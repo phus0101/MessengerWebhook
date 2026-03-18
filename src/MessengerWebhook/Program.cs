@@ -1,4 +1,6 @@
+using System.Threading.Channels;
 using MessengerWebhook.Configuration;
+using MessengerWebhook.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -12,6 +14,14 @@ builder.Services.Configure<WebhookOptions>(
 
 // Add health checks
 builder.Services.AddHealthChecks();
+
+// Configure Channel for async event processing
+var channel = Channel.CreateBounded<MessagingEvent>(
+    new BoundedChannelOptions(1000)
+    {
+        FullMode = BoundedChannelFullMode.Wait
+    });
+builder.Services.AddSingleton(channel);
 
 var app = builder.Build();
 
@@ -59,6 +69,33 @@ app.MapGet("/webhook", (
     return Results.Text(challenge);
 })
 .WithName("VerifyWebhook");
+
+// Webhook event endpoint (POST)
+app.MapPost("/webhook", async (
+    WebhookEvent webhookEvent,
+    Channel<MessagingEvent> channel,
+    ILogger<Program> logger) =>
+{
+    if (webhookEvent.Object != "page")
+    {
+        logger.LogWarning("Invalid object type: {Object}", webhookEvent.Object);
+        return Results.NotFound();
+    }
+
+    var eventCount = 0;
+    foreach (var entry in webhookEvent.Entry)
+    {
+        foreach (var messagingEvent in entry.Messaging)
+        {
+            await channel.Writer.WriteAsync(messagingEvent);
+            eventCount++;
+        }
+    }
+
+    logger.LogInformation("Webhook received: {EventCount} events queued", eventCount);
+    return Results.Ok(new { status = "EVENT_RECEIVED" });
+})
+.WithName("ReceiveWebhook");
 
 // Root endpoint
 app.MapGet("/", () => Results.Ok(new {
