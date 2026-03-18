@@ -1,4 +1,5 @@
 using MessengerWebhook.Configuration;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,6 +29,37 @@ if (string.IsNullOrWhiteSpace(webhookOpts.VerifyToken))
 // Health check endpoint
 app.MapHealthChecks("/health");
 
+// Webhook verification endpoint (GET)
+app.MapGet("/webhook", (
+    [FromQuery(Name = "hub.mode")] string? mode,
+    [FromQuery(Name = "hub.verify_token")] string? verifyToken,
+    [FromQuery(Name = "hub.challenge")] string? challenge,
+    IOptions<WebhookOptions> options,
+    ILogger<Program> logger) =>
+{
+    if (string.IsNullOrEmpty(mode) || string.IsNullOrEmpty(verifyToken) || string.IsNullOrEmpty(challenge))
+    {
+        logger.LogWarning("Webhook verification failed: Missing parameters");
+        return Results.BadRequest("Missing required parameters");
+    }
+
+    if (mode != "subscribe")
+    {
+        logger.LogWarning("Webhook verification failed: Invalid mode {Mode}", mode);
+        return Results.StatusCode(403);
+    }
+
+    if (verifyToken != options.Value.VerifyToken)
+    {
+        logger.LogWarning("Webhook verification failed: Invalid verify token");
+        return Results.StatusCode(403);
+    }
+
+    logger.LogInformation("Webhook verified successfully");
+    return Results.Text(challenge);
+})
+.WithName("VerifyWebhook");
+
 // Root endpoint
 app.MapGet("/", () => Results.Ok(new {
     status = "running",
@@ -35,3 +67,6 @@ app.MapGet("/", () => Results.Ok(new {
 }));
 
 app.Run();
+
+// Make Program class accessible to integration tests
+public partial class Program { }
