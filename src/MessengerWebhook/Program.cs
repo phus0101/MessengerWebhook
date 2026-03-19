@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using MessengerWebhook.BackgroundServices;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Middleware;
 using MessengerWebhook.Models;
@@ -17,14 +18,31 @@ builder.Services.Configure<WebhookOptions>(
 // Add health checks
 builder.Services.AddHealthChecks();
 
-// Register signature validator
+// Configure JSON serializer for case-insensitive property matching
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.PropertyNameCaseInsensitive = true;
+});
+
+// Add memory cache for idempotency with size limit
+builder.Services.AddMemoryCache(options =>
+{
+    options.SizeLimit = 100_000; // Limit to 100k entries
+    options.CompactionPercentage = 0.25; // Evict 25% when full
+});
+
+// Register services
 builder.Services.AddSingleton<ISignatureValidator, SignatureValidator>();
+builder.Services.AddScoped<WebhookProcessor>();
+
+// Register background service
+builder.Services.AddHostedService<WebhookProcessingService>();
 
 // Configure Channel for async event processing
 var channel = Channel.CreateBounded<MessagingEvent>(
     new BoundedChannelOptions(1000)
     {
-        FullMode = BoundedChannelFullMode.Wait
+        FullMode = BoundedChannelFullMode.DropOldest // Drop oldest to prevent blocking
     });
 builder.Services.AddSingleton(channel);
 
