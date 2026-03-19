@@ -1,6 +1,8 @@
 using System.Threading.Channels;
 using MessengerWebhook.Configuration;
+using MessengerWebhook.Middleware;
 using MessengerWebhook.Models;
+using MessengerWebhook.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -14,6 +16,9 @@ builder.Services.Configure<WebhookOptions>(
 
 // Add health checks
 builder.Services.AddHealthChecks();
+
+// Register signature validator
+builder.Services.AddSingleton<ISignatureValidator, SignatureValidator>();
 
 // Configure Channel for async event processing
 var channel = Channel.CreateBounded<MessagingEvent>(
@@ -35,6 +40,9 @@ if (string.IsNullOrWhiteSpace(facebookOpts.PageAccessToken))
     throw new InvalidOperationException("Facebook:PageAccessToken is required. Configure via User Secrets or environment variables.");
 if (string.IsNullOrWhiteSpace(webhookOpts.VerifyToken))
     throw new InvalidOperationException("Webhook:VerifyToken is required. Configure via User Secrets or environment variables.");
+
+// Add signature validation middleware
+app.UseMiddleware<SignatureValidationMiddleware>();
 
 // Health check endpoint
 app.MapHealthChecks("/health");
