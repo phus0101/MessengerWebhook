@@ -30,6 +30,16 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 .ReturnsAsync(new SendMessageResponse("test_recipient", "test_message_id"));
 
             services.AddSingleton(mockMessengerService.Object);
+
+            // Remove GraphApiHealthCheck to avoid real API calls in tests
+            services.Configure<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckServiceOptions>(options =>
+            {
+                var graphApiCheck = options.Registrations.FirstOrDefault(r => r.Name == "graph_api");
+                if (graphApiCheck != null)
+                {
+                    options.Registrations.Remove(graphApiCheck);
+                }
+            });
         });
     }
 }

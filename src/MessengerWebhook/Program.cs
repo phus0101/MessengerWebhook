@@ -16,7 +16,9 @@ builder.Services.Configure<WebhookOptions>(
     builder.Configuration.GetSection(WebhookOptions.SectionName));
 
 // Add health checks
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<MessengerWebhook.HealthChecks.ChannelHealthCheck>("channel_queue")
+    .AddCheck<MessengerWebhook.HealthChecks.GraphApiHealthCheck>("graph_api");
 
 // Configure JSON serializer for case-insensitive property matching
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -79,8 +81,27 @@ if (string.IsNullOrWhiteSpace(webhookOpts.VerifyToken))
 // Add signature validation middleware
 app.UseMiddleware<SignatureValidationMiddleware>();
 
-// Health check endpoint
-app.MapHealthChecks("/health");
+// Health check endpoint with detailed response
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var result = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description,
+                data = e.Value.Data
+            }),
+            totalDuration = report.TotalDuration.TotalMilliseconds
+        });
+        await context.Response.WriteAsync(result);
+    }
+});
 
 // Webhook verification endpoint (GET)
 app.MapGet("/webhook", (
@@ -139,6 +160,19 @@ app.MapPost("/webhook", async (
     return Results.Ok(new { status = "EVENT_RECEIVED" });
 })
 .WithName("ReceiveWebhook");
+
+// Metrics endpoint
+app.MapGet("/metrics", (Channel<MessagingEvent> channel) =>
+{
+    var queueDepth = channel.Reader.Count;
+    return Results.Ok(new
+    {
+        queue_depth = queueDepth,
+        queue_capacity = 1000,
+        queue_utilization_percent = (queueDepth * 100.0 / 1000),
+        timestamp = DateTimeOffset.UtcNow
+    });
+});
 
 // Root endpoint
 app.MapGet("/", () => Results.Ok(new {
