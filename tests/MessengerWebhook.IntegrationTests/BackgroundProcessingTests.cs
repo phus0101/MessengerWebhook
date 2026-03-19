@@ -7,10 +7,12 @@ using System.Threading.Channels;
 using FluentAssertions;
 using MessengerWebhook.BackgroundServices;
 using MessengerWebhook.Models;
+using MessengerWebhook.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Moq;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -37,6 +39,17 @@ public class BackgroundProcessingTests : IClassFixture<WebApplicationFactory<Pro
                     ["Facebook:PageAccessToken"] = "test_page_token",
                     ["Webhook:VerifyToken"] = "test_verify_token"
                 });
+            });
+
+            builder.ConfigureServices(services =>
+            {
+                // Mock IMessengerService to avoid real API calls
+                var mockMessengerService = new Mock<IMessengerService>();
+                mockMessengerService
+                    .Setup(m => m.SendTextMessageAsync(It.IsAny<string>(), It.IsAny<string>()))
+                    .ReturnsAsync(new SendMessageResponse("test_recipient", "test_message_id"));
+
+                services.AddSingleton(mockMessengerService.Object);
             });
         });
 

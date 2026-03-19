@@ -35,6 +35,23 @@ builder.Services.AddMemoryCache(options =>
 builder.Services.AddSingleton<ISignatureValidator, SignatureValidator>();
 builder.Services.AddScoped<WebhookProcessor>();
 
+// Configure HttpClient for MessengerService with Polly resilience
+builder.Services.AddHttpClient<IMessengerService, MessengerService>()
+    .AddStandardResilienceHandler(options =>
+    {
+        options.Retry.MaxRetryAttempts = 3;
+        options.Retry.Delay = TimeSpan.FromSeconds(2);
+        options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
+        options.Retry.UseJitter = true;
+
+        options.CircuitBreaker.FailureRatio = 0.5;
+        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+        options.CircuitBreaker.MinimumThroughput = 5;
+        options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
+
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10);
+    });
+
 // Register background service
 builder.Services.AddHostedService<WebhookProcessingService>();
 

@@ -9,11 +9,16 @@ namespace MessengerWebhook.Services;
 public class WebhookProcessor
 {
     private readonly IMemoryCache _cache;
+    private readonly IMessengerService _messengerService;
     private readonly ILogger<WebhookProcessor> _logger;
 
-    public WebhookProcessor(IMemoryCache cache, ILogger<WebhookProcessor> logger)
+    public WebhookProcessor(
+        IMemoryCache cache,
+        IMessengerService messengerService,
+        ILogger<WebhookProcessor> logger)
     {
         _cache = cache;
+        _messengerService = messengerService;
         _logger = logger;
     }
 
@@ -53,9 +58,13 @@ public class WebhookProcessor
             senderId,
             text ?? "[no text]");
 
-        // TODO: Phase 6 - Call Graph API to send reply
-        // For now, just log
-        await Task.CompletedTask;
+        // Send echo reply
+        if (!string.IsNullOrEmpty(text))
+        {
+            var reply = $"Bạn đã nói: {text}";
+            await _messengerService.SendTextMessageAsync(senderId, reply);
+            _logger.LogInformation("Reply sent to {SenderId}", senderId);
+        }
 
         // Mark as processed (48h TTL with size tracking)
         _cache.Set(cacheKey, true, new MemoryCacheEntryOptions
@@ -84,8 +93,10 @@ public class WebhookProcessor
             senderId,
             payload);
 
-        // TODO: Phase 6 - Call Graph API to send reply
-        await Task.CompletedTask;
+        // Send postback acknowledgment
+        var reply = $"Đã nhận postback: {payload}";
+        await _messengerService.SendTextMessageAsync(senderId, reply);
+        _logger.LogInformation("Postback reply sent to {SenderId}", senderId);
 
         // Mark as processed (48h TTL with size tracking)
         _cache.Set(cacheKey, true, new MemoryCacheEntryOptions

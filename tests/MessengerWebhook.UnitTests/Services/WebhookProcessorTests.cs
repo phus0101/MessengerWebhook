@@ -10,14 +10,16 @@ namespace MessengerWebhook.UnitTests.Services;
 public class WebhookProcessorTests
 {
     private readonly IMemoryCache _cache;
+    private readonly Mock<IMessengerService> _messengerServiceMock;
     private readonly Mock<ILogger<WebhookProcessor>> _loggerMock;
     private readonly WebhookProcessor _processor;
 
     public WebhookProcessorTests()
     {
         _cache = new MemoryCache(new MemoryCacheOptions());
+        _messengerServiceMock = new Mock<IMessengerService>();
         _loggerMock = new Mock<ILogger<WebhookProcessor>>();
-        _processor = new WebhookProcessor(_cache, _loggerMock.Object);
+        _processor = new WebhookProcessor(_cache, _messengerServiceMock.Object, _loggerMock.Object);
     }
 
     [Fact]
