@@ -1,10 +1,13 @@
 using System.Threading.Channels;
 using MessengerWebhook.BackgroundServices;
 using MessengerWebhook.Configuration;
+using MessengerWebhook.Data;
+using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.Middleware;
 using MessengerWebhook.Models;
 using MessengerWebhook.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +17,10 @@ builder.Services.Configure<FacebookOptions>(
     builder.Configuration.GetSection(FacebookOptions.SectionName));
 builder.Services.Configure<WebhookOptions>(
     builder.Configuration.GetSection(WebhookOptions.SectionName));
+
+// Configure PostgreSQL DbContext
+builder.Services.AddDbContext<MessengerBotDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Add health checks
 builder.Services.AddHealthChecks()
@@ -36,6 +43,10 @@ builder.Services.AddMemoryCache(options =>
 // Register services
 builder.Services.AddSingleton<ISignatureValidator, SignatureValidator>();
 builder.Services.AddScoped<WebhookProcessor>();
+
+// Register repositories
+builder.Services.AddScoped<IProductRepository, ProductRepository>();
+builder.Services.AddScoped<ISessionRepository, SessionRepository>();
 
 // Configure HttpClient for MessengerService with Polly resilience
 builder.Services.AddHttpClient<IMessengerService, MessengerService>()
