@@ -4,5 +4,9 @@
       "Bash(cd:*)",
       "Bash(taskkill:*)"
     ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": false,
+    "context7@claude-plugins-official": false
   }
 }

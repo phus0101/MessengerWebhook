@@ -27,7 +27,8 @@ public class MessengerBotDbContext : DbContext
 
         // ConversationSession indexes
         modelBuilder.Entity<ConversationSession>()
-            .HasIndex(s => s.FacebookPSID);
+            .HasIndex(s => s.FacebookPSID)
+            .IsUnique();
 
         modelBuilder.Entity<ConversationSession>()
             .HasIndex(s => s.LastActivityAt);
@@ -61,6 +62,14 @@ public class MessengerBotDbContext : DbContext
 
         modelBuilder.Entity<Cart>()
             .HasIndex(c => c.ExpiresAt);
+
+        // CartItem indexes
+        modelBuilder.Entity<CartItem>()
+            .HasIndex(i => i.VariantId);
+
+        // OrderItem indexes
+        modelBuilder.Entity<OrderItem>()
+            .HasIndex(i => i.VariantId);
 
         // Relationships
         modelBuilder.Entity<Product>()
