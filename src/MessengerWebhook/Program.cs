@@ -6,6 +6,9 @@ using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.Middleware;
 using MessengerWebhook.Models;
 using MessengerWebhook.Services;
+using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.AI.Handlers;
+using MessengerWebhook.Services.AI.Strategies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -17,6 +20,8 @@ builder.Services.Configure<FacebookOptions>(
     builder.Configuration.GetSection(FacebookOptions.SectionName));
 builder.Services.Configure<WebhookOptions>(
     builder.Configuration.GetSection(WebhookOptions.SectionName));
+builder.Services.Configure<GeminiOptions>(
+    builder.Configuration.GetSection(GeminiOptions.SectionName));
 
 // Configure PostgreSQL DbContext
 builder.Services.AddDbContext<MessengerBotDbContext>(options =>
@@ -47,6 +52,24 @@ builder.Services.AddScoped<WebhookProcessor>();
 // Register repositories
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<ISessionRepository, SessionRepository>();
+
+// Register AI strategies
+builder.Services.AddSingleton<IModelSelectionStrategy, HybridModelSelectionStrategy>();
+
+// Register Gemini handlers
+builder.Services.AddTransient<GeminiAuthHandler>();
+builder.Services.AddTransient<GeminiRetryHandler>();
+
+// Configure HttpClient for GeminiService with handlers
+builder.Services.AddHttpClient<IGeminiService, GeminiService>((sp, client) =>
+{
+    var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+    client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+})
+.AddHttpMessageHandler<GeminiAuthHandler>()
+.AddHttpMessageHandler<GeminiRetryHandler>()
+.SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
 // Configure HttpClient for MessengerService with Polly resilience
 builder.Services.AddHttpClient<IMessengerService, MessengerService>()
@@ -88,6 +111,10 @@ if (string.IsNullOrWhiteSpace(facebookOpts.PageAccessToken))
     throw new InvalidOperationException("Facebook:PageAccessToken is required. Configure via User Secrets or environment variables.");
 if (string.IsNullOrWhiteSpace(webhookOpts.VerifyToken))
     throw new InvalidOperationException("Webhook:VerifyToken is required. Configure via User Secrets or environment variables.");
+
+var geminiOpts = app.Services.GetRequiredService<IOptions<GeminiOptions>>().Value;
+if (string.IsNullOrWhiteSpace(geminiOpts.ApiKey))
+    throw new InvalidOperationException("Gemini:ApiKey is required. Configure via User Secrets or environment variables.");
 
 // Add signature validation middleware
 app.UseMiddleware<SignatureValidationMiddleware>();
