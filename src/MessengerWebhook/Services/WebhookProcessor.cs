@@ -1,6 +1,5 @@
 using MessengerWebhook.Models;
-using MessengerWebhook.Services.AI;
-using MessengerWebhook.Services.AI.Models;
+using MessengerWebhook.StateMachine;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace MessengerWebhook.Services;
@@ -12,18 +11,18 @@ public class WebhookProcessor
 {
     private readonly IMemoryCache _cache;
     private readonly IMessengerService _messengerService;
-    private readonly IGeminiService _geminiService;
+    private readonly IStateMachine _stateMachine;
     private readonly ILogger<WebhookProcessor> _logger;
 
     public WebhookProcessor(
         IMemoryCache cache,
         IMessengerService messengerService,
-        IGeminiService geminiService,
+        IStateMachine stateMachine,
         ILogger<WebhookProcessor> logger)
     {
         _cache = cache;
         _messengerService = messengerService;
-        _geminiService = geminiService;
+        _stateMachine = stateMachine;
         _logger = logger;
     }
 
@@ -63,25 +62,18 @@ public class WebhookProcessor
             senderId,
             text ?? "[no text]");
 
-        // Generate AI reply
+        // Process message through state machine
         if (!string.IsNullOrEmpty(text))
         {
             try
             {
-                // For now, use empty history - Phase 3 will add conversation state management
-                var history = new List<ConversationMessage>();
-
-                var reply = await _geminiService.SendMessageAsync(
-                    senderId,
-                    text,
-                    history);
-
+                var reply = await _stateMachine.ProcessMessageAsync(senderId, text);
                 await _messengerService.SendTextMessageAsync(senderId, reply);
-                _logger.LogInformation("AI reply sent to {SenderId}", senderId);
+                _logger.LogInformation("State machine reply sent to {SenderId}", senderId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to generate AI reply for {SenderId}", senderId);
+                _logger.LogError(ex, "Failed to process message for {SenderId}", senderId);
 
                 // Fallback to simple acknowledgment
                 await _messengerService.SendTextMessageAsync(

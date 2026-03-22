@@ -1786,3 +1786,311 @@ public class OutboxProcessorService : BackgroundService
 **Phase 8.4: Scaling (2 months)**
 - Optimize CQRS read models
 - Event store performance tuning
+
+---
+
+## ADR-006: State Machine Architecture
+
+**Date**: 2026-03-22
+**Status**: ✅ Implemented (Phase 3)
+**Context**: Conversation flow management for multi-step e-commerce interactions
+
+### Problem
+
+Chatbot conversations require:
+- Multi-step workflows (browse → select → cart → checkout)
+- Context preservation across messages
+- Timeout handling for inactive sessions
+- Validation of state transitions
+- Error recovery mechanisms
+
+### Options Evaluated
+
+#### Option A: Simple If-Else Chain ❌
+
+```csharp
+public async Task<string> ProcessMessage(string psid, string message)
+{
+    var session = await GetSession(psid);
+
+    if (session.State == "idle")
+    {
+        // Handle idle
+    }
+    else if (session.State == "browsing")
+    {
+        // Handle browsing
+    }
+    // ... 17 more states
+}
+```
+
+**Pros**:
+- Simple to understand
+- No abstraction overhead
+
+**Cons**:
+- ❌ Unmaintainable at scale (17 states)
+- ❌ No transition validation
+- ❌ Difficult to test individual states
+- ❌ Tight coupling between states
+
+#### Option B: State Pattern with Handlers ⭐ SELECTED
+
+```csharp
+public interface IStateHandler
+{
+    ConversationState HandledState { get; }
+    Task<string> HandleAsync(StateContext ctx, string message);
+}
+
+public class ConversationStateMachine
+{
+    public async Task<string> ProcessMessageAsync(string psid, string message)
+    {
+        var ctx = await LoadOrCreateAsync(psid);
+        var handler = GetHandler(ctx.CurrentState);
+        var response = await handler.HandleAsync(ctx, message);
+        await SaveAsync(ctx);
+        return response;
+    }
+}
+```
+
+**Pros**:
+- ✅ Each state isolated in own handler
+- ✅ Easy to add new states
+- ✅ Testable in isolation
+- ✅ Centralized transition validation
+- ✅ Clear separation of concerns
+
+**Cons**:
+- More initial setup
+- Requires DI configuration
+
+#### Option C: Workflow Engine (Elsa, Temporal) ❌
+
+**Pros**:
+- Visual workflow designer
+- Built-in persistence
+- Advanced features (compensation, saga)
+
+**Cons**:
+- ❌ Overkill for simple state machine
+- ❌ External dependency
+- ❌ Learning curve
+- ❌ Harder to customize
+
+### Decision: Option B (State Pattern with Handlers)
+
+**Rationale**:
+- 17 conversation states require clean separation
+- Each state has distinct logic (product search, cart management, checkout)
+- Need to validate transitions (can't jump from Idle to Checkout)
+- Must handle errors gracefully (transition to Error state)
+- Team familiar with dependency injection patterns
+
+### Implementation
+
+#### Architecture Components
+
+**1. State Machine Core** (`ConversationStateMachine.cs`):
+- Session lifecycle management
+- State persistence to database
+- Timeout handling (15min inactivity, 60min absolute)
+- Transition validation via rules engine
+
+**2. State Handlers** (`StateMachine/Handlers/`):
+- 12 concrete handlers (11 + BaseStateHandler)
+- Each handler implements `IStateHandler`
+- Extends `BaseStateHandler` for common functionality
+- Automatic error handling with Error state transition
+
+**3. State Context** (`Models/StateContext.cs`):
+- Carries session data between handlers
+- Type-safe data storage via `GetData<T>()` / `SetData()`
+- Conversation history management
+- Timeout detection
+
+**4. Transition Rules** (`StateTransitionRules.cs`):
+- 114 declarative transition rules
+- Conditional transitions (e.g., cart must have items to checkout)
+- Validation before state changes
+- Prevents invalid state jumps
+
+#### State Diagram
+
+```
+Idle → Greeting → MainMenu
+                    ├→ BrowsingProducts → ProductDetail → VariantSelection → AddToCart
+                    ├→ SkinConsultation → BrowsingProducts
+                    ├→ OrderTracking
+                    └→ Help (from any state)
+
+AddToCart → CartReview → ShippingAddress → PaymentMethod → OrderConfirmation → OrderPlaced
+
+Any state → Error → Idle
+```
+
+#### Handler Pattern
+
+```csharp
+public class ProductDetailStateHandler : BaseStateHandler
+{
+    public override ConversationState HandledState => ConversationState.ProductDetail;
+
+    protected override async Task<string> HandleInternalAsync(StateContext ctx, string message)
+    {
+        // 1. Extract product ID from context
+        var productId = ctx.GetData<string>("selectedProductId");
+
+        // 2. Fetch product details
+        var product = await _productRepo.GetByIdAsync(productId);
+
+        // 3. Update context
+        ctx.SetData("currentProduct", product);
+        AddToHistory(ctx, "user", message);
+
+        // 4. Transition based on user input
+        if (message.Contains("analyze"))
+        {
+            await TransitionToAsync(ctx, ConversationState.SkinAnalysis);
+        }
+        else if (message.Contains("buy"))
+        {
+            await TransitionToAsync(ctx, ConversationState.VariantSelection);
+        }
+
+        // 5. Return response
+        var response = FormatProductDetails(product);
+        AddToHistory(ctx, "assistant", response);
+        return response;
+    }
+}
+```
+
+#### Session Management
+
+**Database Schema**:
+```sql
+CREATE TABLE conversation_sessions (
+    id UUID PRIMARY KEY,
+    facebook_psid TEXT UNIQUE NOT NULL,
+    current_state INT NOT NULL,
+    context_json JSONB,
+    last_activity_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX idx_sessions_psid ON conversation_sessions(facebook_psid);
+CREATE INDEX idx_sessions_expires ON conversation_sessions(expires_at);
+```
+
+**Timeout Strategy**:
+- **Inactivity timeout**: 15 minutes → reset to Idle
+- **Absolute timeout**: 60 minutes → session expires
+- Background cleanup service removes expired sessions
+
+**Context Serialization**:
+```csharp
+// Store complex objects as JSON
+ctx.SetData("cartItems", new List<CartItem> {
+    new() { ProductId = "prod-123", Quantity = 2 }
+});
+
+// Retrieve with type safety
+var cart = ctx.GetData<List<CartItem>>("cartItems") ?? new();
+```
+
+### Benefits Realized
+
+**Maintainability**:
+- Adding new state = create new handler class
+- Modifying state logic = edit single handler file
+- No impact on other states
+
+**Testability**:
+```csharp
+[Fact]
+public async Task ProductDetailHandler_AnalyzeCommand_TransitionsToSkinAnalysis()
+{
+    var handler = new ProductDetailStateHandler(...);
+    var ctx = new StateContext { CurrentState = ConversationState.ProductDetail };
+    ctx.SetData("selectedProductId", "prod-123");
+
+    await handler.HandleAsync(ctx, "analyze this product");
+
+    Assert.Equal(ConversationState.SkinAnalysis, ctx.CurrentState);
+}
+```
+
+**Error Handling**:
+- Unhandled exceptions → automatic Error state transition
+- User-friendly error messages
+- Logging with full context (PSID, state, message)
+
+**Scalability**:
+- Stateless API (sessions in database)
+- Horizontal scaling ready
+- Can add Redis caching later without architecture changes
+
+### Trade-offs
+
+**Pros**:
+- ✅ Clean separation of concerns
+- ✅ Easy to extend with new states
+- ✅ Testable in isolation
+- ✅ Type-safe context management
+- ✅ Centralized transition validation
+
+**Cons**:
+- ❌ More files (12 handler classes)
+- ❌ Requires DI setup for all handlers
+- ❌ Database hit on every message (mitigated by caching later)
+
+### Alternatives Considered
+
+**Why not Workflow Engine?**
+- Elsa/Temporal overkill for 17 states
+- Custom solution gives full control
+- No external dependencies
+- Easier to debug and customize
+
+**Why not Event Sourcing?**
+- Don't need full audit trail of state changes
+- Simple state persistence sufficient
+- Can add event sourcing later if needed
+
+### Migration Path
+
+**Phase 3 → Phase 4**:
+- Add caching layer (Redis) for sessions
+- Implement remaining handlers (PaymentMethod, OrderConfirmation, etc.)
+- Add analytics for state transition patterns
+
+**Phase 4 → Phase 5**:
+- Introduce sub-states for complex flows
+- Add state machine visualization tool
+- Implement A/B testing for conversation flows
+
+### Success Metrics
+
+**Achieved**:
+- ✅ 17 conversation states defined
+- ✅ 12 handlers implemented
+- ✅ 114 transition rules validated
+- ✅ Session timeout handling working
+- ✅ Error recovery mechanism in place
+
+**Pending** (Phase 4+):
+- Average conversation completion rate
+- State transition latency < 100ms
+- Error state frequency < 1%
+- Session timeout rate < 5%
+
+### References
+
+- Implementation: `src/MessengerWebhook/StateMachine/`
+- Tests: `tests/MessengerWebhook.Tests/StateMachine/`
+- Documentation: `docs/system-architecture.md`, `docs/code-standards.md`

@@ -1,7 +1,6 @@
 using MessengerWebhook.Models;
 using MessengerWebhook.Services;
-using MessengerWebhook.Services.AI;
-using MessengerWebhook.Services.AI.Models;
+using MessengerWebhook.StateMachine;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -13,7 +12,7 @@ public class WebhookProcessorTests
 {
     private readonly IMemoryCache _cache;
     private readonly Mock<IMessengerService> _messengerServiceMock;
-    private readonly Mock<IGeminiService> _geminiServiceMock;
+    private readonly Mock<IStateMachine> _stateMachineMock;
     private readonly Mock<ILogger<WebhookProcessor>> _loggerMock;
     private readonly WebhookProcessor _processor;
 
@@ -21,23 +20,20 @@ public class WebhookProcessorTests
     {
         _cache = new MemoryCache(new MemoryCacheOptions());
         _messengerServiceMock = new Mock<IMessengerService>();
-        _geminiServiceMock = new Mock<IGeminiService>();
+        _stateMachineMock = new Mock<IStateMachine>();
         _loggerMock = new Mock<ILogger<WebhookProcessor>>();
 
-        // Setup default AI response
-        _geminiServiceMock
-            .Setup(x => x.SendMessageAsync(
+        // Setup default state machine response
+        _stateMachineMock
+            .Setup(x => x.ProcessMessageAsync(
                 It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<List<ConversationMessage>>(),
-                null,
-                default))
-            .ReturnsAsync("AI response");
+                It.IsAny<string>()))
+            .ReturnsAsync("State machine response");
 
         _processor = new WebhookProcessor(
             _cache,
             _messengerServiceMock.Object,
-            _geminiServiceMock.Object,
+            _stateMachineMock.Object,
             _loggerMock.Object);
     }
 

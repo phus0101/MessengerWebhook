@@ -9,6 +9,8 @@ using MessengerWebhook.Services;
 using MessengerWebhook.Services.AI;
 using MessengerWebhook.Services.AI.Handlers;
 using MessengerWebhook.Services.AI.Strategies;
+using MessengerWebhook.StateMachine;
+using MessengerWebhook.StateMachine.Handlers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -57,6 +59,25 @@ builder.Services.AddScoped<IConversationMessageRepository, ConversationMessageRe
 builder.Services.AddScoped<IIngredientCompatibilityRepository, IngredientCompatibilityRepository>();
 builder.Services.AddScoped<IVectorSearchRepository, VectorSearchRepository>();
 
+// Register session manager
+builder.Services.AddScoped<ISessionManager, SessionManager>();
+
+// Register state machine
+builder.Services.AddScoped<IStateMachine, ConversationStateMachine>();
+
+// Register state handlers
+builder.Services.AddScoped<IdleStateHandler>();
+builder.Services.AddScoped<GreetingStateHandler>();
+builder.Services.AddScoped<MainMenuStateHandler>();
+builder.Services.AddScoped<BrowsingProductsStateHandler>();
+builder.Services.AddScoped<ProductDetailStateHandler>();
+builder.Services.AddScoped<VariantSelectionStateHandler>();
+builder.Services.AddScoped<AddToCartStateHandler>();
+builder.Services.AddScoped<CartReviewStateHandler>();
+builder.Services.AddScoped<ShippingAddressStateHandler>();
+builder.Services.AddScoped<SkinAnalysisStateHandler>();
+builder.Services.AddScoped<HelpStateHandler>();
+
 // Register AI strategies
 builder.Services.AddSingleton<IModelSelectionStrategy, HybridModelSelectionStrategy>();
 
@@ -103,8 +124,10 @@ builder.Services.AddHttpClient<IMessengerService, MessengerService>()
         options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10);
     });
 
-// Register background service
+// Register background services
 builder.Services.AddHostedService<WebhookProcessingService>();
+builder.Services.AddHostedService<SessionCleanupService>();
+builder.Services.AddHostedService<MessageCleanupService>();
 
 // Configure Channel for async event processing
 var channel = Channel.CreateBounded<MessagingEvent>(

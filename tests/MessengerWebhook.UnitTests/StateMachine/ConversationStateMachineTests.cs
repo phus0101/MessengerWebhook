@@ -1,0 +1,353 @@
+using MessengerWebhook.Data.Entities;
+using MessengerWebhook.Data.Repositories;
+using MessengerWebhook.StateMachine;
+using MessengerWebhook.StateMachine.Models;
+using Microsoft.Extensions.Logging;
+using Moq;
+using System.Text.Json;
+using Xunit;
+
+namespace MessengerWebhook.UnitTests.StateMachine;
+
+public class ConversationStateMachineTests
+{
+    private readonly Mock<ISessionRepository> _mockRepository;
+    private readonly Mock<ILogger<ConversationStateMachine>> _mockLogger;
+    private readonly ConversationStateMachine _stateMachine;
+
+    public ConversationStateMachineTests()
+    {
+        _mockRepository = new Mock<ISessionRepository>();
+        _mockLogger = new Mock<ILogger<ConversationStateMachine>>();
+        _stateMachine = new ConversationStateMachine(_mockRepository.Object, _mockLogger.Object);
+    }
+
+    [Fact]
+    public async Task LoadOrCreateAsync_CreatesNewSession_WhenNotExists()
+    {
+        // Arrange
+        var psid = "test-psid-123";
+        _mockRepository.Setup(r => r.GetByPSIDAsync(psid)).ReturnsAsync((ConversationSession?)null);
+        _mockRepository.Setup(r => r.CreateAsync(It.IsAny<ConversationSession>()))
+            .ReturnsAsync((ConversationSession s) => s);
+
+        // Act
+        var context = await _stateMachine.LoadOrCreateAsync(psid);
+
+        // Assert
+        Assert.NotNull(context);
+        Assert.Equal(psid, context.FacebookPSID);
+        Assert.Equal(ConversationState.Idle, context.CurrentState);
+        _mockRepository.Verify(r => r.CreateAsync(It.IsAny<ConversationSession>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task LoadOrCreateAsync_LoadsExistingSession_WhenExists()
+    {
+        // Arrange
+        var psid = "test-psid-123";
+        var session = new ConversationSession
+        {
+            Id = "session-1",
+            FacebookPSID = psid,
+            CurrentState = ConversationState.MainMenu,
+            LastActivityAt = DateTime.UtcNow.AddMinutes(-5),
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(55)
+        };
+        _mockRepository.Setup(r => r.GetByPSIDAsync(psid)).ReturnsAsync(session);
+
+        // Act
+        var context = await _stateMachine.LoadOrCreateAsync(psid);
+
+        // Assert
+        Assert.NotNull(context);
+        Assert.Equal(psid, context.FacebookPSID);
+        Assert.Equal(ConversationState.MainMenu, context.CurrentState);
+        _mockRepository.Verify(r => r.CreateAsync(It.IsAny<ConversationSession>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task LoadOrCreateAsync_ResetsToIdle_WhenInactivityTimeoutExceeded()
+    {
+        // Arrange
+        var psid = "test-psid-123";
+        var session = new ConversationSession
+        {
+            Id = "session-1",
+            FacebookPSID = psid,
+            CurrentState = ConversationState.BrowsingProducts,
+            LastActivityAt = DateTime.UtcNow.AddMinutes(-20), // 20 minutes ago (exceeds 15min timeout)
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(40)
+        };
+        _mockRepository.Setup(r => r.GetByPSIDAsync(psid)).ReturnsAsync(session);
+
+        // Act
+        var context = await _stateMachine.LoadOrCreateAsync(psid);
+
+        // Assert
+        Assert.Equal(ConversationState.Idle, context.CurrentState);
+        Assert.Empty(context.Data);
+    }
+
+    [Fact]
+    public async Task LoadOrCreateAsync_ResetsToIdle_WhenAbsoluteTimeoutExceeded()
+    {
+        // Arrange
+        var psid = "test-psid-123";
+        var session = new ConversationSession
+        {
+            Id = "session-1",
+            FacebookPSID = psid,
+            CurrentState = ConversationState.CartReview,
+            LastActivityAt = DateTime.UtcNow.AddMinutes(-5),
+            CreatedAt = DateTime.UtcNow.AddHours(-2),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-5) // Expired 5 minutes ago
+        };
+        _mockRepository.Setup(r => r.GetByPSIDAsync(psid)).ReturnsAsync(session);
+
+        // Act
+        var context = await _stateMachine.LoadOrCreateAsync(psid);
+
+        // Assert
+        Assert.Equal(ConversationState.Idle, context.CurrentState);
+        Assert.Empty(context.Data);
+    }
+
+    [Fact]
+    public async Task TransitionToAsync_AllowsValidTransition()
+    {
+        // Arrange
+        var context = new StateContext
+        {
+            FacebookPSID = "test-psid",
+            CurrentState = ConversationState.Idle
+        };
+
+        // Act
+        var result = await _stateMachine.TransitionToAsync(context, ConversationState.Greeting);
+
+        // Assert
+        Assert.True(result);
+        Assert.Equal(ConversationState.Greeting, context.CurrentState);
+    }
+
+    [Fact]
+    public async Task TransitionToAsync_RejectsInvalidTransition()
+    {
+        // Arrange
+        var context = new StateContext
+        {
+            FacebookPSID = "test-psid",
+            CurrentState = ConversationState.Idle
+        };
+
+        // Act
+        var result = await _stateMachine.TransitionToAsync(context, ConversationState.OrderPlaced);
+
+        // Assert
+        Assert.False(result);
+        Assert.Equal(ConversationState.Idle, context.CurrentState);
+    }
+
+    [Fact]
+    public async Task TransitionToAsync_AllowsSameStateTransition()
+    {
+        // Arrange
+        var context = new StateContext
+        {
+            FacebookPSID = "test-psid",
+            CurrentState = ConversationState.MainMenu
+        };
+
+        // Act
+        var result = await _stateMachine.TransitionToAsync(context, ConversationState.MainMenu);
+
+        // Assert
+        Assert.True(result);
+        Assert.Equal(ConversationState.MainMenu, context.CurrentState);
+    }
+
+    [Fact]
+    public async Task TransitionToAsync_RespectsConditionalRules()
+    {
+        // Arrange - CartReview to ShippingAddress requires cart items
+        var contextWithoutCart = new StateContext
+        {
+            FacebookPSID = "test-psid",
+            CurrentState = ConversationState.CartReview
+        };
+
+        // Act
+        var result = await _stateMachine.TransitionToAsync(contextWithoutCart, ConversationState.ShippingAddress);
+
+        // Assert
+        Assert.False(result);
+        Assert.Equal(ConversationState.CartReview, contextWithoutCart.CurrentState);
+    }
+
+    [Fact]
+    public async Task TransitionToAsync_AllowsTransitionWhenConditionMet()
+    {
+        // Arrange - CartReview to ShippingAddress with cart items
+        var contextWithCart = new StateContext
+        {
+            FacebookPSID = "test-psid",
+            CurrentState = ConversationState.CartReview
+        };
+        contextWithCart.SetData("cartItems", new List<string> { "item1", "item2" });
+
+        // Act
+        var result = await _stateMachine.TransitionToAsync(contextWithCart, ConversationState.ShippingAddress);
+
+        // Assert
+        Assert.True(result);
+        Assert.Equal(ConversationState.ShippingAddress, contextWithCart.CurrentState);
+    }
+
+    [Fact]
+    public async Task SaveAsync_UpdatesSessionInRepository()
+    {
+        // Arrange
+        var psid = "test-psid-123";
+        var session = new ConversationSession
+        {
+            Id = "session-1",
+            FacebookPSID = psid,
+            CurrentState = ConversationState.Idle,
+            LastActivityAt = DateTime.UtcNow.AddMinutes(-5),
+            CreatedAt = DateTime.UtcNow.AddHours(-1)
+        };
+        _mockRepository.Setup(r => r.GetByPSIDAsync(psid)).ReturnsAsync(session);
+
+        var context = new StateContext
+        {
+            SessionId = "session-1",
+            FacebookPSID = psid,
+            CurrentState = ConversationState.MainMenu,
+            LastInteractionAt = DateTime.UtcNow
+        };
+        context.SetData("testKey", "testValue");
+
+        // Act
+        await _stateMachine.SaveAsync(context);
+
+        // Assert
+        _mockRepository.Verify(r => r.UpdateAsync(It.Is<ConversationSession>(s =>
+            s.CurrentState == ConversationState.MainMenu &&
+            s.ContextJson != null &&
+            s.ContextJson.Contains("testKey")
+        )), Times.Once);
+    }
+
+    [Fact]
+    public async Task ResetAsync_ResetsSessionToIdle()
+    {
+        // Arrange
+        var psid = "test-psid-123";
+        var session = new ConversationSession
+        {
+            Id = "session-1",
+            FacebookPSID = psid,
+            CurrentState = ConversationState.CartReview,
+            ContextJson = "{\"cartItems\":[\"item1\"]}",
+            LastActivityAt = DateTime.UtcNow.AddMinutes(-5),
+            CreatedAt = DateTime.UtcNow.AddHours(-1)
+        };
+        _mockRepository.Setup(r => r.GetByPSIDAsync(psid)).ReturnsAsync(session);
+
+        // Act
+        await _stateMachine.ResetAsync(psid);
+
+        // Assert
+        _mockRepository.Verify(r => r.UpdateAsync(It.Is<ConversationSession>(s =>
+            s.CurrentState == ConversationState.Idle &&
+            s.ContextJson == null
+        )), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessMessageAsync_TransitionsFromIdleToGreeting()
+    {
+        // Arrange
+        var psid = "test-psid-123";
+        ConversationSession? createdSession = null;
+
+        _mockRepository.Setup(r => r.GetByPSIDAsync(psid))
+            .ReturnsAsync(() => createdSession);
+
+        _mockRepository.Setup(r => r.CreateAsync(It.IsAny<ConversationSession>()))
+            .ReturnsAsync((ConversationSession s) =>
+            {
+                createdSession = s;
+                return s;
+            });
+
+        // Act
+        var response = await _stateMachine.ProcessMessageAsync(psid, "Hello");
+
+        // Assert
+        Assert.NotNull(response);
+        Assert.Contains("Welcome", response);
+        _mockRepository.Verify(r => r.UpdateAsync(It.Is<ConversationSession>(s =>
+            s.CurrentState == ConversationState.Greeting
+        )), Times.Once);
+    }
+
+    [Fact]
+    public async Task LoadOrCreateAsync_DeserializesContextJson()
+    {
+        // Arrange
+        var psid = "test-psid-123";
+        var contextData = new Dictionary<string, object>
+        {
+            { "cartItems", new List<string> { "item1", "item2" } },
+            { "selectedProduct", "product-123" }
+        };
+        var session = new ConversationSession
+        {
+            Id = "session-1",
+            FacebookPSID = psid,
+            CurrentState = ConversationState.CartReview,
+            ContextJson = JsonSerializer.Serialize(contextData),
+            LastActivityAt = DateTime.UtcNow.AddMinutes(-5),
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(55)
+        };
+        _mockRepository.Setup(r => r.GetByPSIDAsync(psid)).ReturnsAsync(session);
+
+        // Act
+        var context = await _stateMachine.LoadOrCreateAsync(psid);
+
+        // Assert
+        Assert.NotNull(context.Data);
+        Assert.True(context.Data.ContainsKey("cartItems"));
+        Assert.True(context.Data.ContainsKey("selectedProduct"));
+    }
+
+    [Fact]
+    public async Task LoadOrCreateAsync_HandlesInvalidJson_ReturnsEmptyData()
+    {
+        // Arrange
+        var psid = "test-psid-123";
+        var session = new ConversationSession
+        {
+            Id = "session-1",
+            FacebookPSID = psid,
+            CurrentState = ConversationState.MainMenu,
+            ContextJson = "invalid-json{{{",
+            LastActivityAt = DateTime.UtcNow.AddMinutes(-5),
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(55)
+        };
+        _mockRepository.Setup(r => r.GetByPSIDAsync(psid)).ReturnsAsync(session);
+
+        // Act
+        var context = await _stateMachine.LoadOrCreateAsync(psid);
+
+        // Assert
+        Assert.NotNull(context.Data);
+        Assert.Empty(context.Data);
+    }
+}
