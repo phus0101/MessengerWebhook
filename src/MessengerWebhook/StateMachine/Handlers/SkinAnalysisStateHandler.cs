@@ -14,11 +14,11 @@ public class SkinAnalysisStateHandler : BaseStateHandler
 
     public SkinAnalysisStateHandler(
         IGeminiService geminiService,
-        IStateMachine stateMachine,
+        
         IVectorSearchRepository vectorSearchRepository,
         IEmbeddingService embeddingService,
         ILogger<SkinAnalysisStateHandler> logger)
-        : base(geminiService, stateMachine, logger)
+        : base(geminiService, logger)
     {
         _vectorSearchRepository = vectorSearchRepository;
         _embeddingService = embeddingService;
@@ -45,7 +45,7 @@ Respond with ONLY the skin type.";
         var embedding = await _embeddingService.GenerateAsync(searchQuery);
         var products = await _vectorSearchRepository.SearchSimilarProductsAsync(embedding, limit: 5);
 
-        await TransitionToAsync(ctx, ConversationState.BrowsingProducts);
+        ctx.CurrentState = ConversationState.BrowsingProducts;
 
         if (products.Count == 0)
         {

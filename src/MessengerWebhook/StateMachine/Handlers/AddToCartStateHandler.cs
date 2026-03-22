@@ -10,9 +10,9 @@ public class AddToCartStateHandler : BaseStateHandler
 
     public AddToCartStateHandler(
         IGeminiService geminiService,
-        IStateMachine stateMachine,
+        
         ILogger<AddToCartStateHandler> logger)
-        : base(geminiService, stateMachine, logger)
+        : base(geminiService, logger)
     {
     }
 
@@ -21,7 +21,7 @@ public class AddToCartStateHandler : BaseStateHandler
         var variantId = ctx.GetData<string>("selectedVariantId");
         if (string.IsNullOrEmpty(variantId))
         {
-            await TransitionToAsync(ctx, ConversationState.BrowsingProducts);
+            ctx.CurrentState = ConversationState.BrowsingProducts;
             return "Please select a product variant first.";
         }
 
@@ -31,7 +31,7 @@ public class AddToCartStateHandler : BaseStateHandler
 
         Logger.LogInformation("Added variant {VariantId} to cart for PSID: {PSID}", variantId, ctx.FacebookPSID);
 
-        await TransitionToAsync(ctx, ConversationState.CartReview);
+        ctx.CurrentState = ConversationState.CartReview;
 
         var response = $"Added to cart! You have {cartItems.Count} item(s).\n\nWould you like to:\n1. View cart\n2. Continue shopping";
         AddToHistory(ctx, "model", response);

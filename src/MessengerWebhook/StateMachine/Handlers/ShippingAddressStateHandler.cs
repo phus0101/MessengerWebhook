@@ -10,9 +10,9 @@ public class ShippingAddressStateHandler : BaseStateHandler
 
     public ShippingAddressStateHandler(
         IGeminiService geminiService,
-        IStateMachine stateMachine,
+        
         ILogger<ShippingAddressStateHandler> logger)
-        : base(geminiService, stateMachine, logger)
+        : base(geminiService, logger)
     {
     }
 
@@ -23,7 +23,7 @@ public class ShippingAddressStateHandler : BaseStateHandler
         // Check for back command
         if (message.ToLowerInvariant().Contains("back") || message.ToLowerInvariant().Contains("cart"))
         {
-            await TransitionToAsync(ctx, ConversationState.CartReview);
+            ctx.CurrentState = ConversationState.CartReview;
             return "Returning to cart review.";
         }
 
@@ -46,7 +46,7 @@ Respond with 'valid' or 'invalid'.";
         ctx.SetData("shippingAddress", message);
         Logger.LogInformation("Shipping address saved for PSID: {PSID}", ctx.FacebookPSID);
 
-        await TransitionToAsync(ctx, ConversationState.PaymentMethod);
+        ctx.CurrentState = ConversationState.PaymentMethod;
 
         var reply = "Address saved! Now, please select payment method:\n1. Credit Card\n2. PayPal\n3. Cash on Delivery";
         AddToHistory(ctx, "model", reply);

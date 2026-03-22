@@ -10,15 +10,14 @@ public class IdleStateHandler : BaseStateHandler
 
     public IdleStateHandler(
         IGeminiService geminiService,
-        IStateMachine stateMachine,
         ILogger<IdleStateHandler> logger)
-        : base(geminiService, stateMachine, logger)
+        : base(geminiService, logger)
     {
     }
 
     protected override async Task<string> HandleInternalAsync(Models.StateContext ctx, string message)
     {
-        await TransitionToAsync(ctx, ConversationState.Greeting);
+        ctx.CurrentState = ConversationState.Greeting;
         return "Welcome to our cosmetics store! 🌸";
     }
 }

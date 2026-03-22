@@ -9,18 +9,15 @@ namespace MessengerWebhook.StateMachine.Handlers;
 public abstract class BaseStateHandler : IStateHandler
 {
     protected readonly IGeminiService GeminiService;
-    protected readonly IStateMachine StateMachine;
     protected readonly ILogger Logger;
 
     public abstract ConversationState HandledState { get; }
 
     protected BaseStateHandler(
         IGeminiService geminiService,
-        IStateMachine stateMachine,
         ILogger logger)
     {
         GeminiService = geminiService;
-        StateMachine = stateMachine;
         Logger = logger;
     }
 
@@ -33,25 +30,17 @@ public abstract class BaseStateHandler : IStateHandler
                 HandledState,
                 ctx.FacebookPSID);
 
-            var response = await HandleInternalAsync(ctx, message);
-            await StateMachine.SaveAsync(ctx);
-            return response;
+            return await HandleInternalAsync(ctx, message);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error handling state {State} for PSID: {PSID}", HandledState, ctx.FacebookPSID);
-            await TransitionToAsync(ctx, ConversationState.Error);
-            await StateMachine.SaveAsync(ctx);
+            ctx.CurrentState = ConversationState.Error;
             return "Sorry, something went wrong. Please try again or type 'help' for assistance.";
         }
     }
 
     protected abstract Task<string> HandleInternalAsync(StateContext ctx, string message);
-
-    protected async Task<bool> TransitionToAsync(StateContext ctx, ConversationState newState)
-    {
-        return await StateMachine.TransitionToAsync(ctx, newState);
-    }
 
     protected void AddToHistory(StateContext ctx, string role, string content)
     {

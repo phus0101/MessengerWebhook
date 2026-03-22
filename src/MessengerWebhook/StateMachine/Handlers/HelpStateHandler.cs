@@ -10,9 +10,9 @@ public class HelpStateHandler : BaseStateHandler
 
     public HelpStateHandler(
         IGeminiService geminiService,
-        IStateMachine stateMachine,
+        
         ILogger<HelpStateHandler> logger)
-        : base(geminiService, stateMachine, logger)
+        : base(geminiService, logger)
     {
     }
 
@@ -32,12 +32,12 @@ Keep response under 100 words.";
         var previousState = ctx.GetData<ConversationState?>("previousState");
         if (previousState.HasValue && previousState.Value != ConversationState.Help)
         {
-            await TransitionToAsync(ctx, previousState.Value);
+            ctx.CurrentState = previousState.Value;
             helpResponse += "\n\nReturning to where you were...";
         }
         else
         {
-            await TransitionToAsync(ctx, ConversationState.MainMenu);
+            ctx.CurrentState = ConversationState.MainMenu;
             helpResponse += "\n\nReturning to main menu.";
         }
 

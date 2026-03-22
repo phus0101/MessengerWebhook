@@ -13,10 +13,10 @@ public class VariantSelectionStateHandler : BaseStateHandler
 
     public VariantSelectionStateHandler(
         IGeminiService geminiService,
-        IStateMachine stateMachine,
+        
         IProductRepository productRepository,
         ILogger<VariantSelectionStateHandler> logger)
-        : base(geminiService, stateMachine, logger)
+        : base(geminiService, logger)
     {
         _productRepository = productRepository;
     }
@@ -28,21 +28,21 @@ public class VariantSelectionStateHandler : BaseStateHandler
         var productId = ctx.GetData<string>("selectedProductId");
         if (string.IsNullOrEmpty(productId))
         {
-            await TransitionToAsync(ctx, ConversationState.BrowsingProducts);
+            ctx.CurrentState = ConversationState.BrowsingProducts;
             return "Please select a product first.";
         }
 
         var product = await _productRepository.GetByIdAsync(productId);
         if (product == null)
         {
-            await TransitionToAsync(ctx, ConversationState.BrowsingProducts);
+            ctx.CurrentState = ConversationState.BrowsingProducts;
             return "Product not found.";
         }
 
         // Check for back command
         if (message.ToLowerInvariant().Contains("back"))
         {
-            await TransitionToAsync(ctx, ConversationState.ProductDetail);
+            ctx.CurrentState = ConversationState.ProductDetail;
             return "Returning to product details.";
         }
 
@@ -55,7 +55,7 @@ public class VariantSelectionStateHandler : BaseStateHandler
                 var selectedVariant = variants[selection - 1];
                 ctx.SetData("selectedVariantId", selectedVariant.Id);
 
-                await TransitionToAsync(ctx, ConversationState.AddToCart);
+                ctx.CurrentState = ConversationState.AddToCart;
                 var response = $"Selected: {product.Name} - {selectedVariant.VolumeML}ml {selectedVariant.Texture} (${selectedVariant.Price:F2}). Adding to cart...";
                 AddToHistory(ctx, "model", response);
                 return response;

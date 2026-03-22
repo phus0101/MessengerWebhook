@@ -10,9 +10,8 @@ public class GreetingStateHandler : BaseStateHandler
 
     public GreetingStateHandler(
         IGeminiService geminiService,
-        IStateMachine stateMachine,
         ILogger<GreetingStateHandler> logger)
-        : base(geminiService, stateMachine, logger)
+        : base(geminiService, logger)
     {
     }
 
@@ -34,17 +33,17 @@ Respond with ONLY the intent name.";
 
         if (intent.Contains("skin") || intent.Contains("analysis"))
         {
-            await TransitionToAsync(ctx, ConversationState.SkinConsultation);
+            ctx.CurrentState = ConversationState.SkinConsultation;
             response += "Let's start with a skin consultation!";
         }
         else if (intent.Contains("track") || intent.Contains("order"))
         {
-            await TransitionToAsync(ctx, ConversationState.OrderTracking);
+            ctx.CurrentState = ConversationState.OrderTracking;
             response += "I can help you track your order.";
         }
         else
         {
-            await TransitionToAsync(ctx, ConversationState.MainMenu);
+            ctx.CurrentState = ConversationState.MainMenu;
             response += "What would you like to do?\n\n1. Browse products\n2. Skin consultation\n3. Track order\n4. Help";
         }
 

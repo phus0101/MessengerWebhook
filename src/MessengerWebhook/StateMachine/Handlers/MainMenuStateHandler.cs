@@ -10,9 +10,8 @@ public class MainMenuStateHandler : BaseStateHandler
 
     public MainMenuStateHandler(
         IGeminiService geminiService,
-        IStateMachine stateMachine,
         ILogger<MainMenuStateHandler> logger)
-        : base(geminiService, stateMachine, logger)
+        : base(geminiService, logger)
     {
     }
 
@@ -34,23 +33,23 @@ Respond with ONLY the intent name.";
 
         if (intent.Contains("browse") || intent.Contains("product") || intent.Contains("1"))
         {
-            await TransitionToAsync(ctx, ConversationState.BrowsingProducts);
+            ctx.CurrentState = ConversationState.BrowsingProducts;
             response = "Great! What type of products are you looking for? (e.g., moisturizer, serum, cleanser)";
         }
         else if (intent.Contains("skin") || intent.Contains("consultation") || intent.Contains("2"))
         {
-            await TransitionToAsync(ctx, ConversationState.SkinConsultation);
+            ctx.CurrentState = ConversationState.SkinConsultation;
             response = "Let's find products perfect for your skin! What's your skin type? (oily, dry, combination, sensitive)";
         }
         else if (intent.Contains("track") || intent.Contains("order") || intent.Contains("3"))
         {
-            await TransitionToAsync(ctx, ConversationState.OrderTracking);
+            ctx.CurrentState = ConversationState.OrderTracking;
             response = "Please provide your order number to track your order.";
         }
         else if (intent.Contains("help") || intent.Contains("4"))
         {
             ctx.SetData("previousState", ConversationState.MainMenu);
-            await TransitionToAsync(ctx, ConversationState.Help);
+            ctx.CurrentState = ConversationState.Help;
             response = "I can help you with:\n- Browsing products\n- Skin consultation\n- Order tracking\n\nWhat would you like to know?";
         }
         else

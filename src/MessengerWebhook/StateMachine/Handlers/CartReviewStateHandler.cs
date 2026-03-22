@@ -13,10 +13,10 @@ public class CartReviewStateHandler : BaseStateHandler
 
     public CartReviewStateHandler(
         IGeminiService geminiService,
-        IStateMachine stateMachine,
+        
         IProductRepository productRepository,
         ILogger<CartReviewStateHandler> logger)
-        : base(geminiService, stateMachine, logger)
+        : base(geminiService, logger)
     {
         _productRepository = productRepository;
     }
@@ -28,7 +28,7 @@ public class CartReviewStateHandler : BaseStateHandler
         var cartItems = ctx.GetData<List<string>>("cartItems");
         if (cartItems == null || cartItems.Count == 0)
         {
-            await TransitionToAsync(ctx, ConversationState.BrowsingProducts);
+            ctx.CurrentState = ConversationState.BrowsingProducts;
             return "Your cart is empty. Let's find some products!";
         }
 
@@ -43,13 +43,13 @@ Respond with ONLY the intent name.";
 
         if (intent.Contains("checkout") || intent.Contains("1"))
         {
-            await TransitionToAsync(ctx, ConversationState.ShippingAddress);
+            ctx.CurrentState = ConversationState.ShippingAddress;
             return "Great! Let's proceed to checkout. Please provide your shipping address.";
         }
 
         if (intent.Contains("continue") || intent.Contains("shop") || intent.Contains("2"))
         {
-            await TransitionToAsync(ctx, ConversationState.BrowsingProducts);
+            ctx.CurrentState = ConversationState.BrowsingProducts;
             return "Sure! What else are you looking for?";
         }
 

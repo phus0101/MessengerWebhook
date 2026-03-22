@@ -14,11 +14,11 @@ public class BrowsingProductsStateHandler : BaseStateHandler
 
     public BrowsingProductsStateHandler(
         IGeminiService geminiService,
-        IStateMachine stateMachine,
+        
         IVectorSearchRepository vectorSearchRepository,
         IEmbeddingService embeddingService,
         ILogger<BrowsingProductsStateHandler> logger)
-        : base(geminiService, stateMachine, logger)
+        : base(geminiService, logger)
     {
         _vectorSearchRepository = vectorSearchRepository;
         _embeddingService = embeddingService;
@@ -34,7 +34,7 @@ public class BrowsingProductsStateHandler : BaseStateHandler
             var cartItems = ctx.GetData<List<string>>("cartItems");
             if (cartItems?.Count > 0)
             {
-                await TransitionToAsync(ctx, ConversationState.CartReview);
+                ctx.CurrentState = ConversationState.CartReview;
                 return "Let me show you your cart.";
             }
             return "Your cart is empty. Continue browsing to add products!";
@@ -42,7 +42,7 @@ public class BrowsingProductsStateHandler : BaseStateHandler
 
         if (message.ToLowerInvariant().Contains("menu") || message.ToLowerInvariant().Contains("back"))
         {
-            await TransitionToAsync(ctx, ConversationState.MainMenu);
+            ctx.CurrentState = ConversationState.MainMenu;
             return "Returning to main menu.";
         }
 

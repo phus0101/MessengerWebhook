@@ -13,10 +13,10 @@ public class ProductDetailStateHandler : BaseStateHandler
 
     public ProductDetailStateHandler(
         IGeminiService geminiService,
-        IStateMachine stateMachine,
+        
         IProductRepository productRepository,
         ILogger<ProductDetailStateHandler> logger)
-        : base(geminiService, stateMachine, logger)
+        : base(geminiService, logger)
     {
         _productRepository = productRepository;
     }
@@ -28,14 +28,14 @@ public class ProductDetailStateHandler : BaseStateHandler
         var productId = ctx.GetData<string>("selectedProductId");
         if (string.IsNullOrEmpty(productId))
         {
-            await TransitionToAsync(ctx, ConversationState.BrowsingProducts);
+            ctx.CurrentState = ConversationState.BrowsingProducts;
             return "Please select a product first.";
         }
 
         var product = await _productRepository.GetByIdAsync(productId);
         if (product == null)
         {
-            await TransitionToAsync(ctx, ConversationState.BrowsingProducts);
+            ctx.CurrentState = ConversationState.BrowsingProducts;
             return "Product not found. Let's search again.";
         }
 
@@ -50,18 +50,18 @@ Respond with ONLY the intent name.";
 
         if (intent.Contains("skin") || intent.Contains("analysis"))
         {
-            await TransitionToAsync(ctx, ConversationState.SkinAnalysis);
+            ctx.CurrentState = ConversationState.SkinAnalysis;
             return "Let me check if this product suits your skin. What's your skin type?";
         }
 
         if (intent.Contains("back") || intent.Contains("browse"))
         {
-            await TransitionToAsync(ctx, ConversationState.BrowsingProducts);
+            ctx.CurrentState = ConversationState.BrowsingProducts;
             return "Returning to product search.";
         }
 
         // Default: show variants
-        await TransitionToAsync(ctx, ConversationState.VariantSelection);
+        ctx.CurrentState = ConversationState.VariantSelection;
         var variants = product.Variants.Where(v => v.StockQuantity > 0).ToList();
 
         if (variants.Count == 0)
