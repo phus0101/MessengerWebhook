@@ -55,6 +55,7 @@ builder.Services.AddScoped<ISessionRepository, SessionRepository>();
 builder.Services.AddScoped<ISkinProfileRepository, SkinProfileRepository>();
 builder.Services.AddScoped<IConversationMessageRepository, ConversationMessageRepository>();
 builder.Services.AddScoped<IIngredientCompatibilityRepository, IngredientCompatibilityRepository>();
+builder.Services.AddScoped<IVectorSearchRepository, VectorSearchRepository>();
 
 // Register AI strategies
 builder.Services.AddSingleton<IModelSelectionStrategy, HybridModelSelectionStrategy>();
@@ -65,6 +66,17 @@ builder.Services.AddTransient<GeminiRetryHandler>();
 
 // Configure HttpClient for GeminiService with handlers
 builder.Services.AddHttpClient<IGeminiService, GeminiService>((sp, client) =>
+{
+    var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+    client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+})
+.AddHttpMessageHandler<GeminiAuthHandler>()
+.AddHttpMessageHandler<GeminiRetryHandler>()
+.SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
+// Configure HttpClient for EmbeddingService (reuse same handlers)
+builder.Services.AddHttpClient<IEmbeddingService, GeminiEmbeddingService>((sp, client) =>
 {
     var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
     client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");

@@ -28,6 +28,9 @@ public class Product
     [Column(TypeName = "jsonb")]
     public string? ContraindicationsJson { get; set; }
 
+    // RAG: Vector embedding for semantic search (768 dimensions for text-embedding-004)
+    public float[]? Embedding { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
