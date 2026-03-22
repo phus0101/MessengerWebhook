@@ -71,7 +71,6 @@ public class GeminiService : IGeminiService
         var request = new
         {
             contents = BuildContents(message, history),
-            systemInstruction = new { parts = new[] { new { text = GetSystemPrompt() } } },
             generationConfig = new
             {
                 temperature = _options.Temperature,
@@ -153,6 +152,21 @@ Quy tắc: Trả lời ngắn gọn (2-3 câu), đặt câu hỏi làm rõ nhu c
     private object[] BuildContents(string message, List<ConversationMessage> history)
     {
         var contents = new List<object>();
+
+        // Add system prompt as first user message if no history
+        if (history.Count == 0)
+        {
+            contents.Add(new
+            {
+                role = "user",
+                parts = new[] { new { text = GetSystemPrompt() } }
+            });
+            contents.Add(new
+            {
+                role = "model",
+                parts = new[] { new { text = "Tôi hiểu. Tôi sẽ tư vấn mỹ phẩm chuyên nghiệp, ngắn gọn và không tự tạo thông tin sản phẩm." } }
+            });
+        }
 
         // Add history (limit to last 10 messages to control token usage)
         var historyToSend = history.TakeLast(10).ToList();

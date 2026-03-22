@@ -117,19 +117,19 @@ builder.Services.AddSingleton(channel);
 var app = builder.Build();
 
 // Validate critical configuration on startup
-// var facebookOpts = app.Services.GetRequiredService<IOptions<FacebookOptions>>().Value;
-// var webhookOpts = app.Services.GetRequiredService<IOptions<WebhookOptions>>().Value;
+var facebookOpts = app.Services.GetRequiredService<IOptions<FacebookOptions>>().Value;
+var webhookOpts = app.Services.GetRequiredService<IOptions<WebhookOptions>>().Value;
 
-// if (string.IsNullOrWhiteSpace(facebookOpts.AppSecret))
-//     throw new InvalidOperationException("Facebook:AppSecret is required. Configure via User Secrets or environment variables.");
-// if (string.IsNullOrWhiteSpace(facebookOpts.PageAccessToken))
-//     throw new InvalidOperationException("Facebook:PageAccessToken is required. Configure via User Secrets or environment variables.");
-// if (string.IsNullOrWhiteSpace(webhookOpts.VerifyToken))
-//     throw new InvalidOperationException("Webhook:VerifyToken is required. Configure via User Secrets or environment variables.");
+if (string.IsNullOrWhiteSpace(facebookOpts.AppSecret))
+    throw new InvalidOperationException("Facebook:AppSecret is required. Configure via User Secrets or environment variables.");
+if (string.IsNullOrWhiteSpace(facebookOpts.PageAccessToken))
+    throw new InvalidOperationException("Facebook:PageAccessToken is required. Configure via User Secrets or environment variables.");
+if (string.IsNullOrWhiteSpace(webhookOpts.VerifyToken))
+    throw new InvalidOperationException("Webhook:VerifyToken is required. Configure via User Secrets or environment variables.");
 
-// var geminiOpts = app.Services.GetRequiredService<IOptions<GeminiOptions>>().Value;
-// if (string.IsNullOrWhiteSpace(geminiOpts.ApiKey))
-//     throw new InvalidOperationException("Gemini:ApiKey is required. Configure via User Secrets or environment variables.");
+var geminiOpts = app.Services.GetRequiredService<IOptions<GeminiOptions>>().Value;
+if (string.IsNullOrWhiteSpace(geminiOpts.ApiKey))
+    throw new InvalidOperationException("Gemini:ApiKey is required. Configure via User Secrets or environment variables.");
 
 // Add signature validation middleware
 app.UseMiddleware<SignatureValidationMiddleware>();

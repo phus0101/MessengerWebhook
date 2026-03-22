@@ -1,5 +1,7 @@
 using MessengerWebhook.Models;
 using MessengerWebhook.Services;
+using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.AI.Models;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -11,6 +13,7 @@ public class WebhookProcessorTests
 {
     private readonly IMemoryCache _cache;
     private readonly Mock<IMessengerService> _messengerServiceMock;
+    private readonly Mock<IGeminiService> _geminiServiceMock;
     private readonly Mock<ILogger<WebhookProcessor>> _loggerMock;
     private readonly WebhookProcessor _processor;
 
@@ -18,8 +21,24 @@ public class WebhookProcessorTests
     {
         _cache = new MemoryCache(new MemoryCacheOptions());
         _messengerServiceMock = new Mock<IMessengerService>();
+        _geminiServiceMock = new Mock<IGeminiService>();
         _loggerMock = new Mock<ILogger<WebhookProcessor>>();
-        _processor = new WebhookProcessor(_cache, _messengerServiceMock.Object, _loggerMock.Object);
+
+        // Setup default AI response
+        _geminiServiceMock
+            .Setup(x => x.SendMessageAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<List<ConversationMessage>>(),
+                null,
+                default))
+            .ReturnsAsync("AI response");
+
+        _processor = new WebhookProcessor(
+            _cache,
+            _messengerServiceMock.Object,
+            _geminiServiceMock.Object,
+            _loggerMock.Object);
     }
 
     [Fact]

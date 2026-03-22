@@ -1,4 +1,6 @@
 using MessengerWebhook.Models;
+using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.AI.Models;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace MessengerWebhook.Services;
@@ -10,15 +12,18 @@ public class WebhookProcessor
 {
     private readonly IMemoryCache _cache;
     private readonly IMessengerService _messengerService;
+    private readonly IGeminiService _geminiService;
     private readonly ILogger<WebhookProcessor> _logger;
 
     public WebhookProcessor(
         IMemoryCache cache,
         IMessengerService messengerService,
+        IGeminiService geminiService,
         ILogger<WebhookProcessor> logger)
     {
         _cache = cache;
         _messengerService = messengerService;
+        _geminiService = geminiService;
         _logger = logger;
     }
 
@@ -58,12 +63,31 @@ public class WebhookProcessor
             senderId,
             text ?? "[no text]");
 
-        // Send echo reply
+        // Generate AI reply
         if (!string.IsNullOrEmpty(text))
         {
-            var reply = $"Bạn đã nói: {text}";
-            await _messengerService.SendTextMessageAsync(senderId, reply);
-            _logger.LogInformation("Reply sent to {SenderId}", senderId);
+            try
+            {
+                // For now, use empty history - Phase 3 will add conversation state management
+                var history = new List<ConversationMessage>();
+
+                var reply = await _geminiService.SendMessageAsync(
+                    senderId,
+                    text,
+                    history);
+
+                await _messengerService.SendTextMessageAsync(senderId, reply);
+                _logger.LogInformation("AI reply sent to {SenderId}", senderId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate AI reply for {SenderId}", senderId);
+
+                // Fallback to simple acknowledgment
+                await _messengerService.SendTextMessageAsync(
+                    senderId,
+                    "Xin lỗi, tôi đang gặp sự cố kỹ thuật. Vui lòng thử lại sau.");
+            }
         }
 
         // Mark as processed (48h TTL with size tracking)
