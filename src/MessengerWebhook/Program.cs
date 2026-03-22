@@ -89,7 +89,12 @@ builder.Services.AddScoped<IStateHandler, VariantSelectionStateHandler>();
 builder.Services.AddScoped<IStateHandler, AddToCartStateHandler>();
 builder.Services.AddScoped<IStateHandler, CartReviewStateHandler>();
 builder.Services.AddScoped<IStateHandler, ShippingAddressStateHandler>();
+builder.Services.AddScoped<IStateHandler, PaymentMethodStateHandler>();
+builder.Services.AddScoped<IStateHandler, OrderConfirmationStateHandler>();
+builder.Services.AddScoped<IStateHandler, OrderPlacedStateHandler>();
+builder.Services.AddScoped<IStateHandler, OrderTrackingStateHandler>();
 builder.Services.AddScoped<IStateHandler, SkinAnalysisStateHandler>();
+builder.Services.AddScoped<IStateHandler, SkinConsultationStateHandler>();
 builder.Services.AddScoped<IStateHandler, HelpStateHandler>();
 builder.Services.AddScoped<IStateHandler, ErrorStateHandler>();
 
