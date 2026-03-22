@@ -13,6 +13,7 @@ public class GeminiService : IGeminiService
     private readonly GeminiOptions _options;
     private readonly IModelSelectionStrategy _modelStrategy;
     private readonly ILogger<GeminiService> _logger;
+    private readonly string _systemPrompt;
 
     public GeminiService(
         HttpClient httpClient,
@@ -24,6 +25,19 @@ public class GeminiService : IGeminiService
         _options = options.Value;
         _modelStrategy = modelStrategy;
         _logger = logger;
+
+        // Load system prompt from file
+        var promptPath = Path.Combine(AppContext.BaseDirectory, _options.SystemPromptPath);
+        if (File.Exists(promptPath))
+        {
+            _systemPrompt = File.ReadAllText(promptPath);
+            _logger.LogInformation("Loaded system prompt from {Path}", promptPath);
+        }
+        else
+        {
+            _logger.LogWarning("System prompt file not found at {Path}, using default", promptPath);
+            _systemPrompt = GetDefaultSystemPrompt();
+        }
     }
 
     public async Task<string> SendMessageAsync(
@@ -126,20 +140,14 @@ public class GeminiService : IGeminiService
 
     private string GetSystemPrompt()
     {
-        return @"Bạn là chuyên viên tư vấn thời trang chuyên nghiệp cho cửa hàng quần áo.
+        return _systemPrompt;
+    }
 
-Nhiệm vụ của bạn:
-- Giúp khách hàng tìm sản phẩm phù hợp với phong cách, dáng người, và dịp sử dụng
-- Đặt câu hỏi làm rõ nhu cầu (tối đa 2 câu hỏi mỗi lần)
-- Gợi ý sản phẩm cụ thể khi đã hiểu rõ nhu cầu
-- Trả lời ngắn gọn, thân thiện, chuyên nghiệp (2-3 câu)
-- Chỉ giới thiệu sản phẩm có trong danh mục của cửa hàng
-- Sử dụng ngôn ngữ tự nhiên, gần gũi như một người bạn
-
-Lưu ý:
-- KHÔNG tự ý tạo ra thông tin sản phẩm không có trong danh mục
-- KHÔNG đưa ra giá cả nếu chưa có thông tin chính xác
-- Nếu không chắc chắn, hãy hỏi thêm thông tin từ khách hàng";
+    private string GetDefaultSystemPrompt()
+    {
+        return @"Bạn là chuyên viên tư vấn mỹ phẩm chuyên nghiệp.
+Nhiệm vụ: Giúp khách hàng tìm sản phẩm phù hợp với loại da và tình trạng da.
+Quy tắc: Trả lời ngắn gọn (2-3 câu), đặt câu hỏi làm rõ nhu cầu, KHÔNG tự tạo thông tin sản phẩm.";
     }
 
     private object[] BuildContents(string message, List<ConversationMessage> history)

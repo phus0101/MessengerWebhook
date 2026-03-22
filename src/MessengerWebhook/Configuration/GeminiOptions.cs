@@ -11,6 +11,7 @@ public class GeminiOptions
     public double Temperature { get; set; } = 0.7;
     public int MaxRetries { get; set; } = 3;
     public int TimeoutSeconds { get; set; } = 60;
+    public string SystemPromptPath { get; set; } = "Prompts/beauty-consultant-system-prompt.txt";
     public RateLimitOptions RateLimits { get; set; } = new();
 }
 

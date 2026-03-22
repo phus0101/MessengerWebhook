@@ -16,6 +16,9 @@ public class MessengerBotDbContext : DbContext
     public DbSet<Size> Sizes { get; set; }
     public DbSet<ProductImage> ProductImages { get; set; }
     public DbSet<ConversationSession> ConversationSessions { get; set; }
+    public DbSet<ConversationMessage> ConversationMessages { get; set; }
+    public DbSet<SkinProfile> SkinProfiles { get; set; }
+    public DbSet<IngredientCompatibility> IngredientCompatibilities { get; set; }
     public DbSet<Cart> Carts { get; set; }
     public DbSet<CartItem> CartItems { get; set; }
     public DbSet<Order> Orders { get; set; }
@@ -39,7 +42,7 @@ public class MessengerBotDbContext : DbContext
             .IsUnique();
 
         modelBuilder.Entity<ProductVariant>()
-            .HasIndex(v => new { v.ProductId, v.ColorId, v.SizeId })
+            .HasIndex(v => new { v.ProductId, v.VolumeML, v.Texture })
             .IsUnique();
 
         // Product indexes
@@ -70,6 +73,22 @@ public class MessengerBotDbContext : DbContext
         // OrderItem indexes
         modelBuilder.Entity<OrderItem>()
             .HasIndex(i => i.VariantId);
+
+        // ConversationMessage indexes
+        modelBuilder.Entity<ConversationMessage>()
+            .HasIndex(m => m.SessionId);
+
+        modelBuilder.Entity<ConversationMessage>()
+            .HasIndex(m => m.CreatedAt);
+
+        // SkinProfile indexes
+        modelBuilder.Entity<SkinProfile>()
+            .HasIndex(s => s.SessionId)
+            .IsUnique();
+
+        // IngredientCompatibility indexes
+        modelBuilder.Entity<IngredientCompatibility>()
+            .HasIndex(i => new { i.Ingredient1, i.Ingredient2 });
 
         // Relationships
         modelBuilder.Entity<Product>()
@@ -106,6 +125,18 @@ public class MessengerBotDbContext : DbContext
             .HasMany(o => o.Items)
             .WithOne(i => i.Order)
             .HasForeignKey(i => i.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConversationMessage>()
+            .HasOne(m => m.Session)
+            .WithMany()
+            .HasForeignKey(m => m.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SkinProfile>()
+            .HasOne(s => s.Session)
+            .WithMany()
+            .HasForeignKey(s => s.SessionId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // Decimal precision

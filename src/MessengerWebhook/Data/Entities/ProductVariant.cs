@@ -4,9 +4,12 @@ public class ProductVariant
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public string ProductId { get; set; } = string.Empty;
-    public string ColorId { get; set; } = string.Empty;
-    public string SizeId { get; set; } = string.Empty;
     public string SKU { get; set; } = string.Empty;
+
+    // Cosmetics-specific: volume and texture variants
+    public int VolumeML { get; set; }  // 30, 50, 100, 200
+    public string Texture { get; set; } = string.Empty;  // cream, gel, serum, oil
+
     public decimal Price { get; set; }
     public int StockQuantity { get; set; }
     public bool IsAvailable { get; set; } = true;
@@ -15,6 +18,4 @@ public class ProductVariant
 
     // Navigation properties
     public Product Product { get; set; } = null!;
-    public Color Color { get; set; } = null!;
-    public Size Size { get; set; } = null!;
 }

@@ -12,7 +12,7 @@ public class ProductRepository : IProductRepository
         _context = context;
     }
 
-    public async Task<List<Product>> GetByCategoryAsync(string category)
+    public async Task<List<Product>> GetByCategoryAsync(ProductCategory category)
     {
         return await _context.Products
             .Where(p => p.Category == category && p.IsActive)
@@ -26,9 +26,6 @@ public class ProductRepository : IProductRepository
         return await _context.Products
             .Include(p => p.Images)
             .Include(p => p.Variants)
-                .ThenInclude(v => v.Color)
-            .Include(p => p.Variants)
-                .ThenInclude(v => v.Size)
             .FirstOrDefaultAsync(p => p.Id == id);
     }
 
@@ -36,8 +33,6 @@ public class ProductRepository : IProductRepository
     {
         return await _context.ProductVariants
             .Where(v => v.ProductId == productId && v.IsAvailable)
-            .Include(v => v.Color)
-            .Include(v => v.Size)
             .ToListAsync();
     }
 }
