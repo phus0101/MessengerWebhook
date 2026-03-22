@@ -35,40 +35,30 @@ public class ConversationFlowTests : IClassFixture<DatabaseFixture>
         var stateMachineLogger = Mock.Of<ILogger<ConversationStateMachine>>();
         var geminiService = Mock.Of<IGeminiService>();
 
-        // Create mock state machine that will be replaced with real one
-        var mockStateMachine = new Mock<IStateMachine>();
-        ConversationStateMachine? realStateMachine = null;
-
-        // Setup mock to delegate to real state machine once created
-        mockStateMachine.Setup(m => m.TransitionToAsync(It.IsAny<StateContext>(), It.IsAny<ConversationState>()))
-            .Returns<StateContext, ConversationState>((ctx, state) => realStateMachine!.TransitionToAsync(ctx, state));
-
-        // Create state handlers with mock state machine
+        // Create state handlers
         var handlers = new List<IStateHandler>
         {
             new IdleStateHandler(
                 geminiService,
-                mockStateMachine.Object,
                 Mock.Of<ILogger<IdleStateHandler>>()),
             new GreetingStateHandler(
                 geminiService,
-                mockStateMachine.Object,
                 Mock.Of<ILogger<GreetingStateHandler>>())
         };
 
-        // Create real state machine
-        realStateMachine = new ConversationStateMachine(sessionRepo, handlers, stateMachineLogger);
+        // Create state machine
+        var stateMachine = new ConversationStateMachine(sessionRepo, handlers, stateMachineLogger);
 
         var psid = $"test_user_{Guid.NewGuid():N}";
 
         // Act - Initial greeting (Idle -> Greeting)
-        var reply = await realStateMachine.ProcessMessageAsync(psid, "hello");
+        var reply = await stateMachine.ProcessMessageAsync(psid, "hello");
 
         // Assert
         reply.Should().NotBeNullOrEmpty();
         reply.Should().Contain("Welcome");
 
-        var ctx = await realStateMachine.LoadOrCreateAsync(psid);
+        var ctx = await stateMachine.LoadOrCreateAsync(psid);
         ctx.CurrentState.Should().Be(ConversationState.Greeting);
 
         // Verify session persisted

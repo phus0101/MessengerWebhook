@@ -14,8 +14,22 @@ using MessengerWebhook.StateMachine.Handlers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Serilog;
+
+// Configure Serilog
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: "logs/app-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 7,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Use Serilog for logging
+builder.Host.UseSerilog();
 
 // Configure strongly-typed options
 builder.Services.Configure<FacebookOptions>(
@@ -77,6 +91,7 @@ builder.Services.AddScoped<IStateHandler, CartReviewStateHandler>();
 builder.Services.AddScoped<IStateHandler, ShippingAddressStateHandler>();
 builder.Services.AddScoped<IStateHandler, SkinAnalysisStateHandler>();
 builder.Services.AddScoped<IStateHandler, HelpStateHandler>();
+builder.Services.AddScoped<IStateHandler, ErrorStateHandler>();
 
 // Register AI strategies
 builder.Services.AddSingleton<IModelSelectionStrategy, HybridModelSelectionStrategy>();

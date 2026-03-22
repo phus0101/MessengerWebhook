@@ -1,7 +1,6 @@
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.Services.AI;
-using MessengerWebhook.StateMachine;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
 using Microsoft.Extensions.Logging;
@@ -12,7 +11,6 @@ namespace MessengerWebhook.UnitTests.StateMachine.Handlers;
 public class VariantSelectionStateHandlerTests
 {
     private readonly Mock<IGeminiService> _geminiServiceMock;
-    private readonly Mock<IStateMachine> _stateMachineMock;
     private readonly Mock<IProductRepository> _productRepositoryMock;
     private readonly Mock<ILogger<VariantSelectionStateHandler>> _loggerMock;
     private readonly VariantSelectionStateHandler _handler;
@@ -20,12 +18,10 @@ public class VariantSelectionStateHandlerTests
     public VariantSelectionStateHandlerTests()
     {
         _geminiServiceMock = new Mock<IGeminiService>();
-        _stateMachineMock = new Mock<IStateMachine>();
         _productRepositoryMock = new Mock<IProductRepository>();
         _loggerMock = new Mock<ILogger<VariantSelectionStateHandler>>();
         _handler = new VariantSelectionStateHandler(
             _geminiServiceMock.Object,
-            _stateMachineMock.Object,
             _productRepositoryMock.Object,
             _loggerMock.Object);
     }
@@ -52,13 +48,11 @@ public class VariantSelectionStateHandlerTests
         };
 
         _productRepositoryMock.Setup(x => x.GetByIdAsync("prod1")).ReturnsAsync(product);
-        _stateMachineMock.Setup(x => x.TransitionToAsync(ctx, ConversationState.AddToCart)).ReturnsAsync(true);
-        _stateMachineMock.Setup(x => x.SaveAsync(ctx)).Returns(Task.CompletedTask);
 
         var response = await _handler.HandleAsync(ctx, "1");
 
         Assert.Contains("var1", ctx.GetData<string>("selectedVariantId"));
-        _stateMachineMock.Verify(x => x.TransitionToAsync(ctx, ConversationState.AddToCart), Times.Once);
+        Assert.Equal(ConversationState.AddToCart, ctx.CurrentState);
     }
 
     [Fact]
@@ -69,11 +63,9 @@ public class VariantSelectionStateHandlerTests
         var product = new Product { Id = "prod1", Name = "Test Product" };
 
         _productRepositoryMock.Setup(x => x.GetByIdAsync("prod1")).ReturnsAsync(product);
-        _stateMachineMock.Setup(x => x.TransitionToAsync(ctx, ConversationState.ProductDetail)).ReturnsAsync(true);
-        _stateMachineMock.Setup(x => x.SaveAsync(ctx)).Returns(Task.CompletedTask);
 
         var response = await _handler.HandleAsync(ctx, "back");
 
-        _stateMachineMock.Verify(x => x.TransitionToAsync(ctx, ConversationState.ProductDetail), Times.Once);
+        Assert.Equal(ConversationState.ProductDetail, ctx.CurrentState);
     }
 }

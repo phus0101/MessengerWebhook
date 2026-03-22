@@ -2,7 +2,6 @@ using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.Services.AI;
 using MessengerWebhook.Services.AI.Models;
-using MessengerWebhook.StateMachine;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
 using Microsoft.Extensions.Logging;
@@ -13,7 +12,6 @@ namespace MessengerWebhook.UnitTests.StateMachine.Handlers;
 public class BrowsingProductsStateHandlerTests
 {
     private readonly Mock<IGeminiService> _geminiServiceMock;
-    private readonly Mock<IStateMachine> _stateMachineMock;
     private readonly Mock<IVectorSearchRepository> _vectorSearchMock;
     private readonly Mock<IEmbeddingService> _embeddingServiceMock;
     private readonly Mock<ILogger<BrowsingProductsStateHandler>> _loggerMock;
@@ -22,13 +20,11 @@ public class BrowsingProductsStateHandlerTests
     public BrowsingProductsStateHandlerTests()
     {
         _geminiServiceMock = new Mock<IGeminiService>();
-        _stateMachineMock = new Mock<IStateMachine>();
         _vectorSearchMock = new Mock<IVectorSearchRepository>();
         _embeddingServiceMock = new Mock<IEmbeddingService>();
         _loggerMock = new Mock<ILogger<BrowsingProductsStateHandler>>();
         _handler = new BrowsingProductsStateHandler(
             _geminiServiceMock.Object,
-            _stateMachineMock.Object,
             _vectorSearchMock.Object,
             _embeddingServiceMock.Object,
             _loggerMock.Object);
@@ -45,13 +41,11 @@ public class BrowsingProductsStateHandlerTests
     {
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.BrowsingProducts };
         ctx.SetData("cartItems", new List<string> { "item1" });
-        _stateMachineMock.Setup(x => x.TransitionToAsync(ctx, ConversationState.CartReview)).ReturnsAsync(true);
-        _stateMachineMock.Setup(x => x.SaveAsync(ctx)).Returns(Task.CompletedTask);
 
         var response = await _handler.HandleAsync(ctx, "show cart");
 
         Assert.Contains("cart", response, StringComparison.OrdinalIgnoreCase);
-        _stateMachineMock.Verify(x => x.TransitionToAsync(ctx, ConversationState.CartReview), Times.Once);
+        Assert.Equal(ConversationState.CartReview, ctx.CurrentState);
     }
 
     [Fact]
@@ -66,7 +60,6 @@ public class BrowsingProductsStateHandlerTests
         _embeddingServiceMock.Setup(x => x.GenerateAsync(It.IsAny<string>(), default)).ReturnsAsync(new float[768]);
         _vectorSearchMock.Setup(x => x.SearchSimilarProductsAsync(It.IsAny<float[]>(), 5, 0.7, default))
             .ReturnsAsync(products);
-        _stateMachineMock.Setup(x => x.SaveAsync(ctx)).Returns(Task.CompletedTask);
 
         var response = await _handler.HandleAsync(ctx, "moisturizer");
 
@@ -83,7 +76,6 @@ public class BrowsingProductsStateHandlerTests
         _embeddingServiceMock.Setup(x => x.GenerateAsync(It.IsAny<string>(), default)).ReturnsAsync(new float[768]);
         _vectorSearchMock.Setup(x => x.SearchSimilarProductsAsync(It.IsAny<float[]>(), 5, 0.7, default))
             .ReturnsAsync(new List<Product>());
-        _stateMachineMock.Setup(x => x.SaveAsync(ctx)).Returns(Task.CompletedTask);
 
         var response = await _handler.HandleAsync(ctx, "xyz123");
 

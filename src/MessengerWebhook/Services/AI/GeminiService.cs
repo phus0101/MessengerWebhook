@@ -153,20 +153,17 @@ Quy tắc: Trả lời ngắn gọn (2-3 câu), đặt câu hỏi làm rõ nhu c
     {
         var contents = new List<object>();
 
-        // Add system prompt as first user message if no history
-        if (history.Count == 0)
+        // Always add system prompt as first user message to ensure language detection works
+        contents.Add(new
         {
-            contents.Add(new
-            {
-                role = "user",
-                parts = new[] { new { text = GetSystemPrompt() } }
-            });
-            contents.Add(new
-            {
-                role = "model",
-                parts = new[] { new { text = "Tôi hiểu. Tôi sẽ tư vấn mỹ phẩm chuyên nghiệp, ngắn gọn và không tự tạo thông tin sản phẩm." } }
-            });
-        }
+            role = "user",
+            parts = new[] { new { text = GetSystemPrompt() } }
+        });
+        contents.Add(new
+        {
+            role = "model",
+            parts = new[] { new { text = "Tôi hiểu. Tôi sẽ tư vấn mỹ phẩm chuyên nghiệp, ngắn gọn và không tự tạo thông tin sản phẩm." } }
+        });
 
         // Add history (limit to last 10 messages to control token usage)
         var historyToSend = history.TakeLast(10).ToList();

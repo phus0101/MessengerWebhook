@@ -2,7 +2,6 @@ using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.Services.AI;
 using MessengerWebhook.Services.AI.Models;
-using MessengerWebhook.StateMachine;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
 using Microsoft.Extensions.Logging;
@@ -13,7 +12,6 @@ namespace MessengerWebhook.UnitTests.StateMachine.Handlers;
 public class ProductDetailStateHandlerTests
 {
     private readonly Mock<IGeminiService> _geminiServiceMock;
-    private readonly Mock<IStateMachine> _stateMachineMock;
     private readonly Mock<IProductRepository> _productRepositoryMock;
     private readonly Mock<ILogger<ProductDetailStateHandler>> _loggerMock;
     private readonly ProductDetailStateHandler _handler;
@@ -21,12 +19,10 @@ public class ProductDetailStateHandlerTests
     public ProductDetailStateHandlerTests()
     {
         _geminiServiceMock = new Mock<IGeminiService>();
-        _stateMachineMock = new Mock<IStateMachine>();
         _productRepositoryMock = new Mock<IProductRepository>();
         _loggerMock = new Mock<ILogger<ProductDetailStateHandler>>();
         _handler = new ProductDetailStateHandler(
             _geminiServiceMock.Object,
-            _stateMachineMock.Object,
             _productRepositoryMock.Object,
             _loggerMock.Object);
     }
@@ -41,13 +37,11 @@ public class ProductDetailStateHandlerTests
     public async Task HandleAsync_WithoutSelectedProduct_ShouldTransitionToBrowsing()
     {
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.ProductDetail };
-        _stateMachineMock.Setup(x => x.TransitionToAsync(ctx, ConversationState.BrowsingProducts)).ReturnsAsync(true);
-        _stateMachineMock.Setup(x => x.SaveAsync(ctx)).Returns(Task.CompletedTask);
 
         var response = await _handler.HandleAsync(ctx, "show details");
 
         Assert.Contains("select a product", response, StringComparison.OrdinalIgnoreCase);
-        _stateMachineMock.Verify(x => x.TransitionToAsync(ctx, ConversationState.BrowsingProducts), Times.Once);
+        Assert.Equal(ConversationState.BrowsingProducts, ctx.CurrentState);
     }
 
     [Fact]
@@ -72,12 +66,10 @@ public class ProductDetailStateHandlerTests
             It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
             null,
             default)).ReturnsAsync("select_variant");
-        _stateMachineMock.Setup(x => x.TransitionToAsync(ctx, ConversationState.VariantSelection)).ReturnsAsync(true);
-        _stateMachineMock.Setup(x => x.SaveAsync(ctx)).Returns(Task.CompletedTask);
 
         var response = await _handler.HandleAsync(ctx, "select variant");
 
         Assert.Contains("50ml", response);
-        _stateMachineMock.Verify(x => x.TransitionToAsync(ctx, ConversationState.VariantSelection), Times.Once);
+        Assert.Equal(ConversationState.VariantSelection, ctx.CurrentState);
     }
 }
