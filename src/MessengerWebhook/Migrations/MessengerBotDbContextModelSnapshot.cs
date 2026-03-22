@@ -46,7 +46,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("SessionId");
 
-                    b.ToTable("Carts");
+                    b.ToTable("Carts", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.CartItem", b =>
@@ -78,7 +78,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("VariantId");
 
-                    b.ToTable("CartItems");
+                    b.ToTable("CartItems", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Color", b =>
@@ -96,7 +96,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Colors");
+                    b.ToTable("Colors", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ConversationMessage", b =>
@@ -125,7 +125,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("SessionId");
 
-                    b.ToTable("ConversationMessages");
+                    b.ToTable("ConversationMessages", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ConversationSession", b =>
@@ -159,7 +159,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("LastActivityAt");
 
-                    b.ToTable("ConversationSessions");
+                    b.ToTable("ConversationSessions", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.IngredientCompatibility", b =>
@@ -189,7 +189,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("Ingredient1", "Ingredient2");
 
-                    b.ToTable("IngredientCompatibilities");
+                    b.ToTable("IngredientCompatibilities", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Order", b =>
@@ -240,7 +240,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("Orders");
+                    b.ToTable("Orders", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.OrderItem", b =>
@@ -273,7 +273,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("VariantId");
 
-                    b.ToTable("OrderItems");
+                    b.ToTable("OrderItems", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Product", b =>
@@ -334,7 +334,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("Category");
 
-                    b.ToTable("Products");
+                    b.ToTable("Products", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ProductImage", b =>
@@ -363,7 +363,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("ProductId");
 
-                    b.ToTable("ProductImages");
+                    b.ToTable("ProductImages", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ProductVariant", b =>
@@ -420,7 +420,7 @@ namespace MessengerWebhook.Migrations
                     b.HasIndex("ProductId", "VolumeML", "Texture")
                         .IsUnique();
 
-                    b.ToTable("ProductVariants");
+                    b.ToTable("ProductVariants", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Size", b =>
@@ -438,7 +438,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Sizes");
+                    b.ToTable("Sizes", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.SkinProfile", b =>
@@ -471,7 +471,7 @@ namespace MessengerWebhook.Migrations
                     b.HasIndex("SessionId")
                         .IsUnique();
 
-                    b.ToTable("SkinProfiles");
+                    b.ToTable("SkinProfiles", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Cart", b =>

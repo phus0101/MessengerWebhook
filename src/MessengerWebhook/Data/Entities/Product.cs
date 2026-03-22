@@ -29,6 +29,8 @@ public class Product
     public string? ContraindicationsJson { get; set; }
 
     // RAG: Vector embedding for semantic search (768 dimensions for text-embedding-004)
+    // Stored as vector(768) in PostgreSQL, handled via raw SQL in repository
+    [NotMapped]
     public float[]? Embedding { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

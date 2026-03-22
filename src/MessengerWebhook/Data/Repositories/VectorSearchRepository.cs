@@ -77,16 +77,32 @@ public class VectorSearchRepository : IVectorSearchRepository
             throw new ArgumentException("Embedding must have 768 dimensions", nameof(embedding));
         }
 
-        var product = await _context.Products.FindAsync(new object[] { productId }, cancellationToken);
-        if (product == null)
+        // Check if product exists
+        var exists = await _context.Products.AnyAsync(p => p.Id == productId, cancellationToken);
+        if (!exists)
         {
             throw new InvalidOperationException($"Product with ID {productId} not found");
         }
 
-        product.Embedding = embedding;
-        product.UpdatedAt = DateTime.UtcNow;
+        // Use raw SQL to update embedding (since Embedding is [NotMapped])
+        var sql = @"UPDATE ""Products""
+                    SET ""Embedding"" = @embedding::vector,
+                        ""UpdatedAt"" = @updatedAt
+                    WHERE ""Id"" = @productId";
 
-        await _context.SaveChangesAsync(cancellationToken);
+        var embeddingParam = new NpgsqlParameter("@embedding", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Real)
+        {
+            Value = embedding
+        };
+
+        await _context.Database.ExecuteSqlRawAsync(
+            sql,
+            new[] {
+                embeddingParam,
+                new NpgsqlParameter("@updatedAt", DateTime.UtcNow),
+                new NpgsqlParameter("@productId", productId)
+            },
+            cancellationToken);
 
         _logger.LogDebug("Updated embedding for product {ProductId}", productId);
     }
