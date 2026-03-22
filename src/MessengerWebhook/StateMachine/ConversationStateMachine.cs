@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
+using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
 using Microsoft.Extensions.Logging;
 
@@ -10,15 +11,18 @@ public class ConversationStateMachine : IStateMachine
 {
     private readonly ISessionRepository _sessionRepository;
     private readonly ILogger<ConversationStateMachine> _logger;
+    private readonly Dictionary<ConversationState, IStateHandler> _handlers;
     private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan AbsoluteTimeout = TimeSpan.FromMinutes(60);
 
     public ConversationStateMachine(
         ISessionRepository sessionRepository,
+        IEnumerable<IStateHandler> handlers,
         ILogger<ConversationStateMachine> logger)
     {
         _sessionRepository = sessionRepository;
         _logger = logger;
+        _handlers = handlers.ToDictionary(h => h.HandledState, h => h);
     }
 
     public async Task<StateContext> LoadOrCreateAsync(string psid)
@@ -114,22 +118,26 @@ public class ConversationStateMachine : IStateMachine
     {
         var context = await LoadOrCreateAsync(psid);
 
-        // Stub implementation - will be replaced with state handlers in Phase 3.2
         _logger.LogInformation(
             "Processing message in state {State} for PSID: {PSID}",
             context.CurrentState,
             psid);
 
-        // For now, just transition from Idle to Greeting
-        if (context.CurrentState == ConversationState.Idle)
+        // Get handler for current state
+        if (!_handlers.TryGetValue(context.CurrentState, out var handler))
         {
-            await TransitionToAsync(context, ConversationState.Greeting);
+            _logger.LogError("No handler found for state {State}", context.CurrentState);
             await SaveAsync(context);
-            return "Hello! Welcome to our cosmetics store. How can I help you today?";
+            return "Xin lỗi, đã có lỗi xảy ra. Vui lòng thử lại sau.";
         }
 
+        // Process message with handler
+        var response = await handler.HandleAsync(context, message);
+
+        // Save updated context
         await SaveAsync(context);
-        return "Message received. State handlers will be implemented in Phase 3.2.";
+
+        return response;
     }
 
     public async Task ResetAsync(string psid)
