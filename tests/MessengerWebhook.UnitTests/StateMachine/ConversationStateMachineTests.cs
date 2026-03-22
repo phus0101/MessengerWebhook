@@ -1,6 +1,7 @@
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.StateMachine;
+using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -19,7 +20,11 @@ public class ConversationStateMachineTests
     {
         _mockRepository = new Mock<ISessionRepository>();
         _mockLogger = new Mock<ILogger<ConversationStateMachine>>();
-        _stateMachine = new ConversationStateMachine(_mockRepository.Object, _mockLogger.Object);
+
+        // Create empty handler collection for unit tests (handlers tested separately)
+        var handlers = Enumerable.Empty<IStateHandler>();
+
+        _stateMachine = new ConversationStateMachine(_mockRepository.Object, handlers, _mockLogger.Object);
     }
 
     [Fact]
@@ -267,33 +272,8 @@ public class ConversationStateMachineTests
         )), Times.Once);
     }
 
-    [Fact]
-    public async Task ProcessMessageAsync_TransitionsFromIdleToGreeting()
-    {
-        // Arrange
-        var psid = "test-psid-123";
-        ConversationSession? createdSession = null;
-
-        _mockRepository.Setup(r => r.GetByPSIDAsync(psid))
-            .ReturnsAsync(() => createdSession);
-
-        _mockRepository.Setup(r => r.CreateAsync(It.IsAny<ConversationSession>()))
-            .ReturnsAsync((ConversationSession s) =>
-            {
-                createdSession = s;
-                return s;
-            });
-
-        // Act
-        var response = await _stateMachine.ProcessMessageAsync(psid, "Hello");
-
-        // Assert
-        Assert.NotNull(response);
-        Assert.Contains("Welcome", response);
-        _mockRepository.Verify(r => r.UpdateAsync(It.Is<ConversationSession>(s =>
-            s.CurrentState == ConversationState.Greeting
-        )), Times.Once);
-    }
+    // Note: ProcessMessageAsync integration with handlers is tested in IntegrationTests.ConversationFlowTests
+    // Unit tests focus on state machine logic without handler dependencies
 
     [Fact]
     public async Task LoadOrCreateAsync_DeserializesContextJson()

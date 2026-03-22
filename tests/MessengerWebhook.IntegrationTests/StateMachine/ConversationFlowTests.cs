@@ -3,6 +3,9 @@ using MessengerWebhook.Data;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.StateMachine;
+using MessengerWebhook.StateMachine.Handlers;
+using MessengerWebhook.StateMachine.Models;
+using MessengerWebhook.Services.AI;
 using MessengerWebhook.IntegrationTests.Fixtures;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -29,19 +32,43 @@ public class ConversationFlowTests : IClassFixture<DatabaseFixture>
         // Arrange
         await using var context = _fixture.CreateDbContext();
         var sessionRepo = new SessionRepository(context);
-        var logger = Mock.Of<ILogger<ConversationStateMachine>>();
-        var stateMachine = new ConversationStateMachine(sessionRepo, logger);
+        var stateMachineLogger = Mock.Of<ILogger<ConversationStateMachine>>();
+        var geminiService = Mock.Of<IGeminiService>();
+
+        // Create mock state machine that will be replaced with real one
+        var mockStateMachine = new Mock<IStateMachine>();
+        ConversationStateMachine? realStateMachine = null;
+
+        // Setup mock to delegate to real state machine once created
+        mockStateMachine.Setup(m => m.TransitionToAsync(It.IsAny<StateContext>(), It.IsAny<ConversationState>()))
+            .Returns<StateContext, ConversationState>((ctx, state) => realStateMachine!.TransitionToAsync(ctx, state));
+
+        // Create state handlers with mock state machine
+        var handlers = new List<IStateHandler>
+        {
+            new IdleStateHandler(
+                geminiService,
+                mockStateMachine.Object,
+                Mock.Of<ILogger<IdleStateHandler>>()),
+            new GreetingStateHandler(
+                geminiService,
+                mockStateMachine.Object,
+                Mock.Of<ILogger<GreetingStateHandler>>())
+        };
+
+        // Create real state machine
+        realStateMachine = new ConversationStateMachine(sessionRepo, handlers, stateMachineLogger);
 
         var psid = $"test_user_{Guid.NewGuid():N}";
 
         // Act - Initial greeting (Idle -> Greeting)
-        var reply = await stateMachine.ProcessMessageAsync(psid, "hello");
+        var reply = await realStateMachine.ProcessMessageAsync(psid, "hello");
 
         // Assert
         reply.Should().NotBeNullOrEmpty();
         reply.Should().Contain("Welcome");
 
-        var ctx = await stateMachine.LoadOrCreateAsync(psid);
+        var ctx = await realStateMachine.LoadOrCreateAsync(psid);
         ctx.CurrentState.Should().Be(ConversationState.Greeting);
 
         // Verify session persisted
@@ -58,7 +85,8 @@ public class ConversationFlowTests : IClassFixture<DatabaseFixture>
         await using var context = _fixture.CreateDbContext();
         var sessionRepo = new SessionRepository(context);
         var logger = Mock.Of<ILogger<ConversationStateMachine>>();
-        var stateMachine = new ConversationStateMachine(sessionRepo, logger);
+        var handlers = Enumerable.Empty<IStateHandler>();
+        var stateMachine = new ConversationStateMachine(sessionRepo, handlers, logger);
 
         var psid = $"test_user_{Guid.NewGuid():N}";
 
@@ -68,7 +96,7 @@ public class ConversationFlowTests : IClassFixture<DatabaseFixture>
         var state1 = ctx1.CurrentState;
 
         // Simulate new request - create new state machine instance
-        var stateMachine2 = new ConversationStateMachine(sessionRepo, logger);
+        var stateMachine2 = new ConversationStateMachine(sessionRepo, handlers, logger);
         var ctx2 = await stateMachine2.LoadOrCreateAsync(psid);
 
         // Assert - State should be preserved
@@ -84,7 +112,8 @@ public class ConversationFlowTests : IClassFixture<DatabaseFixture>
         await using var context = _fixture.CreateDbContext();
         var sessionRepo = new SessionRepository(context);
         var mockLogger = new Mock<ILogger<ConversationStateMachine>>();
-        var stateMachine = new ConversationStateMachine(sessionRepo, mockLogger.Object);
+        var handlers = Enumerable.Empty<IStateHandler>();
+        var stateMachine = new ConversationStateMachine(sessionRepo, handlers, mockLogger.Object);
 
         var psid = $"test_user_{Guid.NewGuid():N}";
 

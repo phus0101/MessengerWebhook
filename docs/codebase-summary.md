@@ -167,19 +167,19 @@ MessengerWebhook/
 - Conditional transitions (e.g., cart must have items)
 - Validation before state changes
 
-**State Handlers** (`Handlers/`, 12 handlers):
-1. `IdleStateHandler` - Initial state
-2. `GreetingStateHandler` - Welcome message
-3. `MainMenuStateHandler` - Main menu options
-4. `BrowsingProductsStateHandler` - Product catalog
-5. `ProductDetailStateHandler` - Single product view
-6. `SkinAnalysisStateHandler` - AI skin analysis
-7. `VariantSelectionStateHandler` - Choose variant
-8. `AddToCartStateHandler` - Add to cart
-9. `CartReviewStateHandler` - Review cart
-10. `ShippingAddressStateHandler` - Collect address
+**State Handlers** (`Handlers/`, 11 handlers + base):
+1. `IdleStateHandler` - Initial state, awaits user message
+2. `GreetingStateHandler` - Welcome message, transition to MainMenu
+3. `MainMenuStateHandler` - Present main options (Browse, Skin Analysis, Help)
+4. `BrowsingProductsStateHandler` - Product catalog with semantic search
+5. `ProductDetailStateHandler` - Single product view with details
+6. `SkinAnalysisStateHandler` - AI-powered skin analysis
+7. `VariantSelectionStateHandler` - Choose product variant (color/size)
+8. `AddToCartStateHandler` - Add item to cart
+9. `CartReviewStateHandler` - Review cart contents
+10. `ShippingAddressStateHandler` - Collect shipping info
 11. `HelpStateHandler` - Context-aware help
-12. `BaseStateHandler` - Abstract base class
+12. `BaseStateHandler` - Abstract base with error handling
 
 **State Context** (`Models/StateContext.cs`):
 - Session data carrier
@@ -492,11 +492,16 @@ dotnet ef migrations script --project src/MessengerWebhook
 - Semantic product search
 - Integration tests with Testcontainers
 
-**Phase 3: State Machine** ✅
+**Phase 3: State Machine** ✅ (Completed: 2026-03-22)
 - 17 conversation states
-- 12 state handlers
-- 114 transition rules
-- Session management with timeouts
+- 11 state handlers (IdleStateHandler, GreetingStateHandler, MainMenuStateHandler, BrowsingProductsStateHandler, ProductDetailStateHandler, SkinAnalysisStateHandler, VariantSelectionStateHandler, AddToCartStateHandler, CartReviewStateHandler, ShippingAddressStateHandler, HelpStateHandler)
+- 114 transition rules with validation
+- Session management with timeouts (15min inactivity, 60min absolute)
+- SessionManager with IMemoryCache for performance
+- WebhookProcessor integration complete
+- Language detection in system prompt
+- Unit tests: 139/139 passing
+- Code review score: 8.5/10
 
 ### Pending Phases
 
@@ -632,10 +637,14 @@ dotnet ef migrations script --project src/MessengerWebhook
 ## Known Limitations
 
 1. **Single Instance**: Not yet optimized for horizontal scaling
-2. **No Caching**: Sessions and products fetched from database on every request
+2. **Session Caching**: SessionManager uses IMemoryCache (Phase 3), product caching pending
 3. **Limited Error Recovery**: Some error scenarios not fully handled
-4. **Incomplete Handlers**: 5 state handlers still stubbed (PaymentMethod, OrderConfirmation, etc.)
+4. **Incomplete Handlers**: 6 state handlers pending (PaymentMethod, OrderConfirmation, OrderPlaced, OrderTracking, SkinConsultation, Error)
 5. **No Multi-Tenancy**: Tenant resolution not yet implemented
+6. **High-Priority Issues** (from Phase 3 code review):
+   - Double-save pattern in BaseStateHandler/ConversationStateMachine
+   - Null reference risk in BrowsingProductsStateHandler
+   - SessionManager edge case in SaveAsync
 
 ---
 

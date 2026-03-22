@@ -66,17 +66,17 @@ builder.Services.AddScoped<ISessionManager, SessionManager>();
 builder.Services.AddScoped<IStateMachine, ConversationStateMachine>();
 
 // Register state handlers
-builder.Services.AddScoped<IdleStateHandler>();
-builder.Services.AddScoped<GreetingStateHandler>();
-builder.Services.AddScoped<MainMenuStateHandler>();
-builder.Services.AddScoped<BrowsingProductsStateHandler>();
-builder.Services.AddScoped<ProductDetailStateHandler>();
-builder.Services.AddScoped<VariantSelectionStateHandler>();
-builder.Services.AddScoped<AddToCartStateHandler>();
-builder.Services.AddScoped<CartReviewStateHandler>();
-builder.Services.AddScoped<ShippingAddressStateHandler>();
-builder.Services.AddScoped<SkinAnalysisStateHandler>();
-builder.Services.AddScoped<HelpStateHandler>();
+builder.Services.AddScoped<IStateHandler, IdleStateHandler>();
+builder.Services.AddScoped<IStateHandler, GreetingStateHandler>();
+builder.Services.AddScoped<IStateHandler, MainMenuStateHandler>();
+builder.Services.AddScoped<IStateHandler, BrowsingProductsStateHandler>();
+builder.Services.AddScoped<IStateHandler, ProductDetailStateHandler>();
+builder.Services.AddScoped<IStateHandler, VariantSelectionStateHandler>();
+builder.Services.AddScoped<IStateHandler, AddToCartStateHandler>();
+builder.Services.AddScoped<IStateHandler, CartReviewStateHandler>();
+builder.Services.AddScoped<IStateHandler, ShippingAddressStateHandler>();
+builder.Services.AddScoped<IStateHandler, SkinAnalysisStateHandler>();
+builder.Services.AddScoped<IStateHandler, HelpStateHandler>();
 
 // Register AI strategies
 builder.Services.AddSingleton<IModelSelectionStrategy, HybridModelSelectionStrategy>();
