@@ -27,11 +27,11 @@ public class GeminiEmbeddingService : IEmbeddingService
 
         var request = new
         {
-            model = "text-embedding-004",
+            model = _options.EmbeddingModel,
             content = new { parts = new[] { new { text } } }
         };
 
-        var url = "https://generativelanguage.googleapis.com/v1/models/text-embedding-004:embedContent";
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_options.EmbeddingModel}:embedContent";
         var response = await _httpClient.PostAsJsonAsync(url, request, ct);
 
         if (!response.IsSuccessStatusCode)
@@ -66,12 +66,12 @@ public class GeminiEmbeddingService : IEmbeddingService
             {
                 requests = batch.Select(text => new
                 {
-                    model = "text-embedding-004",
+                    model = _options.EmbeddingModel,
                     content = new { parts = new[] { new { text } } }
                 }).ToList()
             };
 
-            var url = "https://generativelanguage.googleapis.com/v1/models/text-embedding-004:batchEmbedContents";
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_options.EmbeddingModel}:batchEmbedContents";
             var response = await _httpClient.PostAsJsonAsync(url, request, ct);
 
             if (!response.IsSuccessStatusCode)

@@ -7,6 +7,7 @@ public class GeminiOptions
     public string ApiKey { get; set; } = string.Empty;
     public string ProModel { get; set; } = "gemini-1.5-pro";
     public string FlashLiteModel { get; set; } = "gemini-1.5-flash";
+    public string EmbeddingModel { get; set; } = "gemini-embedding-2-preview";
     public int MaxTokens { get; set; } = 2048;
     public double Temperature { get; set; } = 0.7;
     public int MaxRetries { get; set; } = 3;
