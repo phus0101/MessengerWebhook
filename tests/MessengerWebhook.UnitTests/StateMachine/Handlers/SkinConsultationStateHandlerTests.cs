@@ -51,10 +51,14 @@ public class SkinConsultationStateHandlerTests
             null,
             default)).ReturnsAsync("Here's advice for your skin concern.");
 
-        _embeddingServiceMock.Setup(x => x.GenerateAsync(It.IsAny<string>()))
+        _embeddingServiceMock.Setup(x => x.GenerateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new float[] { 0.1f, 0.2f });
 
-        _vectorSearchRepositoryMock.Setup(x => x.SearchSimilarProductsAsync(It.IsAny<float[]>(), It.IsAny<int>()))
+        _vectorSearchRepositoryMock.Setup(x => x.SearchSimilarProductsAsync(
+            It.IsAny<float[]>(),
+            It.IsAny<int>(),
+            It.IsAny<double>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync(products);
 
         var response = await _handler.HandleAsync(ctx, "I have dry skin");
