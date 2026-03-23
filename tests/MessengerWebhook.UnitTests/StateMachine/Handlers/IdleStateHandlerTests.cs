@@ -27,13 +27,82 @@ public class IdleStateHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_ShouldTransitionToGreeting()
+    public async Task HandleAsync_WithSkinConsultationIntent_ShouldTransitionToSkinConsultation()
     {
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Idle };
 
-        var response = await _handler.HandleAsync(ctx, "hello");
+        _geminiServiceMock.SetupSequence(x => x.SendMessageAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
+            null,
+            default))
+            .ReturnsAsync("skin_consultation")
+            .ReturnsAsync("Chào bạn! Tôi hiểu bạn đang cần tư vấn về sản phẩm cho da dầu.");
 
-        Assert.Contains("Welcome", response);
-        Assert.Equal(ConversationState.Greeting, ctx.CurrentState);
+        var response = await _handler.HandleAsync(ctx, "tôi muốn tư vấn sản phẩm cho da dầu");
+
+        Assert.Equal(ConversationState.SkinConsultation, ctx.CurrentState);
+        Assert.Contains("tư vấn", response, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithBrowseProductsIntent_ShouldTransitionToBrowsingProducts()
+    {
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Idle };
+
+        _geminiServiceMock.SetupSequence(x => x.SendMessageAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
+            null,
+            default))
+            .ReturnsAsync("browse_products")
+            .ReturnsAsync("Chào bạn! Tôi sẽ giúp bạn xem các sản phẩm của shop.");
+
+        var response = await _handler.HandleAsync(ctx, "cho tôi xem sản phẩm");
+
+        Assert.Equal(ConversationState.BrowsingProducts, ctx.CurrentState);
+        Assert.Contains("sản phẩm", response, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithOrderTrackingIntent_ShouldTransitionToOrderTracking()
+    {
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Idle };
+
+        _geminiServiceMock.SetupSequence(x => x.SendMessageAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
+            null,
+            default))
+            .ReturnsAsync("order_tracking")
+            .ReturnsAsync("Chào bạn! Tôi sẽ giúp bạn kiểm tra đơn hàng.");
+
+        var response = await _handler.HandleAsync(ctx, "kiểm tra đơn hàng của tôi");
+
+        Assert.Equal(ConversationState.OrderTracking, ctx.CurrentState);
+        Assert.Contains("đơn hàng", response, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithGreetingIntent_ShouldTransitionToMainMenu()
+    {
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Idle };
+
+        _geminiServiceMock.SetupSequence(x => x.SendMessageAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
+            null,
+            default))
+            .ReturnsAsync("greeting")
+            .ReturnsAsync("Xin chào! Rất vui được hỗ trợ bạn.");
+
+        var response = await _handler.HandleAsync(ctx, "xin chào");
+
+        Assert.Equal(ConversationState.MainMenu, ctx.CurrentState);
+        Assert.Contains("Bạn muốn:", response);
     }
 }
