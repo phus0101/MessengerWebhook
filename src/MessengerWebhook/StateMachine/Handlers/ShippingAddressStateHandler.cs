@@ -21,10 +21,10 @@ public class ShippingAddressStateHandler : BaseStateHandler
         AddToHistory(ctx, "user", message);
 
         // Check for back command
-        if (message.ToLowerInvariant().Contains("back") || message.ToLowerInvariant().Contains("cart"))
+        if (message.ToLowerInvariant().Contains("back") || message.ToLowerInvariant().Contains("cart") || message.ToLowerInvariant().Contains("quay"))
         {
             ctx.CurrentState = ConversationState.CartReview;
-            return "Returning to cart review.";
+            return "Quay lại xem giỏ hàng.";
         }
 
         // Use Gemini to validate and parse address
@@ -38,7 +38,7 @@ Respond with 'valid' or 'invalid'.";
 
         if (validation.Contains("invalid"))
         {
-            var response = "Please provide a complete address including street, city, and postal code.";
+            var response = "Vui lòng cung cấp địa chỉ đầy đủ bao gồm đường, thành phố và mã bưu điện.";
             AddToHistory(ctx, "model", response);
             return response;
         }
@@ -48,7 +48,7 @@ Respond with 'valid' or 'invalid'.";
 
         ctx.CurrentState = ConversationState.PaymentMethod;
 
-        var reply = "Address saved! Now, please select payment method:\n1. Credit Card\n2. PayPal\n3. Cash on Delivery";
+        var reply = "Đã lưu địa chỉ! Bây giờ, vui lòng chọn phương thức thanh toán:\n1. Thẻ tín dụng\n2. PayPal\n3. Thanh toán khi nhận hàng";
         AddToHistory(ctx, "model", reply);
         return reply;
     }

@@ -29,21 +29,21 @@ public class VariantSelectionStateHandler : BaseStateHandler
         if (string.IsNullOrEmpty(productId))
         {
             ctx.CurrentState = ConversationState.BrowsingProducts;
-            return "Please select a product first.";
+            return "Vui lòng chọn sản phẩm trước.";
         }
 
         var product = await _productRepository.GetByIdAsync(productId);
         if (product == null)
         {
             ctx.CurrentState = ConversationState.BrowsingProducts;
-            return "Product not found.";
+            return "Không tìm thấy sản phẩm.";
         }
 
         // Check for back command
-        if (message.ToLowerInvariant().Contains("back"))
+        if (message.ToLowerInvariant().Contains("back") || message.ToLowerInvariant().Contains("quay"))
         {
             ctx.CurrentState = ConversationState.ProductDetail;
-            return "Returning to product details.";
+            return "Quay lại chi tiết sản phẩm.";
         }
 
         // Parse variant selection
@@ -56,13 +56,13 @@ public class VariantSelectionStateHandler : BaseStateHandler
                 ctx.SetData("selectedVariantId", selectedVariant.Id);
 
                 ctx.CurrentState = ConversationState.AddToCart;
-                var response = $"Selected: {product.Name} - {selectedVariant.VolumeML}ml {selectedVariant.Texture} (${selectedVariant.Price:F2}). Adding to cart...";
+                var response = $"Đã chọn: {product.Name} - {selectedVariant.VolumeML}ml {selectedVariant.Texture} ({selectedVariant.Price:N0}đ). Đang thêm vào giỏ hàng...";
                 AddToHistory(ctx, "model", response);
                 return response;
             }
         }
 
-        var reply = "Please reply with a valid number to select a variant, or type 'back' to return.";
+        var reply = "Vui lòng trả lời số hợp lệ để chọn phiên bản, hoặc gõ 'quay lại' để trở về.";
         AddToHistory(ctx, "model", reply);
         return reply;
     }

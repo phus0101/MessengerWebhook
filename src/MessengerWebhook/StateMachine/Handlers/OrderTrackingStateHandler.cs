@@ -22,16 +22,16 @@ public class OrderTrackingStateHandler : BaseStateHandler
         var lowerMessage = message.ToLowerInvariant();
 
         // Check for menu command
-        if (lowerMessage.Contains("menu") || lowerMessage.Contains("main"))
+        if (lowerMessage.Contains("menu") || lowerMessage.Contains("main") || lowerMessage.Contains("chính"))
         {
             ctx.CurrentState = ConversationState.MainMenu;
-            var response = @"Main Menu:
-1. Browse Products
-2. Skin Analysis
-3. Track Order
-4. Help
+            var response = @"Menu chính:
+1. Xem sản phẩm
+2. Phân tích da
+3. Theo dõi đơn hàng
+4. Trợ giúp
 
-What would you like to do?";
+Bạn muốn làm gì?";
 
             AddToHistory(ctx, "model", response);
             return response;
@@ -40,16 +40,16 @@ What would you like to do?";
         // Show tracking details
         var orderId = ctx.GetData<string>("orderId") ?? "N/A";
 
-        var reply = $@"Order Tracking - {orderId}
+        var reply = $@"Theo dõi đơn hàng - {orderId}
 
-Current Status: Processing
-- Order confirmed ✓
-- Payment received ✓
-- Preparing shipment...
+Trạng thái hiện tại: Đang xử lý
+- Đơn hàng đã xác nhận ✓
+- Đã nhận thanh toán ✓
+- Đang chuẩn bị hàng...
 
-Estimated delivery: 3-5 business days
+Dự kiến giao hàng: 3-5 ngày làm việc
 
-Type 'menu' to return to main menu.";
+Gõ 'menu' để quay lại menu chính.";
 
         AddToHistory(ctx, "model", reply);
         return reply;

@@ -22,14 +22,14 @@ public class OrderConfirmationStateHandler : BaseStateHandler
         var lowerMessage = message.ToLowerInvariant();
 
         // Check for back command
-        if (lowerMessage.Contains("back") || lowerMessage.Contains("modify"))
+        if (lowerMessage.Contains("back") || lowerMessage.Contains("modify") || lowerMessage.Contains("quay") || lowerMessage.Contains("sửa"))
         {
             ctx.CurrentState = ConversationState.PaymentMethod;
-            return "Returning to payment method selection.";
+            return "Quay lại chọn phương thức thanh toán.";
         }
 
         // Check for confirmation
-        if (lowerMessage.Contains("confirm") || lowerMessage.Contains("yes") || lowerMessage.Contains("place"))
+        if (lowerMessage.Contains("confirm") || lowerMessage.Contains("yes") || lowerMessage.Contains("place") || lowerMessage.Contains("xác nhận") || lowerMessage.Contains("đặt"))
         {
             // Generate order ID
             var orderId = $"ORD-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
@@ -39,19 +39,19 @@ public class OrderConfirmationStateHandler : BaseStateHandler
 
             ctx.CurrentState = ConversationState.OrderPlaced;
 
-            var reply = $@"✅ Order Placed Successfully!
+            var reply = $@"✅ Đặt hàng thành công!
 
-Order ID: {orderId}
-Estimated delivery: 3-5 business days
+Mã đơn hàng: {orderId}
+Dự kiến giao hàng: 3-5 ngày làm việc
 
-You can track your order anytime by typing 'track order'.
-Type 'menu' to return to main menu.";
+Bạn có thể theo dõi đơn hàng bất cứ lúc nào bằng cách gõ 'theo dõi đơn hàng'.
+Gõ 'menu' để quay lại menu chính.";
 
             AddToHistory(ctx, "model", reply);
             return reply;
         }
 
-        var response = "Please type 'confirm' to place your order or 'back' to modify.";
+        var response = "Vui lòng gõ 'xác nhận' để đặt hàng hoặc 'quay lại' để sửa đổi.";
         AddToHistory(ctx, "model", response);
         return response;
     }

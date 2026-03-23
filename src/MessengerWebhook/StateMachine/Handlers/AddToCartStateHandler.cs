@@ -22,7 +22,7 @@ public class AddToCartStateHandler : BaseStateHandler
         if (string.IsNullOrEmpty(variantId))
         {
             ctx.CurrentState = ConversationState.BrowsingProducts;
-            return "Please select a product variant first.";
+            return "Vui lòng chọn phiên bản sản phẩm trước.";
         }
 
         var cartItems = ctx.GetData<List<string>>("cartItems") ?? new List<string>();
@@ -33,7 +33,7 @@ public class AddToCartStateHandler : BaseStateHandler
 
         ctx.CurrentState = ConversationState.CartReview;
 
-        var response = $"Added to cart! You have {cartItems.Count} item(s).\n\nWould you like to:\n1. View cart\n2. Continue shopping";
+        var response = $"Đã thêm vào giỏ hàng! Bạn có {cartItems.Count} sản phẩm.\n\nBạn muốn:\n1. Xem giỏ hàng\n2. Tiếp tục mua sắm";
         AddToHistory(ctx, "model", response);
         return response;
     }

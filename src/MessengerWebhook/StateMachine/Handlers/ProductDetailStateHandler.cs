@@ -29,14 +29,14 @@ public class ProductDetailStateHandler : BaseStateHandler
         if (string.IsNullOrEmpty(productId))
         {
             ctx.CurrentState = ConversationState.BrowsingProducts;
-            return "Please select a product first.";
+            return "Vui lòng chọn sản phẩm trước.";
         }
 
         var product = await _productRepository.GetByIdAsync(productId);
         if (product == null)
         {
             ctx.CurrentState = ConversationState.BrowsingProducts;
-            return "Product not found. Let's search again.";
+            return "Không tìm thấy sản phẩm. Hãy tìm lại nhé.";
         }
 
         // Check user intent
@@ -51,13 +51,13 @@ Respond with ONLY the intent name.";
         if (intent.Contains("skin") || intent.Contains("analysis"))
         {
             ctx.CurrentState = ConversationState.SkinAnalysis;
-            return "Let me check if this product suits your skin. What's your skin type?";
+            return "Để tôi kiểm tra xem sản phẩm này có phù hợp với da bạn không. Loại da của bạn là gì?";
         }
 
         if (intent.Contains("back") || intent.Contains("browse"))
         {
             ctx.CurrentState = ConversationState.BrowsingProducts;
-            return "Returning to product search.";
+            return "Quay lại tìm kiếm sản phẩm.";
         }
 
         // Default: show variants
@@ -66,13 +66,13 @@ Respond with ONLY the intent name.";
 
         if (variants.Count == 0)
         {
-            return "Sorry, this product is out of stock. Let me show you similar products.";
+            return "Xin lỗi, sản phẩm này đã hết hàng. Để tôi gợi ý sản phẩm tương tự.";
         }
 
         var variantList = string.Join("\n", variants.Select((v, i) =>
-            $"{i + 1}. {v.VolumeML}ml {v.Texture} - ${v.Price:F2} ({v.StockQuantity} in stock)"));
+            $"{i + 1}. {v.VolumeML}ml {v.Texture} - {v.Price:N0}đ (còn {v.StockQuantity} sản phẩm)"));
 
-        var response = $"Available options:\n\n{variantList}\n\nReply with a number to add to cart.";
+        var response = $"Các tùy chọn có sẵn:\n\n{variantList}\n\nTrả lời số để thêm vào giỏ hàng.";
         AddToHistory(ctx, "model", response);
         return response;
     }

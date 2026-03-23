@@ -29,21 +29,21 @@ public class BrowsingProductsStateHandler : BaseStateHandler
         AddToHistory(ctx, "user", message);
 
         // Check for navigation commands
-        if (message.ToLowerInvariant().Contains("cart"))
+        if (message.ToLowerInvariant().Contains("cart") || message.ToLowerInvariant().Contains("giỏ"))
         {
             var cartItems = ctx.GetData<List<string>>("cartItems");
             if (cartItems?.Count > 0)
             {
                 ctx.CurrentState = ConversationState.CartReview;
-                return "Let me show you your cart.";
+                return "Để tôi xem giỏ hàng của bạn.";
             }
-            return "Your cart is empty. Continue browsing to add products!";
+            return "Giỏ hàng của bạn đang trống. Tiếp tục xem sản phẩm để thêm vào giỏ nhé!";
         }
 
-        if (message.ToLowerInvariant().Contains("menu") || message.ToLowerInvariant().Contains("back"))
+        if (message.ToLowerInvariant().Contains("menu") || message.ToLowerInvariant().Contains("back") || message.ToLowerInvariant().Contains("quay"))
         {
             ctx.CurrentState = ConversationState.MainMenu;
-            return "Returning to main menu.";
+            return "Quay lại menu chính.";
         }
 
         // Generate embedding for search query
@@ -52,7 +52,7 @@ public class BrowsingProductsStateHandler : BaseStateHandler
 
         if (products.Count == 0)
         {
-            var response = "I couldn't find products matching your search. Try different keywords like 'moisturizer', 'serum', or 'cleanser'.";
+            var response = "Tôi không tìm thấy sản phẩm phù hợp. Thử từ khóa khác như 'kem dưỡng ẩm', 'serum', hoặc 'sữa rửa mặt' nhé.";
             AddToHistory(ctx, "model", response);
             return response;
         }
@@ -60,9 +60,9 @@ public class BrowsingProductsStateHandler : BaseStateHandler
         ctx.SetData("searchResults", products.Select(p => p.Id).ToList());
 
         var productList = string.Join("\n", products.Select((p, i) =>
-            $"{i + 1}. {p.Name} by {p.Brand} - ${p.BasePrice:F2}\n   {p.Description.Substring(0, Math.Min(80, p.Description.Length))}..."));
+            $"{i + 1}. {p.Name} - {p.Brand} - {p.BasePrice:N0}đ\n   {p.Description.Substring(0, Math.Min(80, p.Description.Length))}..."));
 
-        var reply = $"Found {products.Count} products:\n\n{productList}\n\nReply with a number to see details, or describe what you're looking for.";
+        var reply = $"Tìm thấy {products.Count} sản phẩm:\n\n{productList}\n\nTrả lời số để xem chi tiết, hoặc mô tả bạn đang tìm gì.";
         AddToHistory(ctx, "model", reply);
 
         return reply;

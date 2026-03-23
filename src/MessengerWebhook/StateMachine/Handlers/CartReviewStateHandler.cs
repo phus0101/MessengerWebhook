@@ -29,7 +29,7 @@ public class CartReviewStateHandler : BaseStateHandler
         if (cartItems == null || cartItems.Count == 0)
         {
             ctx.CurrentState = ConversationState.BrowsingProducts;
-            return "Your cart is empty. Let's find some products!";
+            return "Giỏ hàng của bạn đang trống. Hãy tìm sản phẩm nhé!";
         }
 
         // Check user intent
@@ -44,18 +44,18 @@ Respond with ONLY the intent name.";
         if (intent.Contains("checkout") || intent.Contains("1"))
         {
             ctx.CurrentState = ConversationState.ShippingAddress;
-            return "Great! Let's proceed to checkout. Please provide your shipping address.";
+            return "Tuyệt vời! Tiến hành thanh toán. Vui lòng cung cấp địa chỉ giao hàng.";
         }
 
         if (intent.Contains("continue") || intent.Contains("shop") || intent.Contains("2"))
         {
             ctx.CurrentState = ConversationState.BrowsingProducts;
-            return "Sure! What else are you looking for?";
+            return "Được rồi! Bạn đang tìm gì nữa?";
         }
 
         // Show cart summary
         var total = cartItems.Count * 29.99m; // Simplified calculation
-        var response = $"Your cart ({cartItems.Count} items):\nEstimated total: ${total:F2}\n\nOptions:\n1. Checkout\n2. Continue shopping";
+        var response = $"Giỏ hàng của bạn ({cartItems.Count} sản phẩm):\nTổng tạm tính: {total:N0}đ\n\nTùy chọn:\n1. Thanh toán\n2. Tiếp tục mua sắm";
         AddToHistory(ctx, "model", response);
         return response;
     }

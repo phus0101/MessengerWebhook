@@ -36,7 +36,7 @@ public abstract class BaseStateHandler : IStateHandler
         {
             Logger.LogError(ex, "Error handling state {State} for PSID: {PSID}", HandledState, ctx.FacebookPSID);
             ctx.CurrentState = ConversationState.Error;
-            return "Sorry, something went wrong. Please try again or type 'help' for assistance.";
+            return "Xin lỗi, đã có lỗi xảy ra. Vui lòng thử lại hoặc gõ 'trợ giúp' để được hỗ trợ.";
         }
     }
 

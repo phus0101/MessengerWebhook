@@ -21,7 +21,7 @@ public class HelpStateHandler : BaseStateHandler
         AddToHistory(ctx, "user", message);
 
         var prompt = $@"User asked for help: '{message}'
-Provide a brief, helpful response about using the cosmetics chatbot.
+Provide a brief, helpful response in Vietnamese about using the cosmetics chatbot.
 Topics: browsing products, skin consultation, cart, checkout, order tracking.
 Keep response under 100 words.";
 
@@ -33,12 +33,12 @@ Keep response under 100 words.";
         if (previousState.HasValue && previousState.Value != ConversationState.Help)
         {
             ctx.CurrentState = previousState.Value;
-            helpResponse += "\n\nReturning to where you were...";
+            helpResponse += "\n\nQuay lại nơi bạn đang ở...";
         }
         else
         {
             ctx.CurrentState = ConversationState.MainMenu;
-            helpResponse += "\n\nReturning to main menu.";
+            helpResponse += "\n\nQuay lại menu chính.";
         }
 
         AddToHistory(ctx, "model", helpResponse);

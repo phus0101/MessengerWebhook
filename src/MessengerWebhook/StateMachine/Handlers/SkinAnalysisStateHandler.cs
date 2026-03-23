@@ -49,7 +49,7 @@ Respond with ONLY the skin type.";
 
         if (products.Count == 0)
         {
-            var response = $"Thanks! I've noted your skin type as {skinType}. Let me search for suitable products.";
+            var response = $"Cảm ơn! Tôi đã ghi nhận loại da của bạn là {skinType}. Để tôi tìm sản phẩm phù hợp.";
             AddToHistory(ctx, "model", response);
             return response;
         }
@@ -57,9 +57,9 @@ Respond with ONLY the skin type.";
         ctx.SetData("searchResults", products.Select(p => p.Id).ToList());
 
         var productList = string.Join("\n", products.Select((p, i) =>
-            $"{i + 1}. {p.Name} by {p.Brand} - ${p.BasePrice:F2}"));
+            $"{i + 1}. {p.Name} - {p.Brand} - {p.BasePrice:N0}đ"));
 
-        var reply = $"Perfect! For {skinType} skin, I recommend:\n\n{productList}\n\nReply with a number to see details.";
+        var reply = $"Hoàn hảo! Cho da {skinType}, tôi gợi ý:\n\n{productList}\n\nTrả lời số để xem chi tiết.";
         AddToHistory(ctx, "model", reply);
         return reply;
     }

@@ -34,27 +34,27 @@ Respond with ONLY the intent name.";
         if (intent.Contains("browse") || intent.Contains("product") || intent.Contains("1"))
         {
             ctx.CurrentState = ConversationState.BrowsingProducts;
-            response = "Great! What type of products are you looking for? (e.g., moisturizer, serum, cleanser)";
+            response = "Tuyệt vời! Bạn đang tìm loại sản phẩm nào? (ví dụ: kem dưỡng ẩm, serum, sữa rửa mặt)";
         }
         else if (intent.Contains("skin") || intent.Contains("consultation") || intent.Contains("2"))
         {
             ctx.CurrentState = ConversationState.SkinConsultation;
-            response = "Let's find products perfect for your skin! What's your skin type? (oily, dry, combination, sensitive)";
+            response = "Hãy tìm sản phẩm hoàn hảo cho làn da của bạn! Loại da của bạn là gì? (da dầu, da khô, da hỗn hợp, da nhạy cảm)";
         }
         else if (intent.Contains("track") || intent.Contains("order") || intent.Contains("3"))
         {
             ctx.CurrentState = ConversationState.OrderTracking;
-            response = "Please provide your order number to track your order.";
+            response = "Vui lòng cung cấp mã đơn hàng để theo dõi.";
         }
         else if (intent.Contains("help") || intent.Contains("4"))
         {
             ctx.SetData("previousState", ConversationState.MainMenu);
             ctx.CurrentState = ConversationState.Help;
-            response = "I can help you with:\n- Browsing products\n- Skin consultation\n- Order tracking\n\nWhat would you like to know?";
+            response = "Tôi có thể giúp bạn:\n- Xem sản phẩm\n- Tư vấn da\n- Theo dõi đơn hàng\n\nBạn muốn biết gì?";
         }
         else
         {
-            response = "Please choose an option:\n\n1. Browse products\n2. Skin consultation\n3. Track order\n4. Help";
+            response = "Vui lòng chọn một tùy chọn:\n\n1. Xem sản phẩm\n2. Tư vấn da\n3. Theo dõi đơn hàng\n4. Trợ giúp";
         }
 
         AddToHistory(ctx, "model", response);

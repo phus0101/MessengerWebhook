@@ -22,42 +22,42 @@ public class OrderPlacedStateHandler : BaseStateHandler
         var lowerMessage = message.ToLowerInvariant();
 
         // Check for track order command
-        if (lowerMessage.Contains("track"))
+        if (lowerMessage.Contains("track") || lowerMessage.Contains("theo dõi") || lowerMessage.Contains("kiểm tra"))
         {
             ctx.CurrentState = ConversationState.OrderTracking;
             var orderId = ctx.GetData<string>("orderId") ?? "N/A";
 
-            var reply = $@"Order Tracking - {orderId}
+            var reply = $@"Theo dõi đơn hàng - {orderId}
 
-Status: Processing
-- Order confirmed ✓
-- Payment received ✓
-- Preparing shipment...
+Trạng thái: Đang xử lý
+- Đơn hàng đã xác nhận ✓
+- Đã nhận thanh toán ✓
+- Đang chuẩn bị hàng...
 
-We'll notify you when your order ships!";
+Chúng tôi sẽ thông báo khi đơn hàng được giao!";
 
             AddToHistory(ctx, "model", reply);
             return reply;
         }
 
         // Check for menu command
-        if (lowerMessage.Contains("menu") || lowerMessage.Contains("main"))
+        if (lowerMessage.Contains("menu") || lowerMessage.Contains("main") || lowerMessage.Contains("chính"))
         {
             ctx.CurrentState = ConversationState.MainMenu;
-            var response = @"Main Menu:
-1. Browse Products
-2. Skin Analysis
-3. Track Order
-4. Help
+            var response = @"Menu chính:
+1. Xem sản phẩm
+2. Phân tích da
+3. Theo dõi đơn hàng
+4. Trợ giúp
 
-What would you like to do?";
+Bạn muốn làm gì?";
 
             AddToHistory(ctx, "model", response);
             return response;
         }
 
         // Default response
-        var defaultReply = "Your order has been placed! Type 'track order' to check status or 'menu' for main menu.";
+        var defaultReply = "Đơn hàng của bạn đã được đặt! Gõ 'theo dõi đơn hàng' để kiểm tra trạng thái hoặc 'menu' để về menu chính.";
         AddToHistory(ctx, "model", defaultReply);
         return defaultReply;
     }

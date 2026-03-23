@@ -29,22 +29,22 @@ Respond with ONLY the intent name.";
 
         Logger.LogInformation("Detected intent: {Intent} for PSID: {PSID}", intent, ctx.FacebookPSID);
 
-        var response = "Hello! I'm here to help you find the perfect cosmetics. ";
+        var response = "Xin chào! Tôi ở đây để giúp bạn tìm sản phẩm mỹ phẩm hoàn hảo. ";
 
         if (intent.Contains("skin") || intent.Contains("analysis"))
         {
             ctx.CurrentState = ConversationState.SkinConsultation;
-            response += "Let's start with a skin consultation!";
+            response += "Hãy bắt đầu với tư vấn da nhé!";
         }
         else if (intent.Contains("track") || intent.Contains("order"))
         {
             ctx.CurrentState = ConversationState.OrderTracking;
-            response += "I can help you track your order.";
+            response += "Tôi có thể giúp bạn theo dõi đơn hàng.";
         }
         else
         {
             ctx.CurrentState = ConversationState.MainMenu;
-            response += "What would you like to do?\n\n1. Browse products\n2. Skin consultation\n3. Track order\n4. Help";
+            response += "Bạn muốn làm gì?\n\n1. Xem sản phẩm\n2. Tư vấn da\n3. Theo dõi đơn hàng\n4. Trợ giúp";
         }
 
         AddToHistory(ctx, "model", response);

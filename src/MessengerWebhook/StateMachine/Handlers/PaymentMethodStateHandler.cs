@@ -20,10 +20,10 @@ public class PaymentMethodStateHandler : BaseStateHandler
         AddToHistory(ctx, "user", message);
 
         // Check for back command
-        if (message.ToLowerInvariant().Contains("back") || message.ToLowerInvariant().Contains("address"))
+        if (message.ToLowerInvariant().Contains("back") || message.ToLowerInvariant().Contains("address") || message.ToLowerInvariant().Contains("quay") || message.ToLowerInvariant().Contains("địa chỉ"))
         {
             ctx.CurrentState = ConversationState.ShippingAddress;
-            return "Returning to shipping address.";
+            return "Quay lại nhập địa chỉ giao hàng.";
         }
 
         // Parse payment method selection
@@ -43,12 +43,12 @@ Respond with ONLY the payment method name.";
         var shippingAddress = ctx.GetData<string>("shippingAddress") ?? "N/A";
         var cartItems = ctx.GetData<List<string>>("cartItems") ?? new List<string>();
 
-        var reply = $@"Order Summary:
-- Items: {cartItems.Count} product(s)
-- Shipping: {shippingAddress}
-- Payment: {paymentMethod}
+        var reply = $@"Tóm tắt đơn hàng:
+- Sản phẩm: {cartItems.Count} sản phẩm
+- Giao hàng: {shippingAddress}
+- Thanh toán: {paymentMethod}
 
-Type 'confirm' to place order or 'back' to modify.";
+Gõ 'xác nhận' để đặt hàng hoặc 'quay lại' để sửa đổi.";
 
         AddToHistory(ctx, "model", reply);
         return reply;
