@@ -19,7 +19,14 @@ pre {
   overflow-x: auto;
   margin: 1.5rem 0;
   border: 1px solid var(--border-light);
-  max-width: 100%;
+  /* Use fit-content so wide ASCII art expands beyond .content container */
+  width: fit-content;
+  min-width: 100%;
+  max-width: calc(100vw - var(--sidebar-width) - 6rem);
+  /* Center the expanded code block relative to .content */
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
   /* Ensure ASCII art and wide code is scrollable, not clipped */
   white-space: pre;
   /* Always show scrollbar when content overflows */
@@ -113,6 +120,7 @@ hr {
 .code-wrapper {
   position: relative;
   margin: 1.5rem 0;
+  transition: width 0.2s ease, left 0.2s ease;
 }
 
 .code-wrapper pre {

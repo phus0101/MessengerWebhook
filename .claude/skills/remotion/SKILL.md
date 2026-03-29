@@ -3,6 +3,8 @@ name: ck:remotion
 description: Best practices for Remotion - Video creation in React
 metadata:
   tags: remotion, video, react, animation, composition
+  author: claudekit
+  version: "1.0.0"
 argument-hint: "[video or component]"
 ---
 

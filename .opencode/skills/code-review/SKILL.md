@@ -1,24 +1,42 @@
 ---
 name: ck:code-review
-description: "Review code quality, receive feedback with technical rigor, verify completion claims. Use before PRs, after implementing features, when claiming task completion. Includes scout-based edge case detection and native Task pipeline orchestration."
-argument-hint: "[context] OR codebase [parallel]"
+description: "Review code quality with adversarial rigor. Supports input modes: pending changes, PR number, commit hash, codebase scan. Always-on red-team analysis finds security holes, false assumptions, and failure modes."
+argument-hint: "[#PR | COMMIT | --pending | codebase [parallel]]"
+metadata:
+  author: claudekit
+  version: "2.0.0"
 ---
 
 # Code Review
 
-Guide proper code review practices emphasizing technical rigor, evidence-based claims, and verification over performative responses.
+Adversarial code review with technical rigor, evidence-based claims, and verification over performative responses. Every review includes red-team analysis that actively tries to break the code.
 
-## Default (No Arguments)
+## Input Modes
 
-If invoked with context (recent changes/PR), proceed with review. If invoked WITHOUT arguments, use `AskUserQuestion` to present available review operations:
+Auto-detect from arguments. If ambiguous or no arguments, prompt via `AskUserQuestion`.
 
-| Operation | Description |
-|-----------|-------------|
-| `(default)` | Review recent changes/PR |
-| `codebase` | Full codebase scan & analysis |
-| `codebase parallel` | Parallel multi-reviewer audit |
+| Input | Mode | What Gets Reviewed |
+|-------|------|--------------------|
+| `#123` or PR URL | **PR** | Full PR diff fetched via `gh pr diff` |
+| `abc1234` (7+ hex chars) | **Commit** | Single commit diff via `git show` |
+| `--pending` | **Pending** | Staged + unstaged changes via `git diff` |
+| *(no args, recent changes)* | **Default** | Recent changes in context |
+| `codebase` | **Codebase** | Full codebase scan |
+| `codebase parallel` | **Codebase+** | Parallel multi-reviewer audit |
 
-Present as options via `AskUserQuestion` with header "Review Operation", question "What would you like to do?".
+**Resolution details:** `references/input-mode-resolution.md`
+
+### No Arguments
+
+If invoked WITHOUT arguments and no recent changes in context, use `AskUserQuestion` with header "Review Target", question "What would you like to review?":
+
+| Option | Description |
+|--------|-------------|
+| Pending changes | Review staged/unstaged git diff |
+| Enter PR number | Fetch and review a specific PR |
+| Enter commit hash | Review a specific commit |
+| Full codebase scan | Deep codebase analysis |
+| Parallel codebase audit | Multi-reviewer codebase scan |
 
 ## Core Principle
 
@@ -31,10 +49,13 @@ Verify before implementing. Ask before assuming. Evidence before claims.
 
 | Practice | When | Reference |
 |----------|------|-----------|
+| **Spec compliance** | After implementing from plan/spec, BEFORE quality review | `references/spec-compliance-review.md` |
+| **Adversarial review** | Always-on Stage 3 — actively tries to break the code | `references/adversarial-review.md` |
 | Receiving feedback | Unclear feedback, external reviewers, needs prioritization | `references/code-review-reception.md` |
 | Requesting review | After tasks, before merge, stuck on problem | `references/requesting-code-review.md` |
 | Verification gates | Before any completion claim, commit, PR | `references/verification-before-completion.md` |
 | Edge case scouting | After implementation, before review | `references/edge-case-scouting.md` |
+| **Checklist review** | Pre-landing, `/ck:ship` pipeline, security audit | `references/checklist-workflow.md` |
 | **Task-managed reviews** | Multi-file features (3+ files), parallel reviewers, fix cycles | `references/task-management-reviews.md` |
 
 ## Quick Decision Tree
@@ -42,25 +63,50 @@ Verify before implementing. Ask before assuming. Evidence before claims.
 ```
 SITUATION?
 │
+├─ Input mode? → Resolve diff (references/input-mode-resolution.md)
+│   ├─ #PR / URL → fetch PR diff
+│   ├─ commit hash → git show
+│   ├─ --pending → git diff (staged + unstaged)
+│   ├─ codebase → full scan (references/codebase-scan-workflow.md)
+│   ├─ codebase parallel → parallel audit (references/parallel-review-workflow.md)
+│   └─ default → recent changes in context
+│
 ├─ Received feedback → STOP if unclear, verify if external, implement if human partner
-├─ Completed work → Scout edge cases → Request code-reviewer subagent
-├─ Multi-file feature (3+ files) → Create review pipeline tasks (scout→review→fix→verify)
+├─ Completed work from plan/spec:
+│   ├─ Stage 1: Spec compliance review (references/spec-compliance-review.md)
+│   │   └─ PASS? → Stage 2 │ FAIL? → Fix → Re-review Stage 1
+│   ├─ Stage 2: Code quality review (code-reviewer subagent)
+│   │   └─ Scout edge cases → Review standards, performance
+│   └─ Stage 3: Adversarial review (references/adversarial-review.md) [ALWAYS-ON]
+│       └─ Red-team the code → Adjudicate → Accept/Reject findings
+├─ Completed work (no plan) → Scout → Code quality → Adversarial review
+├─ Pre-landing / ship → Load checklists → Two-pass review → Adversarial review
+├─ Multi-file feature (3+ files) → Create review pipeline tasks (scout→review→adversarial→fix→verify)
 └─ About to claim status → RUN verification command FIRST
 ```
+
+### Three-Stage Review Protocol
+
+**Stage 1 — Spec Compliance** (load `references/spec-compliance-review.md`)
+- Does code match what was requested?
+- Any missing requirements? Any unjustified extras?
+- MUST pass before Stage 2
+
+**Stage 2 — Code Quality** (code-reviewer subagent)
+- Only runs AFTER spec compliance passes
+- Standards, security, performance, edge cases
+
+**Stage 3 — Adversarial Review** (load `references/adversarial-review.md`)
+- Runs AFTER Stage 2 passes, subject to scope gate (skip if <=2 files, <=30 lines, no security files)
+- Spawn adversarial reviewer with context anchoring (runtime, framework, context files)
+- Find: security holes, false assumptions, resource exhaustion, race conditions, supply chain, observability gaps
+- Output: Accept (must fix) / Reject (false positive) / Defer (GitHub issue) verdicts per finding
+- Critical findings block merge; re-reviews use fix-diff-only optimization
 
 ## Receiving Feedback
 
 **Pattern:** READ → UNDERSTAND → VERIFY → EVALUATE → RESPOND → IMPLEMENT
-
-**Rules:**
-- No performative agreement: "You're absolutely right!", "Great point!"
-- No implementation before verification
-- Restate, ask questions, push back with reasoning, or just work
-- YAGNI check: grep for usage before implementing "proper" features
-
-**Source handling:**
-- Human partner: Trusted - implement after understanding
-- External reviewers: Verify technically, check breakage, push back if wrong
+No performative agreement. Verify before implementing. Push back if wrong.
 
 **Full protocol:** `references/code-review-reception.md`
 
@@ -92,12 +138,15 @@ SITUATION?
 
 **When:** Multi-file features (3+ changed files), parallel code-reviewer scopes, review cycles with Critical fix iterations.
 
-**Pipeline:** scout → review → fix → verify (each a Task with dependency chain)
+**Fallback:** Task tools (`TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList`) are CLI-only — unavailable in VSCode extension. If they error, use `TodoWrite` for tracking and run pipeline sequentially. Review quality is identical.
+
+**Pipeline:** scout → review → adversarial → fix → verify (each a Task with dependency chain)
 
 ```
 TaskCreate: "Scout edge cases"         → pending
 TaskCreate: "Review implementation"    → pending, blockedBy: [scout]
-TaskCreate: "Fix critical issues"      → pending, blockedBy: [review]
+TaskCreate: "Adversarial review"       → pending, blockedBy: [review]
+TaskCreate: "Fix critical issues"      → pending, blockedBy: [adversarial]
 TaskCreate: "Verify fixes pass"        → pending, blockedBy: [fix]
 ```
 
@@ -125,10 +174,12 @@ TaskCreate: "Verify fixes pass"        → pending, blockedBy: [fix]
 
 ## Integration with Workflows
 
-- **Subagent-Driven:** Scout edge cases → Review after EACH task → Verify before next
-- **Pull Requests:** Scout → Verify tests → Code-reviewer review → Merge
+- **Subagent-Driven:** Scout → Review → Adversarial → Verify before next task
+- **Pull Requests:** Scout → Code quality → Adversarial → Merge
 - **Task Pipeline:** Create review tasks with dependencies → auto-unblock through chain
-- **Cook Handoff:** Cook completes phase → review pipeline tasks → all complete → cook proceeds
+- **Cook Handoff:** Cook completes phase → review pipeline tasks (incl. adversarial) → all complete → cook proceeds
+- **PR Review:** `/code-review #123` → fetch diff → full 3-stage review on PR changes
+- **Commit Review:** `/code-review abc1234` → review specific commit with full pipeline
 
 ## Codebase Analysis Subcommands
 
@@ -139,9 +190,10 @@ TaskCreate: "Verify fixes pass"        → pending, blockedBy: [fix]
 
 ## Bottom Line
 
-1. Technical rigor over social performance
-2. Scout edge cases before review
-3. Task-manage reviews for multi-file features
-4. Evidence before claims
+1. Resolve input mode first — know WHAT you're reviewing
+2. Technical rigor over social performance
+3. Scout edge cases before review
+4. Adversarial review on EVERY review — no exceptions
+5. Evidence before claims
 
-Verify. Scout. Question. Then implement. Evidence. Then claim.
+Verify. Scout. Red-team. Question. Then implement. Evidence. Then claim.

@@ -3,6 +3,9 @@ name: ck:bootstrap
 description: "Bootstrap new projects with research, tech stack, design, planning, and implementation. Modes: full (interactive), auto (default), fast (skip research), parallel (multi-agent)."
 license: MIT
 argument-hint: "[requirements] [--full|--auto|--fast|--parallel]"
+metadata:
+  author: claudekit
+  version: "1.0.0"
 ---
 
 # Bootstrap - New Project Scaffolding
@@ -14,7 +17,7 @@ End-to-end project bootstrapping from idea to running code.
 ## Usage
 
 ```
-/bootstrap <user-requirements>
+/ck:bootstrap <user-requirements>
 ```
 
 **Flags** (optional, default `--auto`):
@@ -28,8 +31,8 @@ End-to-end project bootstrapping from idea to running code.
 
 **Example:**
 ```
-/bootstrap "Build a SaaS dashboard with auth" --fast
-/bootstrap "E-commerce platform with Stripe" --parallel
+/ck:bootstrap "Build a SaaS dashboard with auth" --fast
+/ck:bootstrap "E-commerce platform with Stripe" --parallel
 ```
 
 ## Workflow Overview
@@ -91,6 +94,7 @@ Elite software engineering expert specializing in system architecture and techni
 - DO NOT implement code directly — delegate through planning + cook skills
 - Sacrifice grammar for concision in reports
 - List unresolved questions at end of reports
+- Run `/ck:journal` to write a concise technical journal entry upon completion
 
 ## References
 

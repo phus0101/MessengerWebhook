@@ -42,6 +42,8 @@ body:not(.has-plan) .main-content {
   max-width: var(--content-width);
   margin: 0 auto;
   padding-bottom: 4rem;
+  /* Allow code blocks to visually overflow beyond content width */
+  overflow: visible;
 }
 
 

@@ -32,8 +32,9 @@ metadata:                                            # Custom key-value pairs
 ## Field Details
 
 ### name (required)
-- Kebab-case only, no spaces, no capitals
-- Must match folder name
+- Supports either `skill-name` or `namespace:skill-name` (for example `ck:plan`)
+- If namespaced, namespace and skill id both use kebab-case only (no spaces, no capitals)
+- Folder name must match the skill id segment (after `:`)
 - Cannot contain "claude" or "anthropic" (reserved)
 
 ### description (required)

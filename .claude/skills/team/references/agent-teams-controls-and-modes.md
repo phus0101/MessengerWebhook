@@ -1,13 +1,14 @@
-# Agent Teams — Controls, Display Modes & Task Management
+# Agent Teams -- Controls, Display Modes & Task Management
 
 > **Source:** https://code.claude.com/docs/en/agent-teams
+> **Version captured:** Claude Code v2.1.80 (March 2026)
 
 ## Display Modes
 
 - **In-process** (default fallback): all teammates in one terminal. `Shift+Up/Down` to navigate. Works in any terminal.
 - **Split panes**: each teammate gets own pane. Requires tmux or iTerm2.
 
-Default is `"auto"` — uses split panes if already inside a tmux session, otherwise in-process. The `"tmux"` setting enables split-pane mode and auto-detects tmux vs iTerm2.
+Default is `"auto"` -- uses split panes if already inside a tmux session, otherwise in-process. The `"tmux"` setting enables split-pane mode and auto-detects tmux vs iTerm2.
 
 ```json
 { "teammateMode": "in-process" }
@@ -20,14 +21,11 @@ Split panes NOT supported in: VS Code terminal, Windows Terminal, Ghostty.
 **tmux setup:** install via system package manager.
 **iTerm2 setup:** install `it2` CLI, enable Python API in iTerm2 > Settings > General > Magic.
 
-## Specify Teammates & Models
+## Model Requirements
 
-Claude decides teammate count based on task, or you specify:
+All Agent Team teammates must run **Opus 4.6** -- this is a hard constraint. Mixed-model teams (e.g., Sonnet for devs, Haiku for testers) are NOT supported within Agent Teams.
 
-```
-Create a team with 4 teammates to refactor these modules in parallel.
-Use Sonnet for each teammate.
-```
+For mixed-model workflows, use **subagents** instead (the `Agent` tool supports `model: "haiku" | "sonnet" | "opus"` per spawn).
 
 ## Plan Approval
 
@@ -40,8 +38,8 @@ Require plan approval before they make any changes.
 
 **Flow:**
 1. Teammate works in read-only plan mode
-2. Teammate finishes planning → sends `plan_approval_request` to lead
-3. Lead reviews → approves via `SendMessage(type: "plan_approval_response", approve: true)`
+2. Teammate finishes planning -> sends `plan_approval_request` to lead
+3. Lead reviews -> approves via `SendMessage(type: "plan_approval_response", approve: true)`
 4. If rejected: teammate stays in plan mode, revises based on feedback, resubmits
 5. Once approved: teammate exits plan mode, begins implementation
 
@@ -51,7 +49,7 @@ Require plan approval before they make any changes.
 
 Restricts lead to coordination-only tools: spawning, messaging, shutting down teammates, and managing tasks. No code editing.
 
-Useful when lead should focus entirely on orchestration — breaking down work, assigning tasks, synthesizing results.
+Useful when lead should focus entirely on orchestration -- breaking down work, assigning tasks, synthesizing results.
 
 **Enable:** Press `Shift+Tab` after team creation to cycle into delegate mode.
 
@@ -62,14 +60,40 @@ Useful when lead should focus entirely on orchestration — breaking down work, 
 
 ## Task Assignment & Claiming
 
-Three states: **pending** → **in_progress** → **completed**. Tasks can have dependencies — blocked until dependencies resolve.
+Three states: **pending** -> **in_progress** -> **completed**. Tasks can have dependencies -- blocked until dependencies resolve.
 
-- **Lead assigns**: tell lead which task → which teammate
+- **Lead assigns**: tell lead which task -> which teammate
 - **Self-claim**: after finishing, teammate picks next unassigned, unblocked task automatically
+- **Auto-unblock**: completing a blocking task automatically unblocks dependents
 
 File locking prevents race conditions on simultaneous claiming.
 
-Task dependencies managed automatically — completing a blocking task unblocks dependents.
+## Worktree Isolation for Implementation
+
+When spawning developer teammates, use `isolation: "worktree"` on the Agent tool:
+
+```
+Agent(
+  subagent_type: "fullstack-developer",
+  model: "opus",
+  isolation: "worktree",
+  run_in_background: true,
+  prompt: "Implement auth module..."
+)
+```
+
+Each dev gets own worktree + branch. No file conflicts during parallel work. Lead merges branches after all devs complete.
+
+**When to use:** Always for cook/implementation templates. Not needed for research/review (read-only).
+
+## Background Spawning
+
+Use `run_in_background: true` on the Agent tool to spawn teammates non-blocking:
+
+- Lead continues orchestration while teammates work
+- Automatic notification when teammate completes
+- No polling needed -- TaskCompleted hook fires on completion
+- Use TaskList as fallback if no events in 60s
 
 ## Shutdown
 
@@ -77,7 +101,7 @@ Task dependencies managed automatically — completing a blocking task unblocks 
 Ask the researcher teammate to shut down
 ```
 
-Teammate can approve (exit) or reject with explanation. Teammates finish current request/tool call before shutting down — can be slow.
+Teammate can approve (exit) or reject with explanation. Teammates finish current request/tool call before shutting down -- can be slow.
 
 ## Cleanup
 
@@ -85,20 +109,18 @@ After all teammates shut down, call `TeamDelete` (no parameters). Fails if activ
 
 Removes shared team resources (`~/.claude/teams/` and `~/.claude/tasks/` entries).
 
-## Hook-Based Orchestration (2.1.33+)
+## Hook-Based Orchestration
 
 ### Event-Driven Monitoring
 
 Instead of polling TaskList, lead receives automatic context injection:
 
-- **TaskCompleted** — fires when any teammate completes a task. Lead gets progress counts.
-- **TeammateIdle** — fires when teammate turn ends. Lead gets available task info.
-
-CK hooks (`task-completed-handler.cjs`, `teammate-idle-handler.cjs`) process these events and inject summary into lead's context.
+- **TaskCompleted** -- fires when any teammate completes a task. Lead gets progress counts.
+- **TeammateIdle** -- fires when teammate turn ends. Lead gets available task info.
 
 ### Recommended Pattern
 
-1. Lead creates tasks and spawns teammates
+1. Lead creates tasks and spawns teammates (with `run_in_background: true`)
 2. TaskCompleted hook notifies lead as tasks finish (progress: N/M)
 3. TeammateIdle hook suggests reassignment or shutdown
 4. Lead acts on suggestions (spawn tester, shut down, reassign)

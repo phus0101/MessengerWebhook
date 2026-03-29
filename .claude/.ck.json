@@ -56,5 +56,16 @@
     }
   },
   "hooks": {},
-  "assertions": []
+  "assertions": [],
+  "kits": {
+    "ClaudeKit Engineer": {
+      "installedSettings": {
+        "hooks": [
+          "node $HOME/.claude/hooks/session-state.cjs",
+          "node $HOME/.claude/hooks/plan-format-kanban.cjs"
+        ],
+        "mcpServers": []
+      }
+    }
+  }
 }

@@ -19,6 +19,7 @@ try {
   const os = require('os');
   const { isHookEnabled } = require('./lib/ck-config-utils.cjs');
   const { invalidateCache } = require('./lib/git-info-cache.cjs');
+  const { createHookTimer, logHookCrash } = require('./lib/hook-logger.cjs');
 
   // Early exit if hook disabled in config
   if (!isHookEnabled('post-edit-simplify-reminder')) {
@@ -76,6 +77,7 @@ function saveSessionData(data) {
  * Main hook logic
  */
 function main() {
+  const timer = createHookTimer('post-edit-simplify-reminder', { event: 'PostToolUse' });
   try {
     // Read hook input from stdin
     let input = '';
@@ -91,6 +93,7 @@ function main() {
     // Only track edit operations
     const editTools = ['Edit', 'Write', 'MultiEdit'];
     if (!editTools.includes(toolName)) {
+      timer.end({ tool: toolName, status: 'skip', exit: 0, note: 'non-edit-tool' });
       console.log(JSON.stringify({ continue: true }));
       return;
     }
@@ -133,24 +136,26 @@ function main() {
       result.additionalContext = additionalContext;
     }
 
+    timer.end({
+      tool: toolName,
+      status: 'ok',
+      exit: 0,
+      note: additionalContext ? 'reminder-injected' : 'tracked-edit'
+    });
     console.log(JSON.stringify(result));
 
   } catch (e) {
     // On error, allow the operation to continue
+    logHookCrash('post-edit-simplify-reminder', e, { event: 'PostToolUse' });
     console.log(JSON.stringify({ continue: true }));
   }
   }
 
   main();
 } catch (e) {
-  // Minimal crash logging (zero deps — only Node builtins)
   try {
-    const fs = require('fs');
-    const p = require('path');
-    const logDir = p.join(__dirname, '.logs');
-    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-    fs.appendFileSync(p.join(logDir, 'hook-log.jsonl'),
-      JSON.stringify({ ts: new Date().toISOString(), hook: p.basename(__filename, '.cjs'), status: 'crash', error: e.message }) + '\n');
+    const { logHookCrash } = require('./lib/hook-logger.cjs');
+    logHookCrash('post-edit-simplify-reminder', e, { event: 'PostToolUse' });
   } catch (_) {}
   process.exit(0); // fail-open
 }

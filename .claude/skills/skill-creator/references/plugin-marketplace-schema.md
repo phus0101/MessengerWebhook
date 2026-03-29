@@ -63,7 +63,7 @@ Full JSON schema for `.claude-plugin/marketplace.json`.
   "plugins": [{
     "name": "review-plugin",
     "source": "./plugins/review-plugin",
-    "description": "Adds a /review skill for quick code reviews"
+    "description": "Adds a review skill for quick code reviews"
   }]
 }
 ```

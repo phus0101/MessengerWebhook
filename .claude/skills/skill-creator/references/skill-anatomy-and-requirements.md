@@ -5,19 +5,20 @@
 ```
 .claude/skills/
 └── skill-name/
-    ├── SKILL.md          (required, <150 lines)
+    ├── SKILL.md          (required, <300 lines)
     │   ├── YAML frontmatter (name, description required)
     │   └── Markdown instructions
     └── Bundled Resources (optional)
         ├── scripts/      Executable code (Python/Node.js)
         ├── references/   Docs loaded into context as needed
+        ├── agents/       Eval agent templates (grader, comparator, analyzer)
         └── assets/       Files used in output (templates, etc.)
 ```
 
 ## Core Requirements
 
-- **SKILL.md:** <150 lines. Concise quick-reference guide.
-- **References:** <150 lines each. Split by logical boundaries.
+- **SKILL.md:** <300 lines. Concise quick-reference guide.
+- **References:** <300 lines each. Split by logical boundaries.
 - **Scripts:** No length limit. Must have tests. Must work cross-platform.
 - **Description:** <200 chars. Specific triggers, not generic.
 - **Consolidation:** Related topics combined (e.g., cloudflare+docker → devops)
@@ -27,7 +28,7 @@
 
 ```yaml
 ---
-name: kebab-case-name
+name: kebab-case-name  # optional namespace: ck:kebab-case-name
 description: Under 200 chars, specific triggers and use cases
 license: Optional
 version: Optional
@@ -51,7 +52,7 @@ See `references/script-quality-criteria.md` for full criteria.
 
 - Documentation loaded as-needed into context
 - Use cases: schemas, APIs, workflows, cheatsheets, domain knowledge
-- **Best practice:** Split >150 lines into multiple files
+- **Best practice:** Split >300 lines into multiple files
 - Include grep patterns in SKILL.md for discoverability
 - Practical instructions, not educational documentation
 
@@ -65,7 +66,7 @@ See `references/script-quality-criteria.md` for full criteria.
 
 Three-level loading for context efficiency:
 1. **Metadata** (~200 chars) — always in context
-2. **SKILL.md body** (<150 lines) — when skill triggers
+2. **SKILL.md body** (<300 lines) — when skill triggers
 3. **Bundled resources** — as needed (scripts: unlimited, execute without loading)
 
 ## Writing Style

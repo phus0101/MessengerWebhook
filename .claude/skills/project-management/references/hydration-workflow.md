@@ -21,15 +21,19 @@ Tasks are **session-scoped** — they disappear when the session ends. Plan file
 └──────────────────┘            └───────────────────┘
 ```
 
+## Tool Availability
+
+Task tools (`TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList`) are **CLI-only** — disabled in VSCode extension. If unavailable, use `TodoWrite` for progress tracking. The hydration pattern still works: plan files remain source of truth, sync-back updates checkboxes regardless of Task tool availability.
+
 ## Session Start: Hydration
 
 1. Read plan files: `plan.md` + `phase-XX-*.md`
 2. Identify unchecked `[ ]` items = remaining work
-3. `TaskCreate` per unchecked item with metadata (phase, priority, effort, planDir, phaseFile)
-4. Set up `addBlockedBy` dependency chains between phases
+3. `TaskCreate` per unchecked item with metadata (phase, priority, effort, planDir, phaseFile) — or `TodoWrite` if Task tools unavailable
+4. Set up `addBlockedBy` dependency chains between phases (skip if using TodoWrite fallback)
 5. Already-checked `[x]` items = done, skip
 
-**Check first:** `TaskList()` — if tasks already exist (same session), skip re-creation.
+**Check first:** `TaskList()` — if tasks already exist (same session), skip re-creation. If TaskList errors, proceed with TodoWrite.
 
 ## During Work
 

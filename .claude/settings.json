@@ -8,6 +8,11 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-init.cjs\""
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-state.cjs\"",
+            "_origin": "engineer"
           }
         ]
       }
@@ -34,6 +39,15 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/cook-after-plan-reminder.cjs\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-state.cjs\"",
+            "_origin": "engineer"
           }
         ]
       }
@@ -84,6 +98,11 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-simplify-reminder.cjs\""
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/plan-format-kanban.cjs\"",
+            "_origin": "engineer"
           }
         ]
       },
@@ -117,6 +136,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-state.cjs\"",
+            "_origin": "engineer"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
@@ -126,6 +156,18 @@
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
-    "superpowers@claude-plugins-official": true
+    "superpowers@claude-plugins-official": false,
+    "playwright@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "postgres-best-practices@supabase-agent-skills": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "atlassian@claude-plugins-official": true
+  },
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "attribution": {
+    "commit": "",
+    "pr": ""
   }
 }

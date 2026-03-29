@@ -18,6 +18,7 @@ try {
   const path = require('path');
   const os = require('os');
   const { isHookEnabled } = require('./lib/ck-config-utils.cjs');
+  const { createHookTimer, logHookCrash } = require('./lib/hook-logger.cjs');
 
   if (!isHookEnabled('task-completed-handler')) {
     process.exit(0);
@@ -61,13 +62,20 @@ function logCompletion(teamName, taskId, taskSubject, teammateName) {
 }
 
 function main() {
+  const timer = createHookTimer('task-completed-handler', { event: 'TaskCompleted' });
   try {
     const stdin = fs.readFileSync(0, 'utf-8').trim();
-    if (!stdin) process.exit(0);
+    if (!stdin) {
+      timer.end({ status: 'skip', exit: 0, note: 'empty-input' });
+      process.exit(0);
+    }
 
     const payload = JSON.parse(stdin);
     const { task_id, task_subject, teammate_name, team_name } = payload;
-    if (!team_name) process.exit(0);
+    if (!team_name) {
+      timer.end({ status: 'skip', exit: 0, note: 'missing-team-name' });
+      process.exit(0);
+    }
 
     // Log completion to report file
     logCompletion(team_name, task_id, task_subject, teammate_name);
@@ -94,25 +102,22 @@ function main() {
       }
     };
     console.log(JSON.stringify(output));
+    timer.end({ status: 'ok', exit: 0, target: String(task_id || ''), note: 'completion-logged' });
     process.exit(0);
   } catch (error) {
     if (process.env.CK_DEBUG) {
       console.error(`[task-completed-handler] Error: ${error.message}`);
     }
+    logHookCrash('task-completed-handler', error, { event: 'TaskCompleted' });
     process.exit(0);
   }
   }
 
   main();
 } catch (e) {
-  // Minimal crash logging (zero deps — only Node builtins)
   try {
-    const fs = require('fs');
-    const p = require('path');
-    const logDir = p.join(__dirname, '.logs');
-    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-    fs.appendFileSync(p.join(logDir, 'hook-log.jsonl'),
-      JSON.stringify({ ts: new Date().toISOString(), hook: p.basename(__filename, '.cjs'), status: 'crash', error: e.message }) + '\n');
+    const { logHookCrash } = require('./lib/hook-logger.cjs');
+    logHookCrash('task-completed-handler', e, { event: 'TaskCompleted' });
   } catch (_) {}
   process.exit(0); // fail-open
 }

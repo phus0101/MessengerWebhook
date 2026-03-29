@@ -59,11 +59,18 @@ Launch N `code-reviewer` subagents simultaneously:
 |---|-----------|------|--------|
 ```
 
-### 5. Auto-Fix Pipeline
+### 5. Adversarial Review (Always-On)
+
+After aggregation, spawn adversarial reviewer (see `adversarial-review.md`) on the full scope:
+- Adversarial reviewer receives aggregated findings + unhandled edge cases as context
+- Actively tries to break the code beyond what edge case verification found
+- Adjudicate findings: Accept / Reject / Defer
+
+### 6. Auto-Fix Pipeline
 
 **IF** unhandled/partial edge cases found:
 - Ask: "Found N unhandled edge cases. Fix with /ck:fix --parallel? [Y/n]"
 
-### 6. Final Report
+### 7. Final Report
 - Summary of verification
 - Ask: "Commit? [Y/n]" → use `git-manager`

@@ -11,6 +11,30 @@
 
 ## Status Update Protocol
 
+### CLI-First Status Updates (Preferred)
+
+Use `ck plan` CLI commands for deterministic, format-safe status changes:
+
+```bash
+# Mark phase completed
+ck plan check <phase-id>
+
+# Mark phase in-progress
+ck plan check <phase-id> --start
+
+# Revert phase to pending
+ck plan uncheck <phase-id>
+
+# Add new phase or sub-phase
+ck plan add-phase "Phase Name" [--after <id>]
+```
+
+CLI automatically updates both `plan.md` table AND phase file frontmatter.
+Plan-level status auto-computed: all completed → `completed`, any in-progress → `in-progress`.
+
+**Fallback:** If `ck` CLI is not available, edit `plan.md` directly —
+only change the Status column cell, preserve table structure exactly.
+
 ### Plan-Level Status
 
 Update `plan.md` frontmatter `status` field:

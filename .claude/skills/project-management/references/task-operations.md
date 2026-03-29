@@ -2,6 +2,8 @@
 
 Claude Code provides 4 native tools for session-scoped task management.
 
+**Tool Availability:** `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` are **CLI-only** — disabled in VSCode extension (`isTTY` check). If these tools error, fall back to `TodoWrite` for progress tracking. Plan file sync-back works identically without Task tools.
+
 ## TaskCreate
 
 Create structured tasks with metadata and dependencies.

@@ -2,8 +2,10 @@
 name: ck:ui-styling
 description: Style UIs with shadcn/ui components (Radix UI + Tailwind CSS). Use for accessible components, themes, dark mode, responsive layouts, design systems, color customization.
 license: MIT
-version: 1.0.0
 argument-hint: "[component or layout]"
+metadata:
+  author: claudekit
+  version: "1.0.0"
 ---
 
 # UI Styling Skill

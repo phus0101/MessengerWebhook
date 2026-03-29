@@ -2,7 +2,9 @@
 name: ck:git
 description: "Git operations with conventional commits. Use for staging, committing, pushing, PRs, merges. Auto-splits commits by type/scope. Security scans for secrets."
 argument-hint: "cm|cp|pr|merge [args]"
-version: 1.0.0
+metadata:
+  author: claudekit
+  version: "1.0.0"
 ---
 
 # Git Operations

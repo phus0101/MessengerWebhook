@@ -7,6 +7,6 @@
   },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": false,
-    "context7@claude-plugins-official": false
+    "context7@claude-plugins-official": true
   }
 }

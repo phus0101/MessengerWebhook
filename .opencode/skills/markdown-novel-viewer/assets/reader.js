@@ -576,6 +576,12 @@
 
       // Add button to wrapper
       wrapper.appendChild(btn);
+
+      // Auto-expand overflowing code blocks to fill available width
+      // (user can collapse back via the button)
+      wrapper.classList.add('expanded');
+      btn.setAttribute('aria-label', 'Collapse code block');
+      applyExpandLayout(wrapper, true);
     });
   }
 
@@ -780,8 +786,14 @@
       // Initialize expand buttons after mermaid renders
       setTimeout(() => initMermaidExpand(), 100);
     });
-    // Initialize code block expand buttons (for wide ASCII art)
-    initCodeExpand();
+    // Initialize code block expand buttons after fonts load
+    // (font metrics affect scrollWidth used for overflow detection)
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => initCodeExpand());
+    } else {
+      // Fallback for browsers without Font Loading API
+      setTimeout(() => initCodeExpand(), 300);
+    }
 
     // Event listeners
     themeToggle?.addEventListener('click', toggleTheme);

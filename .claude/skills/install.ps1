@@ -929,7 +929,7 @@ function Setup-PythonEnv {
         }
     }
 
-    # Install .claude/scripts requirements (contains pyyaml for generate_catalogs.py)
+    # Install .claude/scripts requirements (contains pyyaml for scan_skills.py)
     $scriptsReqPath = Join-Path $ScriptDir "..\scripts\requirements.txt"
     if (Test-Path $scriptsReqPath) {
         $scriptsLogFile = Join-Path $LogDir "install-scripts.log"

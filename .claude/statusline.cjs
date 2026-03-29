@@ -14,14 +14,19 @@ const fs = require('fs');
 const path = require('path');
 
 // Import modular components
-const { green, yellow, red, cyan, magenta, dim, coloredBar, RESET, shouldUseColor } = require('./hooks/lib/colors.cjs');
+const { RESET, green, yellow, red, cyan, magenta, dim, coloredBar, getContextColor, setColorEnabled } = require('./hooks/lib/colors.cjs');
 const { parseTranscript } = require('./hooks/lib/transcript-parser.cjs');
 const { countConfigs } = require('./hooks/lib/config-counter.cjs');
 const { loadConfig } = require('./hooks/lib/ck-config-utils.cjs');
 const { getGitInfo } = require('./hooks/lib/git-info-cache.cjs');
 
-// Buffer constant matching /context output (22.5% of 200k)
-const AUTOCOMPACT_BUFFER = 45000;
+// Buffer constant for fallback context calculation
+const AUTOCOMPACT_BUFFER = 40000;
+const GRAPHEME_SEGMENTER = (
+  typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+)
+  ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+  : null;
 
 /**
  * Expand home directory to ~
@@ -46,16 +51,55 @@ function getTerminalWidth() {
 }
 
 /**
- * Calculate visible string length (strip ANSI codes, account for emoji width)
- * Emojis typically render as 2 columns in terminals
+ * Calculate terminal-visible string length.
+ * Uses grapheme clusters and width heuristics for emoji/combining/CJK text.
  */
 function visibleLength(str) {
   if (!str || typeof str !== 'string') return 0;
-  // Strip ANSI escape codes
   const noAnsi = str.replace(/\x1b\[[0-9;]*m/g, '');
-  // Count emojis (they render as ~2 cols) - common emoji ranges
-  const emojiMatches = noAnsi.match(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu) || [];
-  return noAnsi.length + emojiMatches.length; // +1 per emoji (base length + 1 = 2 cols)
+  const clusters = GRAPHEME_SEGMENTER
+    ? Array.from(GRAPHEME_SEGMENTER.segment(noAnsi), s => s.segment)
+    : Array.from(noAnsi);
+
+  let len = 0;
+  for (const cluster of clusters) {
+    if (!cluster) continue;
+
+    if (/^[\u0000-\u001f\u007f]+$/.test(cluster)) continue; // control chars
+    if (/^\p{Mark}+$/u.test(cluster)) continue; // combining marks
+
+    const first = cluster.codePointAt(0);
+    if (first === 0x200d || first === 0xfe0e || first === 0xfe0f) continue;
+
+    // Emoji grapheme clusters render as 2 columns in most terminals.
+    if ((cluster.includes('\u200d') && /\p{Extended_Pictographic}/u.test(cluster)) ||
+        /\p{Extended_Pictographic}/u.test(cluster)) {
+      len += 2;
+      continue;
+    }
+
+    // Full-width CJK ranges.
+    if (first >= 0x1100 && (
+      first <= 0x115f ||
+      first === 0x2329 ||
+      first === 0x232a ||
+      (first >= 0x2e80 && first <= 0xa4cf && first !== 0x303f) ||
+      (first >= 0xac00 && first <= 0xd7a3) ||
+      (first >= 0xf900 && first <= 0xfaff) ||
+      (first >= 0xfe10 && first <= 0xfe19) ||
+      (first >= 0xfe30 && first <= 0xfe6f) ||
+      (first >= 0xff00 && first <= 0xff60) ||
+      (first >= 0xffe0 && first <= 0xffe6) ||
+      (first >= 0x1f200 && first <= 0x1f251) ||
+      (first >= 0x20000 && first <= 0x3fffd)
+    )) {
+      len += 2;
+      continue;
+    }
+
+    len += 1;
+  }
+  return len;
 }
 
 /**
@@ -76,15 +120,46 @@ function formatElapsed(startTime, endTime) {
 }
 
 /**
- * Read stdin asynchronously
+ * Read stdin asynchronously.
+ * Optional inactivity timeout can be enabled via CK_STATUSLINE_STDIN_TIMEOUT_MS.
  */
 async function readStdin() {
   return new Promise((resolve, reject) => {
     const chunks = [];
     stdin.setEncoding('utf8');
-    stdin.on('data', chunk => chunks.push(chunk));
-    stdin.on('end', () => resolve(chunks.join('')));
-    stdin.on('error', reject);
+
+    const parsedTimeout = Number.parseInt(env.CK_STATUSLINE_STDIN_TIMEOUT_MS || '', 10);
+    const timeoutMs = Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 0;
+    let timer = null;
+
+    const clearTimer = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+
+    const armTimer = () => {
+      if (!timeoutMs) return;
+      clearTimer();
+      timer = setTimeout(() => {
+        reject(new Error(`stdin read timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+    };
+
+    armTimer();
+    stdin.on('data', chunk => {
+      chunks.push(chunk);
+      armTimer();
+    });
+    stdin.on('end', () => {
+      clearTimer();
+      resolve(chunks.join(''));
+    });
+    stdin.on('error', (err) => {
+      clearTimer();
+      reject(err);
+    });
   });
 }
 
@@ -113,12 +188,12 @@ function renderSessionLines(ctx) {
   const termWidth = getTerminalWidth();
   const threshold = Math.floor(termWidth * 0.85);
 
-  // Build all atomic parts for flexible composition (no colors on static text)
-  const dirPart = `📁 ${ctx.currentDir}`;
+  // Build all atomic parts for flexible composition with colors
+  const dirPart = `📁 ${yellow(ctx.currentDir)}`;
 
   let branchPart = '';
   if (ctx.gitBranch) {
-    branchPart = `🌿 ${ctx.gitBranch}`;
+    branchPart = `🌿 ${magenta(ctx.gitBranch)}`;
     // Build git status indicators: (unstaged, +staged, ahead↑, behind↓)
     const gitIndicators = [];
     if (ctx.gitUnstaged > 0) gitIndicators.push(`${ctx.gitUnstaged}`);
@@ -139,14 +214,15 @@ function renderSessionLines(ctx) {
   if (planPart) locationPart += `  ${planPart}`;
 
   // Build session part: 🤖 model  contextBar%  ⌛ time left (usage%)
-  let sessionPart = `🤖 ${ctx.modelName}`;
+  let sessionPart = `🤖 ${cyan(ctx.modelName)}`;
   if (ctx.contextPercent > 0) {
-    sessionPart += `  ${coloredBar(ctx.contextPercent, 12)} ${ctx.contextPercent}%`;
+    const ctxColor = getContextColor(ctx.contextPercent);
+    sessionPart += `  ${coloredBar(ctx.contextPercent, 12)} ${ctxColor}${ctx.contextPercent}%${RESET}`;
   }
-  // Add usage/reset info to session part (stays on line 1 with model - Claude Code only reads line 1)
+  // Keep usage/reset info close to model/context for quick scanning.
   const usageStr = buildUsageString(ctx);
   if (usageStr) {
-    sessionPart += `  ⌛ ${usageStr.replace(/\)$/, ' used)')}`;
+    sessionPart += `  ⌛ ${dim(usageStr.replace(/\)$/, ' used)'))}`;
   }
 
   // Build stats part (only lines changed now)
@@ -162,8 +238,8 @@ function renderSessionLines(ctx) {
   const sessionLen = visibleLength(sessionPart);
   const statsLen = visibleLength(statsPart);
 
-  // Layout priority: SESSION FIRST (Claude Code only reads line 1)
-  // Line 1: model + context + usage (most important for Claude Code)
+  // Layout priority: session info first for readability.
+  // Line 1: model + context + usage
   // Line 2+: location, git, stats
   const allOneLine = `${sessionPart}  ${locationPart}  ${statsPart}`;
   const sessionLocation = `${sessionPart}  ${locationPart}`;
@@ -304,15 +380,15 @@ function renderTodosLine(transcript) {
  * Format: "🤖 opus 4.5  🔋 50%  ⏰ 2h 16m (38%)  🌿 branch  📁 ~/path"
  */
 function renderMinimal(ctx) {
-  const parts = [`🤖 ${ctx.modelName}`];
+  const parts = [`🤖 ${cyan(ctx.modelName)}`];
   if (ctx.contextPercent > 0) {
     const batteryIcon = ctx.contextPercent > 70 ? red('🔋') : '🔋';
     parts.push(`${batteryIcon} ${ctx.contextPercent}%`);
   }
   const usageStr = buildUsageString(ctx);
-  if (usageStr) parts.push(`⏰ ${usageStr}`);
-  if (ctx.gitBranch) parts.push(`🌿 ${ctx.gitBranch}`);
-  parts.push(`📁 ${ctx.currentDir}`);
+  if (usageStr) parts.push(`⏰ ${dim(usageStr)}`);
+  if (ctx.gitBranch) parts.push(`🌿 ${magenta(ctx.gitBranch)}`);
+  parts.push(`📁 ${yellow(ctx.currentDir)}`);
   console.log(parts.join('  '));
 }
 
@@ -321,18 +397,19 @@ function renderMinimal(ctx) {
  */
 function renderCompact(ctx) {
   // Line 1: Session info (model + context + usage)
-  let line1 = `🤖 ${ctx.modelName}`;
+  let line1 = `🤖 ${cyan(ctx.modelName)}`;
   if (ctx.contextPercent > 0) {
-    line1 += `  ${coloredBar(ctx.contextPercent, 12)} ${ctx.contextPercent}%`;
+    const ctxColor = getContextColor(ctx.contextPercent);
+    line1 += `  ${coloredBar(ctx.contextPercent, 12)} ${ctxColor}${ctx.contextPercent}%${RESET}`;
   }
   const usageStr = buildUsageString(ctx);
-  if (usageStr) line1 += `  ⌛ ${usageStr}`;
-  console.log(line1.replace(/ /g, '\u00A0'));
+  if (usageStr) line1 += `  ⌛ ${dim(usageStr)}`;
+  console.log(line1);
 
   // Line 2: Location (branch + directory)
-  let line2 = `📁 ${ctx.currentDir}`;
-  if (ctx.gitBranch) line2 += `  🌿 ${ctx.gitBranch}`;
-  console.log(line2.replace(/ /g, '\u00A0'));
+  let line2 = `📁 ${yellow(ctx.currentDir)}`;
+  if (ctx.gitBranch) line2 += `  🌿 ${magenta(ctx.gitBranch)}`;
+  console.log(line2);
 }
 
 /**
@@ -356,10 +433,9 @@ function render(ctx, singleLineMode = false) {
     if (todosLine) lines.push(todosLine);
   }
 
-  // Output all lines with non-breaking spaces for alignment
+  // Output lines directly to avoid formatting surprises across terminals/renderers.
   for (const line of lines) {
-    const outputLine = shouldUseColor ? `${RESET}${line.replace(/ /g, '\u00A0')}` : line;
-    console.log(outputLine);
+    console.log(line);
   }
 }
 
@@ -410,19 +486,25 @@ async function main() {
       }
     } catch {}
 
-    // Context window - use current_usage fields with AUTOCOMPACT_BUFFER
+    // Context window - prefer pre-calculated fields, fallback to manual calculation
     const usage = data.context_window?.current_usage || {};
     const contextSize = data.context_window?.context_window_size || 0;
     let contextPercent = 0;
     let totalTokens = 0;
 
-    if (contextSize > 0 && contextSize > AUTOCOMPACT_BUFFER) {
+    if (contextSize > 0) {
       totalTokens = (usage.input_tokens ?? 0) +
                     (usage.cache_creation_input_tokens ?? 0) +
                     (usage.cache_read_input_tokens ?? 0);
 
-      // Add buffer to match /context calculation
-      contextPercent = Math.min(100, Math.round(((totalTokens + AUTOCOMPACT_BUFFER) / contextSize) * 100));
+      // Use pre-calculated percentage from Claude Code (model-agnostic, works for 200K and 1M)
+      const preCalcPercent = data.context_window?.used_percentage;
+      if (typeof preCalcPercent === 'number' && preCalcPercent >= 0) {
+        contextPercent = Math.round(preCalcPercent);
+      } else if (contextSize > AUTOCOMPACT_BUFFER) {
+        // Fallback: manual calculation with buffer
+        contextPercent = Math.min(100, Math.round(((totalTokens + AUTOCOMPACT_BUFFER) / contextSize) * 100));
+      }
     }
 
     // Write context data to temp file for hooks to read
@@ -432,6 +514,7 @@ async function main() {
         const contextDataPath = path.join(os.tmpdir(), `ck-context-${sessionId}.json`);
         fs.writeFileSync(contextDataPath, JSON.stringify({
           percent: contextPercent,
+          remaining: data.context_window?.remaining_percentage ?? (100 - contextPercent),
           tokens: totalTokens,
           size: contextSize,
           usage: usage,
@@ -450,7 +533,7 @@ async function main() {
     // Read actual reset time and utilization from usage limits cache (written by usage-context-awareness hook)
     let usagePercent = null;
     try {
-      const usageCachePath = path.join(os.tmpdir(), 'ck-usage-limits-cache.json');
+      const usageCachePath = env.CK_USAGE_CACHE_PATH || path.join(os.tmpdir(), 'ck-usage-limits-cache.json');
       if (fs.existsSync(usageCachePath)) {
         const cache = JSON.parse(fs.readFileSync(usageCachePath, 'utf8'));
 
@@ -509,6 +592,12 @@ async function main() {
     // Load config and get statusline mode
     const config = loadConfig({ includeProject: false, includeAssertions: false, includeLocale: false });
     const statuslineMode = config.statusline || 'full';
+
+    // Apply statuslineColors config: explicit false disables colors regardless of FORCE_COLOR
+    // NO_COLOR env var is checked inside isColorEnabled() and always wins
+    if (config.statuslineColors === false) {
+      setColorEnabled(false);
+    }
 
     // Render based on mode
     switch (statuslineMode) {

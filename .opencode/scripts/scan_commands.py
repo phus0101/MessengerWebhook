@@ -13,7 +13,7 @@ def main() -> None:
     output_path = Path(".opencode/scripts/commands_data.yaml")
     output_path.write_text(
         "# Commands have been migrated to skills.\n"
-        "# See .opencode/skills/ck-help/scripts/skills_data.yaml for the current catalog.\n"
+        "# See .opencode/scripts/skills_data.yaml for the current catalog.\n"
         "[]\n",
         encoding="utf-8",
     )

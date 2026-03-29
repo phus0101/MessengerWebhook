@@ -2,6 +2,9 @@
 name: ck:coding-level
 description: "Set coding experience level for tailored explanations and output format."
 argument-hint: "[0-5]"
+metadata:
+  author: claudekit
+  version: "1.0.0"
 ---
 
 # Coding Level

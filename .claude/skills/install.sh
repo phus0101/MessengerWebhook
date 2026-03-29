@@ -655,6 +655,16 @@ install_node_deps() {
         print_success "plans-kanban dependencies installed"
     fi
 
+    # stitch (@google/stitch-sdk)
+    if [ -d "$SCRIPT_DIR/stitch/scripts" ] && [ -f "$SCRIPT_DIR/stitch/scripts/package.json" ]; then
+        print_info "Installing Stitch SDK dependencies..."
+        if (cd "$SCRIPT_DIR/stitch/scripts" && npm install --quiet); then
+            print_success "Stitch SDK dependencies installed"
+        else
+            print_warning "Stitch SDK install failed (optional)"
+        fi
+    fi
+
     # Optional: Shopify CLI (ask user unless auto-confirming)
     if [ -d "$SCRIPT_DIR/shopify" ]; then
         if [[ "$SKIP_CONFIRM" == "true" ]]; then
@@ -853,7 +863,7 @@ setup_python_env() {
         fi
     done
 
-    # Install .claude/scripts requirements (contains pyyaml for generate_catalogs.py)
+    # Install .claude/scripts requirements (contains pyyaml for scan_skills.py)
     local SCRIPTS_REQ="$SCRIPT_DIR/../scripts/requirements.txt"
     if [ -f "$SCRIPTS_REQ" ]; then
         local SCRIPTS_LOG="$LOG_DIR/install-scripts.log"

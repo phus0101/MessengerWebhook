@@ -1,6 +1,6 @@
 # Complexity Assessment
 
-Classify issue complexity before routing to workflow.
+Classify issue complexity before routing to workflow. Assessment happens AFTER Step 1 (Scout) and Step 2 (Diagnose).
 
 ## Classification Criteria
 
@@ -11,7 +11,7 @@ Classify issue complexity before routing to workflow.
 - Clear error message (type error, syntax, lint)
 - Keywords: `type`, `typescript`, `tsc`, `lint`, `eslint`, `syntax`
 - Obvious fix location
-- No investigation needed
+- Root cause confirmed by diagnosis (not assumed)
 
 **Task usage:** Skip. < 3 steps, overhead exceeds benefit.
 
@@ -20,14 +20,14 @@ Classify issue complexity before routing to workflow.
 - "ESLint errors after upgrade"
 - "Syntax error in config file"
 
-### Moderate (→ workflow-standard.md) — Use Tasks
+### Moderate (→ workflow-standard.md) — Use Tasks (6 phases)
 
 **Indicators:**
 - 2-5 files affected
-- Root cause unclear but localized
-- Needs debugging investigation
+- Root cause identified but fix spans multiple files
+- Needs investigation to confirm diagnosis
 - Keywords: `bug`, `broken`, `not working`, `fails sometimes`
-- Test failures with unclear cause
+- Test failures with root cause traced
 
 **Task usage:** Create 6 phase tasks with dependencies. See `references/task-orchestration.md`.
 
@@ -36,7 +36,7 @@ Classify issue complexity before routing to workflow.
 - "API returns wrong data"
 - "Component not rendering correctly"
 
-### Complex (→ workflow-deep.md) — Use Tasks with Dependency Chains
+### Complex (→ workflow-deep.md) — Use Tasks with Dependency Chains (9 phases)
 
 **Indicators:**
 - System-wide impact (5+ files)
@@ -45,8 +45,9 @@ Classify issue complexity before routing to workflow.
 - Keywords: `architecture`, `refactor`, `system-wide`, `design issue`
 - Performance/security vulnerabilities
 - Multiple interacting components
+- Root cause spans multiple layers/modules
 
-**Task usage:** Create 8 phase tasks. Steps 1+2 run parallel (debug+research). Full dependency chains. See `references/task-orchestration.md`.
+**Task usage:** Create 9 phase tasks. Steps 1+2+3 run parallel (scout+diagnose+research). Full dependency chains. See `references/task-orchestration.md`.
 
 **Examples:**
 - "Memory leak in production"
@@ -64,7 +65,7 @@ Classify issue complexity before routing to workflow.
 - No dependencies between issues
 - Keywords: list of issues, "and", "also", multiple error types
 
-**Task usage:** Create separate task trees per independent issue. Spawn `fullstack-developer` agent per tree. Agents coordinate via `TaskUpdate`/`TaskList`. See `references/task-orchestration.md`.
+**Task usage:** Create separate task trees per independent issue (each with scout+diagnose+fix+verify). Spawn `fullstack-developer` agent per tree. See `references/task-orchestration.md`.
 
 **Examples:**
 - "Fix type errors AND update UI styling"

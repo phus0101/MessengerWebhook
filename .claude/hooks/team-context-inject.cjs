@@ -134,7 +134,7 @@ function main() {
 
     // CK stack context
     const ckCtx = buildCkContext();
-    if (ckCtx.length > 1) { // >1 = has env vars beyond the always-present commit convention line
+    if (ckCtx.length > 0) {
       lines.push('');
       lines.push('## CK Context');
       lines.push(...ckCtx);

@@ -19,6 +19,7 @@ try {
   const fs = require('fs');
   const path = require('path');
   const os = require('os');
+  const { createHookTimer, logHookCrash } = require('./lib/hook-logger.cjs');
 
 // Directories to never shadow (internal infrastructure, not real skills)
 const SKIP_DIRS = new Set(['.shadowed', '.venv', 'node_modules', '__pycache__']);
@@ -214,6 +215,8 @@ function cleanupShadowedDir(paths) {
   // -- Main --------------------------------------------------------------------
 
   function main() {
+    const timer = createHookTimer('skill-dedup');
+    let hookEvent = 'SessionStart';
     try {
       let payload = {};
       try {
@@ -225,14 +228,17 @@ function cleanupShadowedDir(paths) {
 
       const paths = getDefaultPaths();
       const event = payload.hook_event_name || '';
+      hookEvent = event === 'SessionEnd' || event === 'Stop' ? event : 'SessionStart';
 
       if (event === 'SessionEnd' || event === 'Stop') {
         handleSessionEnd(paths);
       } else {
         handleSessionStart(paths);
       }
+      timer.end({ event: hookEvent, status: 'ok', exit: 0, note: 'dedup-complete' });
     } catch (err) {
       process.stderr.write(`[skill-dedup] Error: ${err.message}\n`);
+      logHookCrash('skill-dedup', err, { event: hookEvent });
     }
 
     process.exit(0);
@@ -255,14 +261,9 @@ function cleanupShadowedDir(paths) {
     SKIP_DIRS
   };
 } catch (e) {
-  // Minimal crash logging (zero deps — only Node builtins)
   try {
-    const fs = require('fs');
-    const p = require('path');
-    const logDir = p.join(__dirname, '.logs');
-    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-    fs.appendFileSync(p.join(logDir, 'hook-log.jsonl'),
-      JSON.stringify({ ts: new Date().toISOString(), hook: p.basename(__filename, '.cjs'), status: 'crash', error: e.message }) + '\n');
+    const { logHookCrash } = require('./lib/hook-logger.cjs');
+    logHookCrash('skill-dedup', e, { event: 'SessionStart' });
   } catch (_) {}
   process.exit(0); // fail-open
 }

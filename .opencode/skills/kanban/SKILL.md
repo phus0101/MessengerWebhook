@@ -2,6 +2,9 @@
 name: ck:kanban
 description: "AI agent orchestration board for task visualization and team coordination."
 argument-hint: "[dir]"
+metadata:
+  author: claudekit
+  version: "1.0.0"
 ---
 
 # Plans Dashboard

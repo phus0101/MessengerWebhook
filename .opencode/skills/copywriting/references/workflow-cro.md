@@ -55,7 +55,7 @@ Analyze content and optimize for conversion based on user-reported issues.
 
 ## CRO Plan Creation Workflow
 
-Use when creating a structured CRO optimization plan (e.g., via `/ck:plan:cro`).
+Use when creating a structured CRO optimization plan (e.g., via `/ck:plan --hard` with CRO-specific requirements).
 
 ### Steps
 

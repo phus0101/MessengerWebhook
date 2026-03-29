@@ -26,7 +26,6 @@ EXACT_CATEGORY_MAP = {
     "sequential-thinking": "utilities",
     "test": "utilities",
     "watzup": "utilities",
-    "ck-help": "dev-tools",
     "find-skills": "dev-tools",
     "git": "dev-tools",
     "kanban": "dev-tools",
@@ -219,19 +218,11 @@ def main():
             refs = '📚' if skill['has_references'] else '  '
             print(f"  {scripts}{refs} {skill['name']:30} {skill['description'][:80]}")
 
-    # Output YAML to ck-help scripts directory
-    output_path = Path('.opencode/skills/ck-help/scripts/skills_data.yaml')
+    # Output YAML to scripts directory
+    output_path = Path('.opencode/scripts/skills_data.yaml')
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(yaml.dump(skills, allow_unicode=True, default_flow_style=False))
     print(f"\n✓ Saved metadata to {output_path}")
-
-    # Legacy location now points to canonical source to avoid data drift.
-    legacy_path = Path('.opencode/scripts/skills_data.yaml')
-    legacy_path.write_text(
-        "# Skills catalog moved to .opencode/skills/ck-help/scripts/skills_data.yaml\n"
-        "# Regenerate via: python3 .opencode/scripts/scan_skills.py\n",
-        encoding='utf-8',
-    )
 
 if __name__ == '__main__':
     main()

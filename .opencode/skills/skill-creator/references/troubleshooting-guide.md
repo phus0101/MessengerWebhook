@@ -11,8 +11,9 @@
 - Validate YAML syntax
 
 **Error: "Invalid skill name"**
-- Must be kebab-case, no spaces, no capitals
-- Wrong: `My Cool Skill` → Correct: `my-cool-skill`
+- Use either `skill-name` or `namespace:skill-name`
+- Namespace and skill id must be kebab-case (no spaces, no capitals)
+- Wrong: `My Cool Skill` → Correct: `ck:my-cool-skill`
 
 ## Skill Doesn't Trigger
 
@@ -74,7 +75,7 @@
 **Symptom:** Skill seems slow or responses degraded.
 
 **Solutions:**
-1. Move detailed docs to `references/` — keep SKILL.md under 150 lines
+1. Move detailed docs to `references/` — keep SKILL.md under 300 lines
 2. Link to references instead of inlining content
 3. Evaluate if too many skills enabled simultaneously (>20-50 may degrade)
 4. Consider skill "packs" for related capabilities

@@ -20,20 +20,42 @@ const os = require('os');
 // Active invalidation happens via PostToolUse hooks after Edit/Write/Bash
 const CACHE_TTL = 30000;
 const CACHE_MISS = Symbol('cache_miss');
+const CACHE_SKIP = Symbol('cache_skip');
+
+function isTimeoutError(error) {
+  if (!error) return false;
+  if (error.killed) return true;
+  if (error.signal === 'SIGTERM') return true;
+  return /timed out|etimedout/i.test(String(error.message || ''));
+}
+
+function getExecTimeoutMs() {
+  const parsed = Number.parseInt(process.env.CK_GIT_TIMEOUT_MS || '', 10);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return 3000;
+}
 
 /**
  * Safe command execution wrapper with optional cwd
+ * Timeout prevents hangs on slow/network-mounted repos
  */
 function execIn(cmd, cwd) {
   try {
-    return execSync(cmd, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-      windowsHide: true,
-      cwd: cwd || undefined
-    }).trim();
-  } catch {
-    return '';
+    return {
+      output: execSync(cmd, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+        windowsHide: true,
+        cwd: cwd || undefined,
+        timeout: getExecTimeoutMs()
+      }).trim(),
+      timedOut: false
+    };
+  } catch (error) {
+    return {
+      output: '',
+      timedOut: isTimeoutError(error)
+    };
   }
 }
 
@@ -53,10 +75,11 @@ function getCachePath(cwd) {
  * Read cache if valid (not expired). Returns CACHE_MISS on miss.
  * No existsSync check (TOCTOU race) — just try read and catch.
  */
-function readCache(cachePath) {
+function readCache(cachePath, options = {}) {
+  const { allowStale = false } = options;
   try {
     const cache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-    if (Date.now() - cache.timestamp < CACHE_TTL) {
+    if (Date.now() - cache.timestamp < CACHE_TTL || allowStale) {
       return cache.data; // Can be null (non-git dir) or object (git info)
     }
   } catch {
@@ -94,19 +117,37 @@ function countLines(str) {
  */
 function fetchGitInfo(cwd) {
   // Check if git repo (fast check) — run in target cwd, not process.cwd()
-  if (!execIn('git rev-parse --git-dir', cwd)) {
+  const repoCheck = execIn('git rev-parse --git-dir', cwd);
+  if (repoCheck.timedOut) return CACHE_SKIP;
+  if (!repoCheck.output) {
     return null;
   }
 
-  const branch = execIn('git branch --show-current', cwd) || execIn('git rev-parse --short HEAD', cwd);
-  const unstaged = countLines(execIn('git diff --name-only', cwd));
-  const staged = countLines(execIn('git diff --cached --name-only', cwd));
+  const branchPrimary = execIn('git branch --show-current', cwd);
+  const branchFallback = execIn('git rev-parse --short HEAD', cwd);
+  const unstagedResult = execIn('git diff --name-only', cwd);
+  const stagedResult = execIn('git diff --cached --name-only', cwd);
+  const aheadBehindResult = execIn('git rev-list --left-right --count @{u}...HEAD', cwd);
+
+  if (
+    branchPrimary.timedOut ||
+    branchFallback.timedOut ||
+    unstagedResult.timedOut ||
+    stagedResult.timedOut ||
+    aheadBehindResult.timedOut
+  ) {
+    return CACHE_SKIP;
+  }
+
+  const branch = branchPrimary.output || branchFallback.output;
+  const unstaged = countLines(unstagedResult.output);
+  const staged = countLines(stagedResult.output);
 
   // Ahead/behind — no 2>/dev/null (invalid on Windows cmd.exe)
-  let ahead = 0, behind = 0;
-  const aheadBehind = execIn('git rev-list --left-right --count @{u}...HEAD', cwd);
-  if (aheadBehind) {
-    const parts = aheadBehind.split(/\s+/);
+  let ahead = 0;
+  let behind = 0;
+  if (aheadBehindResult.output) {
+    const parts = aheadBehindResult.output.split(/\s+/);
     behind = parseInt(parts[0], 10) || 0;
     ahead = parseInt(parts[1], 10) || 0;
   }
@@ -127,6 +168,13 @@ function getGitInfo(cwd = process.cwd()) {
 
   // Cache miss or expired, fetch fresh data in target cwd
   const data = fetchGitInfo(cwd);
+  if (data === CACHE_SKIP) {
+    // Timeout/transient failures should not poison cache as non-git.
+    // Prefer last known value (even stale) if available.
+    const stale = readCache(cachePath, { allowStale: true });
+    return stale === CACHE_MISS ? null : stale;
+  }
+
   // Cache both positive and null results (avoids re-spawning git in non-git dirs)
   writeCache(cachePath, data);
 

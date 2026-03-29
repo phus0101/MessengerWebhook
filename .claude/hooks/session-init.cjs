@@ -26,6 +26,7 @@ try {
     extractTaskListId,
     isHookEnabled
   } = require('./lib/ck-config-utils.cjs');
+  const { createHookTimer, logHookCrash } = require('./lib/hook-logger.cjs');
 
   // Early exit if hook disabled in config
   if (!isHookEnabled('session-init')) {
@@ -143,6 +144,7 @@ function detectAgentTeam() {
  * Main hook execution
  */
 async function main() {
+  const timer = createHookTimer('session-init', { event: 'SessionStart' });
   try {
     // Issue #422: One-time cleanup of orphaned .shadowed/ from disabled skill-dedup hook
     const shadowedCleanup = cleanupOrphanedShadowedSkills();
@@ -260,7 +262,7 @@ async function main() {
         writeEnv(envFile, 'CK_RESPONSE_LANGUAGE', config.locale.responseLanguage);
       }
 
-      // Plan validation config (for /plan validate, /plan --hard, /plan --parallel)
+      // Plan validation config (for /ck:plan validate, /ck:plan --hard, /ck:plan --parallel)
       const validation = config.plan?.validation || {};
       writeEnv(envFile, 'CK_VALIDATION_MODE', validation.mode || 'prompt');
       writeEnv(envFile, 'CK_VALIDATION_MIN_QUESTIONS', validation.minQuestions || 3);
@@ -304,7 +306,7 @@ async function main() {
     if (teamInfo) {
       console.log(`[i] Agent Team detected: "${teamInfo.teamName}" (${teamInfo.memberCount} members)`);
       console.log(`    Team config: ~/.claude/teams/${teamInfo.teamName}/config.json`);
-      console.log(`    Use /team skill for orchestration templates.`);
+      console.log(`    Use /ck:team skill for orchestration templates.`);
     }
 
     // Info: Show git root when running from subdirectory (Issue #327: now supported)
@@ -338,23 +340,20 @@ async function main() {
       });
     }
 
+    timer.end({ status: 'ok', exit: 0, note: source || 'session-start' });
     process.exit(0);
   } catch (error) {
     console.error(`SessionStart hook error: ${error.message}`);
+    logHookCrash('session-init', error, { event: 'SessionStart' });
     process.exit(0);
   }
   }
 
   main();
 } catch (e) {
-  // Minimal crash logging (zero deps — only Node builtins)
   try {
-    const fs = require('fs');
-    const p = require('path');
-    const logDir = p.join(__dirname, '.logs');
-    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-    fs.appendFileSync(p.join(logDir, 'hook-log.jsonl'),
-      JSON.stringify({ ts: new Date().toISOString(), hook: p.basename(__filename, '.cjs'), status: 'crash', error: e.message }) + '\n');
+    const { logHookCrash } = require('./lib/hook-logger.cjs');
+    logHookCrash('session-init', e, { event: 'SessionStart' });
   } catch (_) {}
   process.exit(0); // fail-open
 }

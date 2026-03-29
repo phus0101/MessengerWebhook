@@ -1,8 +1,10 @@
 ---
 name: ck:scout
 description: "Fast codebase scouting using parallel agents. Use for file discovery, task context gathering, quick searches across directories. Supports internal (Explore) and external (Gemini/OpenCode) agents."
-version: 1.0.0
 argument-hint: "[search-target] [ext]"
+metadata:
+  author: claudekit
+  version: "1.0.0"
 ---
 
 # Scout
@@ -47,6 +49,7 @@ Read from `.opencode/.ck.json`:
 
 ### 3. Register Scout Tasks
 - **Skip if:** Agent count ≤ 2 (overhead exceeds benefit)
+- **Skip if:** Task tools unavailable (VSCode extension) — use `TodoWrite` instead
 - `TaskList` first — check for existing scout tasks in session
 - If not found, `TaskCreate` per agent with scope metadata
 - See `references/task-management-scouting.md` for patterns and examples
@@ -57,15 +60,17 @@ Load appropriate reference based on decision tree:
 - **External:** `references/external-scouting.md` (Gemini/OpenCode)
 
 **Notes:**
-- `TaskUpdate` each task to `in_progress` before spawning its agent
+- `TaskUpdate` each task to `in_progress` before spawning its agent (skip if Task tools unavailable)
 - Prompt detailed instructions for each subagent with exact directories or files it should read
 - Remember that each subagent has less than 200K tokens of context window
 - Amount of subagents to-be-spawned depends on the current system resources available and amount of files to be scanned
 - Each subagent must return a detailed summary report to a main agent
 
 ### 5. Collect Results
+**IMPORTANT:** Invoke "/ck:project-organization" skill to organize the outputs.
+
 - Timeout: 3 minutes per agent (skip non-responders)
-- `TaskUpdate` completed tasks; log timed-out agents in report
+- `TaskUpdate` completed tasks; log timed-out agents in report (skip if Task tools unavailable)
 - Aggregate findings into single report
 - List unresolved questions at end
 
