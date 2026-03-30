@@ -1,5 +1,6 @@
 using MessengerWebhook.Models;
 using MessengerWebhook.Services;
+using MessengerWebhook.Services.QuickReply;
 using MessengerWebhook.StateMachine;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -13,6 +14,7 @@ public class WebhookProcessorTests
     private readonly IMemoryCache _cache;
     private readonly Mock<IMessengerService> _messengerServiceMock;
     private readonly Mock<IStateMachine> _stateMachineMock;
+    private readonly Mock<IQuickReplyHandler> _quickReplyHandlerMock;
     private readonly Mock<ILogger<WebhookProcessor>> _loggerMock;
     private readonly WebhookProcessor _processor;
 
@@ -21,6 +23,7 @@ public class WebhookProcessorTests
         _cache = new MemoryCache(new MemoryCacheOptions());
         _messengerServiceMock = new Mock<IMessengerService>();
         _stateMachineMock = new Mock<IStateMachine>();
+        _quickReplyHandlerMock = new Mock<IQuickReplyHandler>();
         _loggerMock = new Mock<ILogger<WebhookProcessor>>();
 
         // Setup default state machine response
@@ -34,6 +37,7 @@ public class WebhookProcessorTests
             _cache,
             _messengerServiceMock.Object,
             _stateMachineMock.Object,
+            _quickReplyHandlerMock.Object,
             _loggerMock.Object);
     }
 
@@ -45,7 +49,7 @@ public class WebhookProcessorTests
             Sender: new Sender("sender123"),
             Recipient: new Recipient("page456"),
             Timestamp: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            Message: new Message("mid.123", "Hello World", null),
+            Message: new Message("mid.123", "Hello World", null, null),
             Postback: null
         );
 
@@ -71,7 +75,7 @@ public class WebhookProcessorTests
             Sender: new Sender("sender123"),
             Recipient: new Recipient("page456"),
             Timestamp: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            Message: new Message("mid.duplicate", "First message", null),
+            Message: new Message("mid.duplicate", "First message", null, null),
             Postback: null
         );
 
@@ -114,7 +118,7 @@ public class WebhookProcessorTests
             Sender: new Sender("sender123"),
             Recipient: new Recipient("page456"),
             Timestamp: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            Message: new Message(messageId, "Test message", null),
+            Message: new Message(messageId, "Test message", null, null),
             Postback: null
         );
 
@@ -189,7 +193,7 @@ public class WebhookProcessorTests
             Sender: new Sender("sender123"),
             Recipient: new Recipient("page456"),
             Timestamp: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            Message: new Message("mid.no-text", null, null),
+            Message: new Message("mid.no-text", null, null, null),
             Postback: null
         );
 

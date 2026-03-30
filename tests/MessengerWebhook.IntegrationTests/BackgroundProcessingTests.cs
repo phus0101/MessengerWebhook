@@ -282,7 +282,7 @@ public class BackgroundProcessingTests : IClassFixture<WebApplicationFactory<Pro
             Sender: new Sender("sender123"),
             Recipient: new Recipient("page123"),
             Timestamp: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            Message: new Message($"mid.shutdown-{Guid.NewGuid()}", "Shutdown test", null),
+            Message: new Message($"mid.shutdown-{Guid.NewGuid()}", "Shutdown test", null, null),
             Postback: null
         );
 

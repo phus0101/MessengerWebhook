@@ -171,6 +171,23 @@ builder.Services.AddSingleton(channel);
 
 var app = builder.Build();
 
+// Auto-apply migrations on startup (Development only)
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+    try
+    {
+        await dbContext.Database.MigrateAsync();
+        Log.Information("Database migrations applied successfully");
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Failed to apply database migrations");
+        throw;
+    }
+}
+
 // Validate critical configuration on startup
 var facebookOpts = app.Services.GetRequiredService<IOptions<FacebookOptions>>().Value;
 var webhookOpts = app.Services.GetRequiredService<IOptions<WebhookOptions>>().Value;
