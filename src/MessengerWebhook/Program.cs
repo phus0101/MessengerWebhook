@@ -9,6 +9,10 @@ using MessengerWebhook.Services;
 using MessengerWebhook.Services.AI;
 using MessengerWebhook.Services.AI.Handlers;
 using MessengerWebhook.Services.AI.Strategies;
+using MessengerWebhook.Services.ProductMapping;
+using MessengerWebhook.Services.GiftSelection;
+using MessengerWebhook.Services.Freeship;
+using MessengerWebhook.Services.QuickReply;
 using MessengerWebhook.StateMachine;
 using MessengerWebhook.StateMachine.Handlers;
 using Microsoft.AspNetCore.Mvc;
@@ -72,9 +76,17 @@ builder.Services.AddScoped<ISkinProfileRepository, SkinProfileRepository>();
 builder.Services.AddScoped<IConversationMessageRepository, ConversationMessageRepository>();
 builder.Services.AddScoped<IIngredientCompatibilityRepository, IngredientCompatibilityRepository>();
 builder.Services.AddScoped<IVectorSearchRepository, VectorSearchRepository>();
+builder.Services.AddScoped<IGiftRepository, GiftRepository>();
+builder.Services.AddScoped<IProductGiftMappingRepository, ProductGiftMappingRepository>();
 
 // Register session manager
 builder.Services.AddScoped<ISessionManager, SessionManager>();
+
+// Register Phase 1 services (Quick Reply Handler)
+builder.Services.AddScoped<IProductMappingService, ProductMappingService>();
+builder.Services.AddScoped<IGiftSelectionService, GiftSelectionService>();
+builder.Services.AddScoped<IFreeshipCalculator, FreeshipCalculator>();
+builder.Services.AddScoped<IQuickReplyHandler, QuickReplyHandler>();
 
 // Register state machine
 builder.Services.AddScoped<IStateMachine, ConversationStateMachine>();

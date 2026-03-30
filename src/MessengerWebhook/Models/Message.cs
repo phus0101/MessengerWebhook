@@ -6,5 +6,6 @@ namespace MessengerWebhook.Models;
 public record Message(
     string Mid,
     string? Text,
-    Attachment[]? Attachments
+    Attachment[]? Attachments,
+    QuickReply? QuickReply
 );

@@ -41,6 +41,12 @@ Multi-tenant conversational commerce platform for cosmetics retail via Facebook 
 - `MessengerApiService`: Send API integration
 - `WebhookProcessor`: Incoming message routing
 
+**Quick Reply Services** (`Services/QuickReply/`, `Services/ProductMapping/`, `Services/GiftSelection/`, `Services/Freeship/`):
+- `QuickReplyHandler`: Processes Quick Reply and Postback events
+- `ProductMappingService`: Maps payload codes to products
+- `GiftSelectionService`: Selects gifts based on product mappings
+- `FreeshipCalculator`: Determines freeship eligibility
+
 ### 3. State Machine Layer
 
 **Location**: `src/MessengerWebhook/StateMachine/`
@@ -160,7 +166,7 @@ Facebook → WebhookController → WebhookProcessor → StateMachine → StateHa
 1. Facebook sends POST to /webhook
 2. SignatureValidationMiddleware validates request
 3. WebhookController extracts message data
-4. WebhookProcessor routes to StateMachine
+4. WebhookProcessor routes to StateMachine or QuickReplyHandler
 5. StateMachine loads/creates session
 6. StateMachine checks for timeout
 7. StateMachine gets appropriate StateHandler
@@ -170,6 +176,21 @@ Facebook → WebhookController → WebhookProcessor → StateMachine → StateHa
 11. StateHandler updates context and transitions state
 12. StateMachine persists session
 13. Response sent via MessengerApiService
+```
+
+### Quick Reply/Postback Flow
+
+```
+1. Facebook sends Quick Reply or Postback event
+2. WebhookProcessor detects event type
+3. WebhookProcessor routes to QuickReplyHandler
+4. QuickReplyHandler extracts payload (e.g., "PRODUCT_KCN")
+5. ProductMappingService maps payload to Product entity
+6. GiftSelectionService queries ProductGiftMapping by product code
+7. GiftSelectionService returns highest priority active Gift
+8. FreeshipCalculator checks freeship eligibility
+9. QuickReplyHandler formats response message
+10. Response sent via MessengerApiService
 ```
 
 ### State Transition Flow
@@ -215,6 +236,23 @@ Facebook → WebhookController → WebhookProcessor → StateMachine → StateHa
 - `role` (user/assistant)
 - `content`
 - `timestamp`
+
+**gifts**:
+- `id` (PK, UUID)
+- `code` (unique, varchar(50))
+- `name` (varchar(200))
+- `description` (text, nullable)
+- `image_url` (varchar(500), nullable)
+- `is_active` (boolean, default true)
+- `created_at`, `updated_at`
+
+**product_gift_mappings**:
+- `id` (PK, UUID)
+- `product_code` (varchar(50), FK to products.code)
+- `gift_code` (varchar(50), FK to gifts.code)
+- `priority` (int, default 0, lower = higher priority)
+- `created_at`
+- Unique constraint: (product_code, gift_code)
 
 ## Multi-Tenancy
 

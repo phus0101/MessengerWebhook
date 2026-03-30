@@ -23,6 +23,8 @@ public class MessengerBotDbContext : DbContext
     public DbSet<CartItem> CartItems { get; set; }
     public DbSet<Order> Orders { get; set; }
     public DbSet<OrderItem> OrderItems { get; set; }
+    public DbSet<Gift> Gifts { get; set; }
+    public DbSet<ProductGiftMapping> ProductGiftMappings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -46,6 +48,10 @@ public class MessengerBotDbContext : DbContext
             .IsUnique();
 
         // Product indexes
+        modelBuilder.Entity<Product>()
+            .HasIndex(p => p.Code)
+            .IsUnique();
+
         modelBuilder.Entity<Product>()
             .HasIndex(p => p.Category);
 
@@ -89,6 +95,25 @@ public class MessengerBotDbContext : DbContext
         // IngredientCompatibility indexes
         modelBuilder.Entity<IngredientCompatibility>()
             .HasIndex(i => new { i.Ingredient1, i.Ingredient2 });
+
+        // Gift indexes
+        modelBuilder.Entity<Gift>()
+            .HasIndex(g => g.Code)
+            .IsUnique();
+
+        modelBuilder.Entity<Gift>()
+            .HasIndex(g => g.IsActive);
+
+        // ProductGiftMapping indexes
+        modelBuilder.Entity<ProductGiftMapping>()
+            .HasIndex(m => m.ProductCode);
+
+        modelBuilder.Entity<ProductGiftMapping>()
+            .HasIndex(m => m.GiftCode);
+
+        modelBuilder.Entity<ProductGiftMapping>()
+            .HasIndex(m => new { m.ProductCode, m.GiftCode })
+            .IsUnique();
 
         // Relationships
         modelBuilder.Entity<Product>()
@@ -137,6 +162,20 @@ public class MessengerBotDbContext : DbContext
             .HasOne(s => s.Session)
             .WithMany()
             .HasForeignKey(s => s.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ProductGiftMapping>()
+            .HasOne(m => m.Product)
+            .WithMany()
+            .HasForeignKey(m => m.ProductCode)
+            .HasPrincipalKey(p => p.Code)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ProductGiftMapping>()
+            .HasOne(m => m.Gift)
+            .WithMany(g => g.ProductGiftMappings)
+            .HasForeignKey(m => m.GiftCode)
+            .HasPrincipalKey(g => g.Code)
             .OnDelete(DeleteBehavior.Cascade);
 
         // Decimal precision

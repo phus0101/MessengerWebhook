@@ -1,4 +1,5 @@
 using MessengerWebhook.Models;
+using MessengerWebhook.Services.QuickReply;
 using MessengerWebhook.StateMachine;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -12,17 +13,20 @@ public class WebhookProcessor
     private readonly IMemoryCache _cache;
     private readonly IMessengerService _messengerService;
     private readonly IStateMachine _stateMachine;
+    private readonly IQuickReplyHandler _quickReplyHandler;
     private readonly ILogger<WebhookProcessor> _logger;
 
     public WebhookProcessor(
         IMemoryCache cache,
         IMessengerService messengerService,
         IStateMachine stateMachine,
+        IQuickReplyHandler quickReplyHandler,
         ILogger<WebhookProcessor> logger)
     {
         _cache = cache;
         _messengerService = messengerService;
         _stateMachine = stateMachine;
+        _quickReplyHandler = quickReplyHandler;
         _logger = logger;
     }
 
@@ -57,14 +61,36 @@ public class WebhookProcessor
         var senderId = evt.Sender.Id;
         var text = evt.Message.Text;
 
-        _logger.LogInformation(
-            "Processing message from {SenderId}: {Text}",
-            senderId,
-            text ?? "[no text]");
-
-        // Process message through state machine
-        if (!string.IsNullOrEmpty(text))
+        // Check for Quick Reply
+        if (evt.Message.QuickReply != null)
         {
+            _logger.LogInformation(
+                "Processing Quick Reply from {SenderId}: {Payload}",
+                senderId,
+                evt.Message.QuickReply.Payload);
+
+            try
+            {
+                var reply = await _quickReplyHandler.HandleQuickReplyAsync(senderId, evt.Message.QuickReply.Payload);
+                await _messengerService.SendTextMessageAsync(senderId, reply);
+                _logger.LogInformation("Quick Reply response sent to {SenderId}", senderId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to process Quick Reply for {SenderId}", senderId);
+                await _messengerService.SendTextMessageAsync(
+                    senderId,
+                    "Xin lỗi, em đang gặp sự cố kỹ thuật. Vui lòng thử lại sau.");
+            }
+        }
+        else if (!string.IsNullOrEmpty(text))
+        {
+            _logger.LogInformation(
+                "Processing message from {SenderId}: {Text}",
+                senderId,
+                text);
+
+            // Process message through state machine
             try
             {
                 var reply = await _stateMachine.ProcessMessageAsync(senderId, text);
@@ -109,10 +135,19 @@ public class WebhookProcessor
             senderId,
             payload);
 
-        // Send postback acknowledgment
-        var reply = $"Đã nhận postback: {payload}";
-        await _messengerService.SendTextMessageAsync(senderId, reply);
-        _logger.LogInformation("Postback reply sent to {SenderId}", senderId);
+        try
+        {
+            var reply = await _quickReplyHandler.HandlePostbackAsync(senderId, payload);
+            await _messengerService.SendTextMessageAsync(senderId, reply);
+            _logger.LogInformation("Postback response sent to {SenderId}", senderId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process Postback for {SenderId}", senderId);
+            await _messengerService.SendTextMessageAsync(
+                senderId,
+                "Xin lỗi, em đang gặp sự cố kỹ thuật. Vui lòng thử lại sau.");
+        }
 
         // Mark as processed (48h TTL with size tracking)
         _cache.Set(cacheKey, true, new MemoryCacheEntryOptions

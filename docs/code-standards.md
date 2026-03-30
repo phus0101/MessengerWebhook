@@ -175,6 +175,71 @@ var allowedStates = StateTransitionRules.GetAllowedTransitions(
 
 ---
 
+## Service Layer Patterns
+
+### Quick Reply Handler Pattern
+
+Quick Reply and Postback events follow a specialized handler pattern separate from the state machine:
+
+```csharp
+public class QuickReplyHandler : IQuickReplyHandler
+{
+    private readonly IProductMappingService _productMappingService;
+    private readonly IGiftSelectionService _giftSelectionService;
+    private readonly IFreeshipCalculator _freeshipCalculator;
+
+    public async Task<string> HandleQuickReplyAsync(string senderId, string payload)
+    {
+        // 1. Extract product from payload
+        var product = await _productMappingService.GetProductByPayloadAsync(payload);
+
+        // 2. Get associated gift
+        var gift = await _giftSelectionService.SelectGiftForProductAsync(product.Code);
+
+        // 3. Calculate freeship eligibility
+        var isEligible = _freeshipCalculator.IsEligibleForFreeship(new[] { product.Code });
+
+        // 4. Format and return response
+        return FormatResponseMessage(product, gift, isEligible);
+    }
+}
+```
+
+### Service Composition Pattern
+
+Phase 1 introduces service composition for business logic:
+
+```csharp
+// Product Mapping Service - Payload to Product resolution
+public interface IProductMappingService
+{
+    Task<Product?> GetProductByPayloadAsync(string payload);
+    Task<Product?> GetProductByCodeAsync(string code);
+}
+
+// Gift Selection Service - Product to Gift mapping
+public interface IGiftSelectionService
+{
+    Task<Gift?> SelectGiftForProductAsync(string productCode);
+    Task<List<Gift>> GetAllActiveGiftsAsync();
+}
+
+// Freeship Calculator - Business rule evaluation
+public interface IFreeshipCalculator
+{
+    bool IsEligibleForFreeship(List<string> productCodes);
+    string GetFreeshipMessage(bool isEligible);
+}
+```
+
+**Service Responsibilities:**
+- **ProductMappingService**: Payload parsing and product lookup
+- **GiftSelectionService**: Gift selection by priority
+- **FreeshipCalculator**: Freeship business rules (stateless)
+- **QuickReplyHandler**: Orchestrates services and formats response
+
+---
+
 ## Repository Pattern
 
 ### Interface Definition
@@ -240,6 +305,32 @@ var allProducts = await _context.Products
     .IgnoreQueryFilters()
     .ToListAsync();
 ```
+
+### Gift and Product Mapping Repositories
+
+Phase 1 introduces repositories for gift management:
+
+```csharp
+public interface IGiftRepository
+{
+    Task<Gift?> GetByCodeAsync(string code);
+    Task<List<Gift>> GetAllActiveAsync();
+    Task<Gift> CreateAsync(Gift gift);
+    Task<Gift> UpdateAsync(Gift gift);
+}
+
+public interface IProductGiftMappingRepository
+{
+    Task<List<ProductGiftMapping>> GetByProductCodeAsync(string productCode);
+    Task<List<ProductGiftMapping>> GetByGiftCodeAsync(string giftCode);
+    Task<ProductGiftMapping> CreateAsync(ProductGiftMapping mapping);
+}
+```
+
+**Implementation Notes:**
+- Use `.Include(m => m.Gift)` to load navigation properties
+- Filter by `IsActive` flag for gift eligibility
+- Order by `Priority` (ascending) for gift selection
 
 ---
 

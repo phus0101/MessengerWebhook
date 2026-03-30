@@ -29,6 +29,14 @@ public class ProductRepository : IProductRepository
             .FirstOrDefaultAsync(p => p.Id == id);
     }
 
+    public async Task<Product?> GetByCodeAsync(string code)
+    {
+        return await _context.Products
+            .Include(p => p.Images)
+            .Include(p => p.Variants)
+            .FirstOrDefaultAsync(p => p.Code == code && p.IsActive);
+    }
+
     public async Task<List<ProductVariant>> GetVariantsByProductIdAsync(string productId)
     {
         return await _context.ProductVariants

@@ -3,17 +3,20 @@ using System;
 using MessengerWebhook.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace MessengerWebhook.Migrations
+namespace MessengerWebhook.Data.Migrations
 {
     [DbContext(typeof(MessengerBotDbContext))]
-    partial class MessengerBotDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260330064137_AddIndexesForPhase1")]
+    partial class AddIndexesForPhase1
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
