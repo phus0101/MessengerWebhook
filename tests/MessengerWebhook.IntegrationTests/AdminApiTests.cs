@@ -5,9 +5,17 @@ using FluentAssertions;
 using MessengerWebhook.Data;
 using MessengerWebhook.Data.Entities;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MessengerWebhook.IntegrationTests;
+
+public sealed record AdminSession(
+    string CsrfToken,
+    bool Authenticated,
+    string? UserEmail,
+    bool CanAccessAllPagesInTenant,
+    string? VisibilityMode);
 
 public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
 {
@@ -30,12 +38,14 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
-    public async Task Login_And_GetDraftOrders_ReturnsOnlyAssignedPageData()
+    public async Task Login_And_GetDraftOrders_ReturnsOnlyAssignedPageData_InStrictMode()
     {
         var session = await LoginAsync();
 
         session.Authenticated.Should().BeTrue();
         session.UserEmail.Should().Be(_factory.PrimaryManagerEmail);
+        session.CanAccessAllPagesInTenant.Should().BeFalse();
+        session.VisibilityMode.Should().Be("page-scoped");
 
         var response = await _client.GetAsync("/admin/api/draft-orders");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -44,6 +54,162 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
         payload.GetArrayLength().Should().Be(1);
         payload[0].GetProperty("draftCode").GetString().Should().Be("DR-PRIMARY-001");
         payload[0].GetProperty("facebookPageId").GetString().Should().Be(_factory.PrimaryPageId);
+        payload[0].GetProperty("status").ValueKind.Should().Be(JsonValueKind.String);
+        payload[0].GetProperty("status").GetString().Should().Be("PendingReview");
+        payload[0].GetProperty("riskLevel").ValueKind.Should().Be(JsonValueKind.String);
+        payload[0].GetProperty("riskLevel").GetString().Should().Be("Low");
+    }
+
+    [Fact]
+    public async Task AdminApi_DetailEndpoints_SerializeEnumFields_AsStrings()
+    {
+        await LoginAsync();
+
+        var draftId = await FindDraftIdAsync("DR-PRIMARY-001");
+        var draftResponse = await _client.GetAsync($"/admin/api/draft-orders/{draftId}");
+        draftResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var draftPayload = JsonDocument.Parse(await draftResponse.Content.ReadAsStringAsync()).RootElement;
+        draftPayload.GetProperty("status").ValueKind.Should().Be(JsonValueKind.String);
+        draftPayload.GetProperty("status").GetString().Should().Be("PendingReview");
+        draftPayload.GetProperty("riskLevel").ValueKind.Should().Be(JsonValueKind.String);
+        draftPayload.GetProperty("riskLevel").GetString().Should().Be("Low");
+
+        var supportCaseId = await FindSupportCaseIdAsync("psid-case-primary");
+        var supportResponse = await _client.GetAsync($"/admin/api/support-cases/{supportCaseId}");
+        supportResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var supportPayload = JsonDocument.Parse(await supportResponse.Content.ReadAsStringAsync()).RootElement;
+        supportPayload.GetProperty("status").ValueKind.Should().Be(JsonValueKind.String);
+        supportPayload.GetProperty("status").GetString().Should().Be("Open");
+        supportPayload.GetProperty("reason").ValueKind.Should().Be(JsonValueKind.String);
+        supportPayload.GetProperty("reason").GetString().Should().Be("PolicyException");
+    }
+
+    [Fact]
+    public async Task SearchCustomers_ReturnsOnlyCustomersWithinAllowedScope()
+    {
+        await LoginAsync();
+
+        var response = await _client.GetAsync("/admin/api/customers?query=Khach%20Gan%20Lai");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        payload.GetArrayLength().Should().Be(1);
+        payload[0].GetProperty("fullName").GetString().Should().Be("Khach Gan Lai");
+        payload[0].GetProperty("phoneNumber").GetString().Should().Be("0911111111");
+    }
+
+    [Fact]
+    public async Task UpdateDraftOrder_UsesSelectedCustomerOnlyAsPrefillMetadata()
+    {
+        var session = await LoginAsync();
+        var draftId = await FindDraftIdAsync("DR-PRIMARY-001");
+        var customerId = await FindCustomerIdAsync("psid-primary-existing");
+        var originalCustomerId = await FindCustomerIdAsync("psid-primary");
+
+        var response = await PostJsonAsync(
+            $"/admin/api/draft-orders/{draftId}/update",
+            session.CsrfToken,
+            new
+            {
+                customerIdentityId = customerId,
+                customerName = "Thong tin da sua tren draft",
+                customerPhone = "0999999999",
+                shippingAddress = "Dia chi tam",
+                items = new object[]
+                {
+                    new { productCode = "KCN", quantity = 1, giftCode = "GIFT_KCN" }
+                }
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        payload.GetProperty("succeeded").GetBoolean().Should().BeTrue();
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+        var draft = dbContext.DraftOrders.Single(x => x.Id == draftId);
+        draft.CustomerIdentityId.Should().Be(originalCustomerId);
+        draft.CustomerName.Should().Be("Thong tin da sua tren draft");
+        draft.CustomerPhone.Should().Be("0999999999");
+        draft.ShippingAddress.Should().Be("Dia chi tam");
+        draft.FacebookPageId.Should().Be(_factory.PrimaryPageId);
+    }
+
+    [Fact]
+    public async Task UpdateDraftOrder_UpdatesCustomerItemsAndTotals()
+    {
+        var session = await LoginAsync();
+        var draftId = await FindDraftIdAsync("DR-PRIMARY-001");
+
+        var response = await PostJsonAsync(
+            $"/admin/api/draft-orders/{draftId}/update",
+            session.CsrfToken,
+            new
+            {
+                customerName = "Khach da sua",
+                customerPhone = "0988888888",
+                shippingAddress = "9 Le Loi, Quan 1",
+                items = new object[]
+                {
+                    new { productCode = "KCN", quantity = 1, giftCode = "GIFT_KCN" },
+                    new { productCode = "KL", quantity = 2, giftCode = "GIFT_KL" }
+                }
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        payload.GetProperty("succeeded").GetBoolean().Should().BeTrue();
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+        var draft = dbContext.DraftOrders
+            .Include(x => x.Items)
+            .Single(x => x.Id == draftId);
+
+        draft.CustomerName.Should().Be("Khach da sua");
+        draft.CustomerPhone.Should().Be("0988888888");
+        draft.ShippingAddress.Should().Be("9 Le Loi, Quan 1");
+        draft.Status.Should().Be(DraftOrderStatus.PendingReview);
+        draft.MerchandiseTotal.Should().Be(1140000m);
+        draft.ShippingFee.Should().Be(0m);
+        draft.GrandTotal.Should().Be(1140000m);
+        draft.Items.Should().HaveCount(2);
+        draft.Items.Should().Contain(x => x.ProductCode == "KL" && x.Quantity == 2 && x.GiftCode == "GIFT_KL");
+        dbContext.AdminAuditLogs.Should().ContainSingle(x => x.Action == "update-draft" && x.ResourceId == draftId.ToString());
+    }
+
+    [Fact]
+    public async Task UpdateDraftOrder_DoesNotAllowSubmittedDraft()
+    {
+        var session = await LoginAsync();
+        var draftId = await FindDraftIdAsync("DR-PRIMARY-001");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+            var draft = dbContext.DraftOrders.Single(x => x.Id == draftId);
+            draft.Status = DraftOrderStatus.SubmittedToNobita;
+            draft.NobitaOrderId = "NB-EXISTING";
+            dbContext.SaveChanges();
+        }
+
+        var response = await PostJsonAsync(
+            $"/admin/api/draft-orders/{draftId}/update",
+            session.CsrfToken,
+            new
+            {
+                customerName = "Khach bi khoa",
+                customerPhone = "0900000999",
+                shippingAddress = "10 Nguyen Hue",
+                items = new object[]
+                {
+                    new { productCode = "KCN", quantity = 1, giftCode = "GIFT_KCN" }
+                }
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        payload.GetProperty("succeeded").GetBoolean().Should().BeFalse();
     }
 
     [Fact]
@@ -69,6 +235,46 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
+    public async Task ApproveSubmit_UsesLatestDraftData_AfterUpdate()
+    {
+        var session = await LoginAsync();
+        var draftId = await FindDraftIdAsync("DR-PRIMARY-001");
+
+        var updateResponse = await PostJsonAsync(
+            $"/admin/api/draft-orders/{draftId}/update",
+            session.CsrfToken,
+            new
+            {
+                customerName = "Khach submit moi",
+                customerPhone = "0977777777",
+                shippingAddress = "11 Tran Hung Dao",
+                items = new object[]
+                {
+                    new { productCode = "KCN", quantity = 1, giftCode = "GIFT_KCN" },
+                    new { productCode = "KL", quantity = 1, giftCode = "GIFT_KL" }
+                }
+            });
+
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var submitResponse = await PostJsonAsync(
+            $"/admin/api/draft-orders/{draftId}/approve-submit",
+            session.CsrfToken,
+            new { });
+
+        submitResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        _factory.NobitaStub.SubmittedOrders.Should().ContainSingle();
+        var submittedOrder = _factory.NobitaStub.SubmittedOrders.Single();
+        submittedOrder.CustomerName.Should().Be("Khach submit moi");
+        submittedOrder.CustomerPhoneNumber.Should().Be("0977777777");
+        submittedOrder.ShippingAddress.Should().Be("11 Tran Hung Dao");
+        submittedOrder.Details.Should().HaveCount(2);
+        submittedOrder.Details.Should().Contain(x => x.ProductId == 101 && x.Quantity == 1);
+        submittedOrder.Details.Should().Contain(x => x.ProductId == 102 && x.Quantity == 1);
+    }
+
+    [Fact]
     public async Task ResolveSupportCase_ReleasesBotLock()
     {
         var session = await LoginAsync();
@@ -80,7 +286,7 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
         var resolveResponse = await PostJsonAsync(
             $"/admin/api/support-cases/{supportCaseId}/resolve",
             session.CsrfToken,
-            new { notes = "Đã gọi xác nhận với khách." });
+            new { notes = "Da goi xac nhan voi khach." });
 
         resolveResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -88,7 +294,7 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
         var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
         var supportCase = dbContext.HumanSupportCases.Single(x => x.Id == supportCaseId);
         supportCase.Status.Should().Be(SupportCaseStatus.Resolved);
-        supportCase.ResolutionNotes.Should().Contain("gọi xác nhận");
+        supportCase.ResolutionNotes.Should().Contain("xac nhan");
         dbContext.BotConversationLocks.Single(x => x.FacebookPSID == "psid-case-primary").IsLocked.Should().BeFalse();
     }
 
@@ -120,7 +326,7 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
         updatedProduct.NobitaLastSyncedAt.Should().NotBeNull();
     }
 
-    private async Task<(string CsrfToken, bool Authenticated, string? UserEmail)> LoginAsync()
+    protected async Task<AdminSession> LoginAsync()
     {
         var preAuth = await GetAuthStateAsync();
         var loginResponse = await PostJsonAsync(
@@ -132,7 +338,7 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
         return await GetAuthStateAsync();
     }
 
-    private async Task<(string CsrfToken, bool Authenticated, string? UserEmail)> GetAuthStateAsync()
+    protected async Task<AdminSession> GetAuthStateAsync()
     {
         var response = await _client.GetAsync("/admin/api/auth/me");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -143,8 +349,138 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
         var userEmail = payload.TryGetProperty("user", out var userElement) && userElement.ValueKind != JsonValueKind.Null
             ? userElement.GetProperty("email").GetString()
             : null;
+        var canAccessAllPagesInTenant = payload.TryGetProperty("user", out userElement) &&
+                                        userElement.ValueKind != JsonValueKind.Null &&
+                                        userElement.TryGetProperty("canAccessAllPagesInTenant", out var visibilityElement) &&
+                                        visibilityElement.GetBoolean();
+        var visibilityMode = payload.TryGetProperty("user", out userElement) &&
+                             userElement.ValueKind != JsonValueKind.Null &&
+                             userElement.TryGetProperty("visibilityMode", out var visibilityModeElement)
+            ? visibilityModeElement.GetString()
+            : null;
 
-        return (csrfToken, authenticated, userEmail);
+        return new AdminSession(csrfToken, authenticated, userEmail, canAccessAllPagesInTenant, visibilityMode);
+    }
+
+    protected async Task<Guid> FindDraftIdAsync(string draftCode)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+        return await Task.FromResult(dbContext.DraftOrders.Single(x => x.DraftCode == draftCode).Id);
+    }
+
+    protected async Task<Guid> FindSupportCaseIdAsync(string psid)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+        return await Task.FromResult(dbContext.HumanSupportCases.Single(x => x.FacebookPSID == psid).Id);
+    }
+
+    protected async Task<Guid> FindCustomerIdAsync(string psid)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+        return await Task.FromResult(dbContext.CustomerIdentities.Single(x => x.FacebookPSID == psid).Id);
+    }
+
+    protected async Task<HttpResponseMessage> PostJsonAsync(string url, string csrfToken, object body)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = JsonContent.Create(body)
+        };
+        request.Headers.Add("X-CSRF-TOKEN", csrfToken);
+        return await _client.SendAsync(request);
+    }
+
+}
+
+public sealed class DevelopmentAdminApiTests : IClassFixture<DevelopmentAdminWebApplicationFactory>
+{
+    private readonly DevelopmentAdminWebApplicationFactory _factory;
+    private readonly HttpClient _client;
+
+    public DevelopmentAdminApiTests(DevelopmentAdminWebApplicationFactory factory)
+    {
+        _factory = factory;
+        _factory.ResetStateAsync().GetAwaiter().GetResult();
+        _client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+    }
+
+    [Fact]
+    public async Task Login_InDevelopment_SeesAllPagesWithinTenant_ButNotOtherTenants()
+    {
+        var session = await LoginAsync();
+
+        session.CanAccessAllPagesInTenant.Should().BeTrue();
+        session.VisibilityMode.Should().Be("tenant-wide");
+
+        var response = await _client.GetAsync("/admin/api/draft-orders");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var draftCodes = payload.EnumerateArray().Select(x => x.GetProperty("draftCode").GetString()).ToArray();
+        draftCodes.Should().Contain("DR-PRIMARY-001");
+        draftCodes.Should().Contain("DR-PRIMARY-ALT-001");
+        draftCodes.Should().NotContain("DR-SECONDARY-001");
+    }
+
+    [Fact]
+    public async Task Login_InDevelopment_SeesSupportCasesAcrossPagesInSameTenant()
+    {
+        var session = await LoginAsync();
+
+        var response = await _client.GetAsync("/admin/api/support-cases");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var psids = payload.EnumerateArray().Select(x => x.GetProperty("facebookPSID").GetString()).ToArray();
+        psids.Should().Contain("psid-case-primary");
+        psids.Should().Contain("psid-case-primary-alt");
+        psids.Should().NotContain("psid-case-secondary");
+
+        var draftId = await FindDraftIdAsync("DR-PRIMARY-ALT-001");
+        var submitResponse = await PostJsonAsync(
+            $"/admin/api/draft-orders/{draftId}/approve-submit",
+            session.CsrfToken,
+            new { });
+
+        submitResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    private async Task<AdminSession> LoginAsync()
+    {
+        var preAuth = await GetAuthStateAsync();
+        var loginResponse = await PostJsonAsync(
+            "/admin/api/auth/login",
+            preAuth.CsrfToken,
+            new { email = _factory.PrimaryManagerEmail, password = _factory.AdminPassword, rememberMe = true });
+
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        return await GetAuthStateAsync();
+    }
+
+    private async Task<AdminSession> GetAuthStateAsync()
+    {
+        var response = await _client.GetAsync("/admin/api/auth/me");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var authenticated = payload.GetProperty("authenticated").GetBoolean();
+        var csrfToken = payload.GetProperty("antiForgeryToken").GetString() ?? string.Empty;
+        var userElement = payload.GetProperty("user");
+
+        if (userElement.ValueKind == JsonValueKind.Null)
+        {
+            return new AdminSession(csrfToken, authenticated, null, false, null);
+        }
+
+        return new AdminSession(
+            csrfToken,
+            authenticated,
+            userElement.GetProperty("email").GetString(),
+            userElement.GetProperty("canAccessAllPagesInTenant").GetBoolean(),
+            userElement.GetProperty("visibilityMode").GetString());
     }
 
     private async Task<Guid> FindDraftIdAsync(string draftCode)
@@ -154,11 +490,11 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
         return await Task.FromResult(dbContext.DraftOrders.Single(x => x.DraftCode == draftCode).Id);
     }
 
-    private async Task<Guid> FindSupportCaseIdAsync(string psid)
+    private async Task<Guid> FindCustomerIdAsync(string psid)
     {
         using var scope = _factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
-        return await Task.FromResult(dbContext.HumanSupportCases.Single(x => x.FacebookPSID == psid).Id);
+        return await Task.FromResult(dbContext.CustomerIdentities.Single(x => x.FacebookPSID == psid).Id);
     }
 
     private async Task<HttpResponseMessage> PostJsonAsync(string url, string csrfToken, object body)

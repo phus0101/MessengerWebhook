@@ -17,7 +17,10 @@ public class AdminTenantContextMiddleware
         if (context.Request.Path.StartsWithSegments("/admin") &&
             AdminUserContext.FromPrincipal(context.User) is { } user)
         {
-            tenantContext.Initialize(user.TenantId, user.FacebookPageId, user.Email);
+            tenantContext.Initialize(
+                user.TenantId,
+                user.CanAccessAllPagesInTenant ? null : user.FacebookPageId,
+                user.Email);
         }
 
         await _next(context);

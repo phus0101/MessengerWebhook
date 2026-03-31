@@ -43,6 +43,15 @@ public class DatabaseFixture : IAsyncLifetime
         Console.WriteLine($"[DatabaseFixture] Pending migrations: {string.Join(", ", pendingMigrations)}");
 
         await context.Database.MigrateAsync();
+        await context.Database.ExecuteSqlRawAsync("""
+            ALTER TABLE "Products"
+            ADD COLUMN IF NOT EXISTS "Embedding" vector(768);
+            """);
+        await context.Database.ExecuteSqlRawAsync("""
+            CREATE INDEX IF NOT EXISTS idx_products_embedding
+            ON "Products" USING ivfflat ("Embedding" vector_cosine_ops)
+            WITH (lists = 100);
+            """);
         Console.WriteLine("[DatabaseFixture] Migrations applied");
 
         // Dispose context to clear EF Core model cache

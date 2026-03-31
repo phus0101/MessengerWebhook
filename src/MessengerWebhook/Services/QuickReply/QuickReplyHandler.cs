@@ -2,72 +2,137 @@ using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Services.Freeship;
 using MessengerWebhook.Services.GiftSelection;
 using MessengerWebhook.Services.ProductMapping;
+using MessengerWebhook.StateMachine;
+using MessengerWebhook.StateMachine.Handlers;
+using MessengerWebhook.StateMachine.Models;
 
 namespace MessengerWebhook.Services.QuickReply;
 
 /// <summary>
-/// Handler for Quick Reply and Postback events from Facebook Messenger
+/// Handler for Quick Reply and Postback events from Facebook Messenger.
 /// </summary>
 public class QuickReplyHandler : IQuickReplyHandler
 {
     private readonly IProductMappingService _productMappingService;
     private readonly IGiftSelectionService _giftSelectionService;
     private readonly IFreeshipCalculator _freeshipCalculator;
+    private readonly IStateMachine? _stateMachine;
+    private readonly ILogger<QuickReplyHandler>? _logger;
 
     public QuickReplyHandler(
         IProductMappingService productMappingService,
         IGiftSelectionService giftSelectionService,
         IFreeshipCalculator freeshipCalculator)
+        : this(productMappingService, giftSelectionService, freeshipCalculator, null, null)
+    {
+    }
+
+    public QuickReplyHandler(
+        IProductMappingService productMappingService,
+        IGiftSelectionService giftSelectionService,
+        IFreeshipCalculator freeshipCalculator,
+        IStateMachine? stateMachine,
+        ILogger<QuickReplyHandler>? logger)
     {
         _productMappingService = productMappingService;
         _giftSelectionService = giftSelectionService;
         _freeshipCalculator = freeshipCalculator;
+        _stateMachine = stateMachine;
+        _logger = logger;
     }
 
-    public async Task<string> HandleQuickReplyAsync(string senderId, string payload)
+    public Task<string> HandleQuickReplyAsync(string senderId, string payload)
     {
-        return await ProcessPayloadAsync(payload);
+        return ProcessPayloadAsync(senderId, payload, null);
     }
 
-    public async Task<string> HandlePostbackAsync(string senderId, string payload)
+    public Task<string> HandleQuickReplyAsync(string senderId, string payload, string? pageId)
     {
-        return await ProcessPayloadAsync(payload);
+        return ProcessPayloadAsync(senderId, payload, pageId);
     }
 
-    private async Task<string> ProcessPayloadAsync(string payload)
+    public Task<string> HandlePostbackAsync(string senderId, string payload)
     {
-        // Get product from payload
+        return ProcessPayloadAsync(senderId, payload, null);
+    }
+
+    public Task<string> HandlePostbackAsync(string senderId, string payload, string? pageId)
+    {
+        return ProcessPayloadAsync(senderId, payload, pageId);
+    }
+
+    private async Task<string> ProcessPayloadAsync(string senderId, string payload, string? pageId)
+    {
         var product = await _productMappingService.GetProductByPayloadAsync(payload);
         if (product == null)
         {
-            return "Xin lỗi, em không tìm thấy sản phẩm này. Chị vui lòng thử lại nhé! 🙏";
+            return "Dạ em chưa thấy mã sản phẩm này trong hệ thống. Chị nhắn lại giúp em để em hỗ trợ lên đơn ngay nha.";
         }
 
-        // Get gift for product
         var gift = await _giftSelectionService.SelectGiftForProductAsync(product.Code);
-
-        // Calculate freeship
         var productCodes = new List<string> { product.Code };
-        var isEligibleForFreeship = _freeshipCalculator.IsEligibleForFreeship(productCodes);
-        var freeshipMessage = _freeshipCalculator.GetFreeshipMessage(isEligibleForFreeship);
+        var shippingFee = _freeshipCalculator.CalculateShippingFee(productCodes);
+        var freeshipMessage = _freeshipCalculator.GetFreeshipMessage(shippingFee == 0);
 
-        // Format response message
-        return FormatResponseMessage(product, gift, freeshipMessage);
+        var context = await PersistSalesContextAsync(senderId, pageId, product, gift, shippingFee);
+        var callToAction = context == null
+            ? "Chi iu cho em xin so dien thoai va dia chi em len don luon nha."
+            : SalesMessageParser.BuildMissingInfoPrompt(context);
+
+        return FormatResponseMessage(product, gift, freeshipMessage, callToAction);
     }
 
-    private string FormatResponseMessage(Product product, Gift? gift, string freeshipMessage)
+    private async Task<StateContext?> PersistSalesContextAsync(
+        string senderId,
+        string? pageId,
+        Product product,
+        Gift? gift,
+        decimal shippingFee)
     {
-        var message = $"✨ Dạ em xin phép gửi chị thông tin:\n\n";
-        message += $"📦 Sản phẩm: {product.Name} ({product.BasePrice:N0}đ)\n";
+        if (_stateMachine == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var context = await _stateMachine.LoadOrCreateAsync(senderId, pageId);
+            context.SetData("facebookPageId", pageId ?? context.GetData<string>("facebookPageId") ?? string.Empty);
+            context.SetData("selectedProductCodes", new List<string> { product.Code });
+            context.SetData("selectedGiftCode", gift?.Code ?? string.Empty);
+            context.SetData("selectedGiftName", gift?.Name ?? string.Empty);
+            context.SetData("shippingFee", shippingFee);
+            context.SetData("quickReplyPayload", $"PRODUCT_{product.Code}");
+            context.CurrentState = ConversationState.QuickReplySales;
+
+            await _stateMachine.SaveAsync(context);
+            return context;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Unable to persist quick reply context for {SenderId}", senderId);
+            return null;
+        }
+    }
+
+    private static string FormatResponseMessage(Product product, Gift? gift, string freeshipMessage, string callToAction)
+    {
+        var lines = new List<string>
+        {
+            "Dạ em chốt nhanh cho chị thông tin đang chọn nè:",
+            string.Empty,
+            $"San pham: {product.Name} ({product.BasePrice:N0}d)"
+        };
 
         if (gift != null)
         {
-            message += $"🎁 Quà tặng: {gift.Name}\n";
+            lines.Add($"Qua tang: {gift.Name}");
         }
 
-        message += $"\nTổng cộng: {product.BasePrice:N0}đ {freeshipMessage}\n\n";
-        message += "Chị ơi cho em xin số điện thoại và địa chỉ em lên đơn luôn nha 💕";
+        lines.Add($"Chinh sach ship: {freeshipMessage}");
+        lines.Add(string.Empty);
+        lines.Add(callToAction);
 
-        return message;
+        return string.Join(Environment.NewLine, lines);
     }
 }

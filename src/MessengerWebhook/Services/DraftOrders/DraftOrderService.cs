@@ -57,6 +57,7 @@ public class DraftOrderService : IDraftOrderService
             SessionId = context.SessionId,
             CustomerIdentityId = customer.Id,
             FacebookPSID = context.FacebookPSID,
+            FacebookPageId = customer.FacebookPageId ?? context.GetData<string>("facebookPageId") ?? _tenantContext.FacebookPageId,
             CustomerName = customer.FullName,
             CustomerPhone = phoneNumber,
             ShippingAddress = shippingAddress,

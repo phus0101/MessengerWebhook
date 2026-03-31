@@ -9,6 +9,11 @@ public static class StateTransitionRules
     {
         // From Idle
         new() { FromState = ConversationState.Idle, ToState = ConversationState.Greeting },
+        new() { FromState = ConversationState.Idle, ToState = ConversationState.QuickReplySales },
+        new() { FromState = ConversationState.Idle, ToState = ConversationState.Consulting },
+        new() { FromState = ConversationState.Idle, ToState = ConversationState.CollectingInfo },
+        new() { FromState = ConversationState.Idle, ToState = ConversationState.Complete },
+        new() { FromState = ConversationState.Idle, ToState = ConversationState.HumanHandoff },
 
         // From Greeting
         new() { FromState = ConversationState.Greeting, ToState = ConversationState.MainMenu },
@@ -72,9 +77,27 @@ public static class StateTransitionRules
 
         // From Help (can return to any state)
         new() { FromState = ConversationState.Help, ToState = ConversationState.Idle },
+        new() { FromState = ConversationState.Help, ToState = ConversationState.Consulting },
+        new() { FromState = ConversationState.Help, ToState = ConversationState.CollectingInfo },
         new() { FromState = ConversationState.Help, ToState = ConversationState.MainMenu },
         new() { FromState = ConversationState.Help, ToState = ConversationState.BrowsingProducts },
         new() { FromState = ConversationState.Help, ToState = ConversationState.CartReview },
+
+        // Sales-first flow
+        new() { FromState = ConversationState.QuickReplySales, ToState = ConversationState.CollectingInfo },
+        new() { FromState = ConversationState.QuickReplySales, ToState = ConversationState.Complete },
+        new() { FromState = ConversationState.QuickReplySales, ToState = ConversationState.HumanHandoff },
+        new() { FromState = ConversationState.Consulting, ToState = ConversationState.CollectingInfo },
+        new() { FromState = ConversationState.Consulting, ToState = ConversationState.Complete },
+        new() { FromState = ConversationState.Consulting, ToState = ConversationState.HumanHandoff },
+        new() { FromState = ConversationState.CollectingInfo, ToState = ConversationState.DraftOrder },
+        new() { FromState = ConversationState.CollectingInfo, ToState = ConversationState.Complete },
+        new() { FromState = ConversationState.CollectingInfo, ToState = ConversationState.HumanHandoff },
+        new() { FromState = ConversationState.DraftOrder, ToState = ConversationState.Complete },
+        new() { FromState = ConversationState.Complete, ToState = ConversationState.Consulting },
+        new() { FromState = ConversationState.Complete, ToState = ConversationState.QuickReplySales },
+        new() { FromState = ConversationState.HumanHandoff, ToState = ConversationState.Complete },
+        new() { FromState = ConversationState.HumanHandoff, ToState = ConversationState.Consulting },
 
         // From Error
         new() { FromState = ConversationState.Error, ToState = ConversationState.Idle },

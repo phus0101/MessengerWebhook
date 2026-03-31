@@ -2,9 +2,10 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace MessengerWebhook.Data.Entities;
 
-public class Product
+public class Product : ITenantOwnedEntity
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
+    public Guid? TenantId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
@@ -12,6 +13,10 @@ public class Product
     public ProductCategory Category { get; set; } = ProductCategory.Cosmetics;
     public decimal BasePrice { get; set; }
     public bool IsActive { get; set; } = true;
+    public int? NobitaProductId { get; set; }
+    public decimal NobitaWeight { get; set; }
+    public DateTime? NobitaLastSyncedAt { get; set; }
+    public string? NobitaSyncError { get; set; }
 
     // Cosmetics-specific fields (JSON columns for PostgreSQL)
     [Column(TypeName = "jsonb")]

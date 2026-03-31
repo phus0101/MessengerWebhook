@@ -6,7 +6,8 @@ public enum DraftOrderStatus
     PendingReview = 1,
     Approved = 2,
     Rejected = 3,
-    SubmittedToNobita = 4
+    SubmittedToNobita = 4,
+    SubmitFailed = 5
 }
 
 public enum RiskLevel
@@ -24,6 +25,7 @@ public class DraftOrder : ITenantOwnedEntity
     public string SessionId { get; set; } = string.Empty;
     public Guid? CustomerIdentityId { get; set; }
     public string FacebookPSID { get; set; } = string.Empty;
+    public string? FacebookPageId { get; set; }
     public string? CustomerName { get; set; }
     public string CustomerPhone { get; set; } = string.Empty;
     public string ShippingAddress { get; set; } = string.Empty;
@@ -37,6 +39,13 @@ public class DraftOrder : ITenantOwnedEntity
     public string? CustomerNotes { get; set; }
     public string? AssignedManagerEmail { get; set; }
     public string? NobitaOrderId { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+    public string? ReviewedByEmail { get; set; }
+    public DateTime? SubmittedAt { get; set; }
+    public string? SubmittedByEmail { get; set; }
+    public int SubmissionAttemptCount { get; set; }
+    public DateTime? LastSubmissionAttemptAt { get; set; }
+    public string? LastSubmissionError { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

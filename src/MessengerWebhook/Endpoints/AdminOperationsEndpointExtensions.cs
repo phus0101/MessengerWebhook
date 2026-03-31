@@ -44,6 +44,34 @@ public static class AdminOperationsEndpointExtensions
             return draft == null ? Results.NotFound() : Results.Ok(draft);
         });
 
+        group.MapGet("/customers", async (
+            string? query,
+            HttpContext httpContext,
+            IAdminDashboardQueryService dashboardQueryService,
+            CancellationToken cancellationToken) =>
+        {
+            var user = AdminApiEndpointHelpers.GetUser(httpContext);
+            return user == null
+                ? Results.Unauthorized()
+                : Results.Ok(await dashboardQueryService.SearchCustomersAsync(user, query, cancellationToken));
+        });
+
+        group.MapPost("/draft-orders/{id:guid}/update", async (
+            Guid id,
+            UpdateDraftOrderRequest request,
+            HttpContext httpContext,
+            IAntiforgery antiforgery,
+            IAdminDraftOrderService adminDraftOrderService,
+            CancellationToken cancellationToken) =>
+        {
+            var antiForgeryError = await AdminApiEndpointHelpers.ValidateAntiforgeryAsync(httpContext, antiforgery);
+            if (antiForgeryError != null) return antiForgeryError;
+            var user = AdminApiEndpointHelpers.GetUser(httpContext);
+            return user == null
+                ? Results.Unauthorized()
+                : Results.Ok(await adminDraftOrderService.UpdateDraftOrderAsync(user, id, request, cancellationToken));
+        });
+
         group.MapPost("/draft-orders/{id:guid}/approve-submit", async (
             Guid id,
             HttpContext httpContext,
@@ -160,6 +188,60 @@ public static class AdminOperationsEndpointExtensions
             if (antiForgeryError != null) return antiForgeryError;
             var user = AdminApiEndpointHelpers.GetUser(httpContext);
             return user == null ? Results.Unauthorized() : Results.Ok(await nobitaSubmissionService.SyncProductsAsync(user, request.Search, cancellationToken));
+        });
+
+        group.MapGet("/bot-locks", async (
+            HttpContext httpContext,
+            IBotLockService botLockService,
+            CancellationToken cancellationToken) =>
+        {
+            var user = AdminApiEndpointHelpers.GetUser(httpContext);
+            if (user == null) return Results.Unauthorized();
+            var locks = await botLockService.GetActiveLocksAsync(cancellationToken);
+            return Results.Ok(locks);
+        });
+
+        group.MapGet("/bot-locks/{psid}", async (
+            string psid,
+            HttpContext httpContext,
+            IBotLockService botLockService,
+            CancellationToken cancellationToken) =>
+        {
+            var user = AdminApiEndpointHelpers.GetUser(httpContext);
+            if (user == null) return Results.Unauthorized();
+            var lockHistory = await botLockService.GetLockHistoryAsync(psid, cancellationToken);
+            var isLocked = await botLockService.IsLockedAsync(psid, cancellationToken);
+            return Results.Ok(new { isLocked, history = lockHistory });
+        });
+
+        group.MapPost("/bot-locks/{psid}/unlock", async (
+            string psid,
+            HttpContext httpContext,
+            IAntiforgery antiforgery,
+            IBotLockService botLockService,
+            CancellationToken cancellationToken) =>
+        {
+            var antiForgeryError = await AdminApiEndpointHelpers.ValidateAntiforgeryAsync(httpContext, antiforgery);
+            if (antiForgeryError != null) return antiForgeryError;
+            var user = AdminApiEndpointHelpers.GetUser(httpContext);
+            if (user == null) return Results.Unauthorized();
+            await botLockService.ReleaseAsync(psid, cancellationToken);
+            return Results.Ok(new { success = true });
+        });
+
+        group.MapPost("/bot-locks/{psid}/extend", async (
+            string psid,
+            HttpContext httpContext,
+            IAntiforgery antiforgery,
+            IBotLockService botLockService,
+            CancellationToken cancellationToken) =>
+        {
+            var antiForgeryError = await AdminApiEndpointHelpers.ValidateAntiforgeryAsync(httpContext, antiforgery);
+            if (antiForgeryError != null) return antiForgeryError;
+            var user = AdminApiEndpointHelpers.GetUser(httpContext);
+            if (user == null) return Results.Unauthorized();
+            await botLockService.ExtendLockAsync(psid, 60, cancellationToken); // Extend by 60 minutes
+            return Results.Ok(new { success = true });
         });
 
         return group;

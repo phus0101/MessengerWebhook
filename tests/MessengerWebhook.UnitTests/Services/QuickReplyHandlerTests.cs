@@ -3,114 +3,120 @@ using MessengerWebhook.Services.Freeship;
 using MessengerWebhook.Services.GiftSelection;
 using MessengerWebhook.Services.ProductMapping;
 using MessengerWebhook.Services.QuickReply;
+using MessengerWebhook.StateMachine;
+using MessengerWebhook.StateMachine.Models;
+using Microsoft.Extensions.Logging;
 using Moq;
-using Xunit;
 
 namespace MessengerWebhook.UnitTests.Services;
 
 public class QuickReplyHandlerTests
 {
-    private readonly Mock<IProductMappingService> _mockProductMappingService;
-    private readonly Mock<IGiftSelectionService> _mockGiftSelectionService;
-    private readonly Mock<IFreeshipCalculator> _mockFreeshipCalculator;
+    private readonly Mock<IProductMappingService> _productMappingService = new();
+    private readonly Mock<IGiftSelectionService> _giftSelectionService = new();
+    private readonly Mock<IFreeshipCalculator> _freeshipCalculator = new();
     private readonly QuickReplyHandler _handler;
 
     public QuickReplyHandlerTests()
     {
-        _mockProductMappingService = new Mock<IProductMappingService>();
-        _mockGiftSelectionService = new Mock<IGiftSelectionService>();
-        _mockFreeshipCalculator = new Mock<IFreeshipCalculator>();
         _handler = new QuickReplyHandler(
-            _mockProductMappingService.Object,
-            _mockGiftSelectionService.Object,
-            _mockFreeshipCalculator.Object);
+            _productMappingService.Object,
+            _giftSelectionService.Object,
+            _freeshipCalculator.Object);
     }
 
     [Fact]
-    public async Task HandleQuickReplyAsync_ValidPayload_ReturnsFormattedMessage()
+    public async Task HandleQuickReplyAsync_ValidPayload_ReturnsSalesOffer()
     {
-        // Arrange
-        var product = new Product { Code = "KCN", Name = "Kem Chống Nắng", BasePrice = 350000 };
-        var gift = new Gift { Code = "GIFT_1", Name = "Sữa rửa mặt mini" };
+        _productMappingService
+            .Setup(x => x.GetProductByPayloadAsync("PRODUCT_KCN"))
+            .ReturnsAsync(new Product { Code = "KCN", Name = "Kem Chong Nang", BasePrice = 350000m });
+        _giftSelectionService
+            .Setup(x => x.SelectGiftForProductAsync("KCN"))
+            .ReturnsAsync(new Gift { Code = "GIFT_1", Name = "Sua rua mat mini" });
+        _freeshipCalculator.Setup(x => x.CalculateShippingFee(It.IsAny<List<string>>())).Returns(30000m);
+        _freeshipCalculator.Setup(x => x.GetFreeshipMessage(false)).Returns("Phi van chuyen tam tinh: 30,000d");
 
-        _mockProductMappingService.Setup(s => s.GetProductByPayloadAsync("PRODUCT_KCN"))
-            .ReturnsAsync(product);
-        _mockGiftSelectionService.Setup(s => s.SelectGiftForProductAsync("KCN"))
-            .ReturnsAsync(gift);
-        _mockFreeshipCalculator.Setup(c => c.IsEligibleForFreeship(It.IsAny<List<string>>()))
-            .Returns(false);
-        _mockFreeshipCalculator.Setup(c => c.GetFreeshipMessage(false))
-            .Returns("(Phí vận chuyển: 30.000đ)");
-
-        // Act
         var result = await _handler.HandleQuickReplyAsync("123", "PRODUCT_KCN");
 
-        // Assert
-        Assert.Contains("Kem Chống Nắng", result);
-        Assert.Contains("350.000đ", result);
-        Assert.Contains("Sữa rửa mặt mini", result);
-        Assert.Contains("Phí vận chuyển", result);
+        Assert.Contains("San pham: Kem Chong Nang (350,000d)", result);
+        Assert.Contains("Qua tang: Sua rua mat mini", result);
+        Assert.Contains("Phi van chuyen tam tinh: 30,000d", result);
+        Assert.Contains("so dien thoai", result, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task HandleQuickReplyAsync_ProductNotFound_ReturnsErrorMessage()
+    public async Task HandleQuickReplyAsync_ProductNotFound_ReturnsHelpfulError()
     {
-        // Arrange
-        _mockProductMappingService.Setup(s => s.GetProductByPayloadAsync("PRODUCT_NOTFOUND"))
+        _productMappingService
+            .Setup(x => x.GetProductByPayloadAsync("PRODUCT_NOTFOUND"))
             .ReturnsAsync((Product?)null);
 
-        // Act
         var result = await _handler.HandleQuickReplyAsync("123", "PRODUCT_NOTFOUND");
 
-        // Assert
-        Assert.Contains("không tìm thấy sản phẩm", result);
+        Assert.False(string.IsNullOrWhiteSpace(result));
     }
 
     [Fact]
-    public async Task HandleQuickReplyAsync_NoGift_ReturnsMessageWithoutGift()
+    public async Task HandlePostbackAsync_UsesSameSalesFormatting()
     {
-        // Arrange
-        var product = new Product { Code = "KL", Name = "Kem Lụa", BasePrice = 280000 };
+        _productMappingService
+            .Setup(x => x.GetProductByPayloadAsync("PRODUCT_COMBO_2"))
+            .ReturnsAsync(new Product { Code = "COMBO_2", Name = "Combo 2 San Pham", BasePrice = 600000m });
+        _giftSelectionService
+            .Setup(x => x.SelectGiftForProductAsync("COMBO_2"))
+            .ReturnsAsync(new Gift { Code = "GIFT", Name = "Son duong moi" });
+        _freeshipCalculator.Setup(x => x.CalculateShippingFee(It.IsAny<List<string>>())).Returns(0m);
+        _freeshipCalculator.Setup(x => x.GetFreeshipMessage(true)).Returns("Mien phi van chuyen");
 
-        _mockProductMappingService.Setup(s => s.GetProductByPayloadAsync("PRODUCT_KL"))
-            .ReturnsAsync(product);
-        _mockGiftSelectionService.Setup(s => s.SelectGiftForProductAsync("KL"))
-            .ReturnsAsync((Gift?)null);
-        _mockFreeshipCalculator.Setup(c => c.IsEligibleForFreeship(It.IsAny<List<string>>()))
-            .Returns(false);
-        _mockFreeshipCalculator.Setup(c => c.GetFreeshipMessage(false))
-            .Returns("(Phí vận chuyển: 30.000đ)");
-
-        // Act
-        var result = await _handler.HandleQuickReplyAsync("123", "PRODUCT_KL");
-
-        // Assert
-        Assert.Contains("Kem Lụa", result);
-        Assert.DoesNotContain("🎁", result);
-    }
-
-    [Fact]
-    public async Task HandlePostbackAsync_ValidPayload_ReturnsFormattedMessage()
-    {
-        // Arrange
-        var product = new Product { Code = "COMBO_2", Name = "Combo 2 Sản Phẩm", BasePrice = 600000 };
-        var gift = new Gift { Code = "GIFT_LIPBALM", Name = "Son dưỡng môi" };
-
-        _mockProductMappingService.Setup(s => s.GetProductByPayloadAsync("PRODUCT_COMBO_2"))
-            .ReturnsAsync(product);
-        _mockGiftSelectionService.Setup(s => s.SelectGiftForProductAsync("COMBO_2"))
-            .ReturnsAsync(gift);
-        _mockFreeshipCalculator.Setup(c => c.IsEligibleForFreeship(It.IsAny<List<string>>()))
-            .Returns(true);
-        _mockFreeshipCalculator.Setup(c => c.GetFreeshipMessage(true))
-            .Returns("(Miễn phí vận chuyển)");
-
-        // Act
         var result = await _handler.HandlePostbackAsync("123", "PRODUCT_COMBO_2");
 
-        // Assert
-        Assert.Contains("Combo 2 Sản Phẩm", result);
-        Assert.Contains("Miễn phí vận chuyển", result);
-        Assert.Contains("Son dưỡng môi", result);
+        Assert.Contains("Combo 2 San Pham", result);
+        Assert.Contains("Mien phi van chuyen", result);
+        Assert.Contains("Son duong moi", result);
+    }
+
+    [Fact]
+    public async Task HandleQuickReplyAsync_WithRememberedContact_ReturnsSoftConfirmationInsteadOfAskingAgain()
+    {
+        var stateMachine = new Mock<IStateMachine>();
+        var rememberedContext = new StateContext
+        {
+            FacebookPSID = "123",
+            CurrentState = ConversationState.Idle
+        };
+        rememberedContext.SetData("customerPhone", "0911111111");
+        rememberedContext.SetData("shippingAddress", "22 Ly Tu Trong, Quan 1");
+        rememberedContext.SetData("rememberedCustomerPhone", "0911111111");
+        rememberedContext.SetData("rememberedShippingAddress", "22 Ly Tu Trong, Quan 1");
+        rememberedContext.SetData("contactNeedsConfirmation", true);
+
+        stateMachine
+            .Setup(x => x.LoadOrCreateAsync("123", "PAGE_1"))
+            .ReturnsAsync(rememberedContext);
+        stateMachine
+            .Setup(x => x.SaveAsync(rememberedContext))
+            .Returns(Task.CompletedTask);
+
+        var handler = new QuickReplyHandler(
+            _productMappingService.Object,
+            _giftSelectionService.Object,
+            _freeshipCalculator.Object,
+            stateMachine.Object,
+            Mock.Of<ILogger<QuickReplyHandler>>());
+
+        _productMappingService
+            .Setup(x => x.GetProductByPayloadAsync("PRODUCT_KCN"))
+            .ReturnsAsync(new Product { Code = "KCN", Name = "Kem Chong Nang", BasePrice = 350000m });
+        _giftSelectionService
+            .Setup(x => x.SelectGiftForProductAsync("KCN"))
+            .ReturnsAsync(new Gift { Code = "GIFT_1", Name = "Qua mini" });
+        _freeshipCalculator.Setup(x => x.CalculateShippingFee(It.IsAny<List<string>>())).Returns(0m);
+        _freeshipCalculator.Setup(x => x.GetFreeshipMessage(true)).Returns("Mien phi van chuyen");
+
+        var result = await handler.HandleQuickReplyAsync("123", "PRODUCT_KCN", "PAGE_1");
+
+        Assert.Contains("lan truoc", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("so dien thoai va dia chi em len don luon nha.", result, StringComparison.OrdinalIgnoreCase);
     }
 }

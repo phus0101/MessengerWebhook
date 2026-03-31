@@ -10,6 +10,7 @@ public class RiskSignal : ITenantOwnedEntity
     public RiskLevel Level { get; set; } = RiskLevel.Low;
     public string Source { get; set; } = "local";
     public string Reason { get; set; } = string.Empty;
+    public string CustomerMessage { get; set; } = string.Empty;
     public bool RequiresManualReview { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

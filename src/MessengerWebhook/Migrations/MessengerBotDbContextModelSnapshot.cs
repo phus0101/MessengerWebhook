@@ -22,6 +22,94 @@ namespace MessengerWebhook.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.AdminAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ActorEmail")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Details")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FacebookPageId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ManagerProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResourceId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ResourceType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("ResourceType", "ResourceId");
+
+                    b.ToTable("AdminAuditLogs");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.BotConversationLock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FacebookPSID")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FacebookPageId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("HumanSupportCaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsLocked")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("LockedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UnlockAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FacebookPSID", "IsLocked");
+
+                    b.ToTable("BotConversationLocks");
+                });
+
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Cart", b =>
                 {
                     b.Property<string>("Id")
@@ -119,6 +207,9 @@ namespace MessengerWebhook.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt");
@@ -149,7 +240,72 @@ namespace MessengerWebhook.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("FacebookPageId")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("LastActivityAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FacebookPSID")
+                        .IsUnique();
+
+                    b.HasIndex("FacebookPageId");
+
+                    b.HasIndex("LastActivityAt");
+
+                    b.ToTable("ConversationSessions");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.CustomerIdentity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FacebookPSID")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FacebookPageId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("FailedDeliveries")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FullName")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("LastInteractionAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("LifetimeValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ShippingAddress")
+                        .HasColumnType("text");
+
+                    b.Property<int>("SuccessfulDeliveries")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("TotalOrders")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
@@ -157,9 +313,213 @@ namespace MessengerWebhook.Migrations
                     b.HasIndex("FacebookPSID")
                         .IsUnique();
 
-                    b.HasIndex("LastActivityAt");
+                    b.HasIndex("PhoneNumber");
 
-                    b.ToTable("ConversationSessions");
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("CustomerIdentities");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.DraftOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssignedManagerEmail")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CustomerIdentityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CustomerName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CustomerNotes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CustomerPhone")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("DraftCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FacebookPSID")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FacebookPageId")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("GrandTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("LastSubmissionAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastSubmissionError")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("MerchandiseTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("NobitaOrderId")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("RequiresManualReview")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReviewedByEmail")
+                        .HasColumnType("text");
+
+                    b.Property<int>("RiskLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RiskSummary")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ShippingAddress")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("ShippingFee")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SubmissionAttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SubmittedByEmail")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerIdentityId");
+
+                    b.HasIndex("DraftCode")
+                        .IsUnique();
+
+                    b.HasIndex("FacebookPageId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("DraftOrders");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.DraftOrderItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DraftOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GiftCode")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GiftName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DraftOrderId");
+
+                    b.ToTable("DraftOrderItems");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.FacebookPageConfig", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AppSecretOverride")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DefaultManagerEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FacebookPageId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPrimaryPage")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PageAccessToken")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PageName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VerifyToken")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FacebookPageId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("FacebookPageConfigs");
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Gift", b =>
@@ -191,17 +551,97 @@ namespace MessengerWebhook.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Code")
-                        .IsUnique();
-
                     b.HasIndex("IsActive");
 
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique();
+
                     b.ToTable("Gifts");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.HumanSupportCase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssignedToEmail")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ClaimedByEmail")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CustomerIdentityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DraftOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FacebookPSID")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FacebookPageId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LastNotificationError")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastNotificationSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Reason")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ResolutionNotes")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResolvedByEmail")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("ResumeBotOnNextMessage")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TranscriptExcerpt")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FacebookPSID");
+
+                    b.HasIndex("FacebookPageId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("HumanSupportCases");
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.IngredientCompatibility", b =>
@@ -232,6 +672,111 @@ namespace MessengerWebhook.Migrations
                     b.HasIndex("Ingredient1", "Ingredient2");
 
                     b.ToTable("IngredientCompatibilities");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.KnowledgeSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Category")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsPublished")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category", "IsPublished");
+
+                    b.ToTable("KnowledgeSnapshots");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.ManagerProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("FacebookPageConfigId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("FailedLoginCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastLoginIp")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LockedUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PasswordHash")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email");
+
+                    b.HasIndex("FacebookPageConfigId");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("ManagerProfiles");
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Order", b =>
@@ -358,11 +903,27 @@ namespace MessengerWebhook.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("NobitaLastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("NobitaProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NobitaSyncError")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("NobitaWeight")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
                     b.Property<string>("SkinConcernsJson")
                         .HasColumnType("jsonb");
 
                     b.Property<string>("SkinTypesJson")
                         .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Texture")
                         .HasColumnType("text");
@@ -377,7 +938,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("Category");
 
-                    b.HasIndex("Code")
+                    b.HasIndex("TenantId", "Code")
                         .IsUnique();
 
                     b.ToTable("Products");
@@ -405,13 +966,16 @@ namespace MessengerWebhook.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("GiftCode");
 
                     b.HasIndex("ProductCode");
 
-                    b.HasIndex("ProductCode", "GiftCode")
+                    b.HasIndex("TenantId", "ProductCode", "GiftCode")
                         .IsUnique();
 
                     b.ToTable("ProductGiftMappings");
@@ -503,6 +1067,57 @@ namespace MessengerWebhook.Migrations
                     b.ToTable("ProductVariants");
                 });
 
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.RiskSignal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CustomerIdentityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CustomerMessage")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("DraftOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("RequiresManualReview")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("Score")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerIdentityId");
+
+                    b.HasIndex("DraftOrderId");
+
+                    b.HasIndex("Level");
+
+                    b.ToTable("RiskSignals");
+                });
+
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Size", b =>
                 {
                     b.Property<string>("Id")
@@ -554,6 +1169,80 @@ namespace MessengerWebhook.Migrations
                     b.ToTable("SkinProfiles");
                 });
 
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.Tenant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("Tenants");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.VipProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CustomerIdentityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GreetingStyle")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsVip")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastOrderAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("LifetimeValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Tier")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TotalOrders")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerIdentityId")
+                        .IsUnique();
+
+                    b.ToTable("VipProfiles");
+                });
+
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Cart", b =>
                 {
                     b.HasOne("MessengerWebhook.Data.Entities.ConversationSession", "Session")
@@ -593,6 +1282,69 @@ namespace MessengerWebhook.Migrations
                         .IsRequired();
 
                     b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.CustomerIdentity", b =>
+                {
+                    b.HasOne("MessengerWebhook.Data.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId");
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.DraftOrder", b =>
+                {
+                    b.HasOne("MessengerWebhook.Data.Entities.CustomerIdentity", "CustomerIdentity")
+                        .WithMany()
+                        .HasForeignKey("CustomerIdentityId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MessengerWebhook.Data.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId");
+
+                    b.Navigation("CustomerIdentity");
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.DraftOrderItem", b =>
+                {
+                    b.HasOne("MessengerWebhook.Data.Entities.DraftOrder", "DraftOrder")
+                        .WithMany("Items")
+                        .HasForeignKey("DraftOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DraftOrder");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.FacebookPageConfig", b =>
+                {
+                    b.HasOne("MessengerWebhook.Data.Entities.Tenant", "Tenant")
+                        .WithMany("FacebookPages")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.ManagerProfile", b =>
+                {
+                    b.HasOne("MessengerWebhook.Data.Entities.FacebookPageConfig", "FacebookPageConfig")
+                        .WithMany()
+                        .HasForeignKey("FacebookPageConfigId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MessengerWebhook.Data.Entities.Tenant", "Tenant")
+                        .WithMany("Managers")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("FacebookPageConfig");
+
+                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Order", b =>
@@ -676,6 +1428,23 @@ namespace MessengerWebhook.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.RiskSignal", b =>
+                {
+                    b.HasOne("MessengerWebhook.Data.Entities.CustomerIdentity", "CustomerIdentity")
+                        .WithMany("RiskSignals")
+                        .HasForeignKey("CustomerIdentityId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("MessengerWebhook.Data.Entities.DraftOrder", "DraftOrder")
+                        .WithMany("RiskSignals")
+                        .HasForeignKey("DraftOrderId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("CustomerIdentity");
+
+                    b.Navigation("DraftOrder");
+                });
+
             modelBuilder.Entity("MessengerWebhook.Data.Entities.SkinProfile", b =>
                 {
                     b.HasOne("MessengerWebhook.Data.Entities.ConversationSession", "Session")
@@ -687,6 +1456,17 @@ namespace MessengerWebhook.Migrations
                     b.Navigation("Session");
                 });
 
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.VipProfile", b =>
+                {
+                    b.HasOne("MessengerWebhook.Data.Entities.CustomerIdentity", "CustomerIdentity")
+                        .WithOne("VipProfile")
+                        .HasForeignKey("MessengerWebhook.Data.Entities.VipProfile", "CustomerIdentityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CustomerIdentity");
+                });
+
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Cart", b =>
                 {
                     b.Navigation("Items");
@@ -695,6 +1475,20 @@ namespace MessengerWebhook.Migrations
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Color", b =>
                 {
                     b.Navigation("Variants");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.CustomerIdentity", b =>
+                {
+                    b.Navigation("RiskSignals");
+
+                    b.Navigation("VipProfile");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.DraftOrder", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("RiskSignals");
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Gift", b =>
@@ -717,6 +1511,13 @@ namespace MessengerWebhook.Migrations
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Size", b =>
                 {
                     b.Navigation("Variants");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.Tenant", b =>
+                {
+                    b.Navigation("FacebookPages");
+
+                    b.Navigation("Managers");
                 });
 #pragma warning restore 612, 618
         }

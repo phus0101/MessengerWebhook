@@ -1,4 +1,5 @@
 using MessengerWebhook.Data.Entities;
+using MessengerWebhook.Services.Tenants;
 using Microsoft.EntityFrameworkCore;
 
 namespace MessengerWebhook.Data.Repositories;
@@ -6,10 +7,17 @@ namespace MessengerWebhook.Data.Repositories;
 public class SessionRepository : ISessionRepository
 {
     private readonly MessengerBotDbContext _context;
+    private readonly ITenantContext _tenantContext;
 
     public SessionRepository(MessengerBotDbContext context)
+        : this(context, new NullTenantContext())
+    {
+    }
+
+    public SessionRepository(MessengerBotDbContext context, ITenantContext tenantContext)
     {
         _context = context;
+        _tenantContext = tenantContext;
     }
 
     public async Task<ConversationSession?> GetByPSIDAsync(string psid)
@@ -20,6 +28,8 @@ public class SessionRepository : ISessionRepository
 
     public async Task<ConversationSession> CreateAsync(ConversationSession session)
     {
+        session.TenantId ??= _tenantContext.TenantId;
+        session.FacebookPageId ??= _tenantContext.FacebookPageId;
         _context.ConversationSessions.Add(session);
         await _context.SaveChangesAsync();
         return session;

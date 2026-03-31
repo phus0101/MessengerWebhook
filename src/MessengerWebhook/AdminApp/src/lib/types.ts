@@ -1,9 +1,18 @@
+import type {
+  DraftOrderStatus,
+  RiskLevel,
+  SupportCaseReason,
+  SupportCaseStatus
+} from "./admin-enums";
+
 export type AdminUser = {
   managerId: string;
   email: string;
   fullName: string;
   tenantId: string;
   facebookPageId?: string | null;
+  canAccessAllPagesInTenant?: boolean;
+  visibilityMode?: string | null;
 };
 
 export type AuthState = {
@@ -26,8 +35,8 @@ export type DraftOrderListItem = {
   customerName?: string | null;
   customerPhone: string;
   shippingAddress: string;
-  status: string;
-  riskLevel: string;
+  status: DraftOrderStatus | number | null;
+  riskLevel: RiskLevel | number | null;
   requiresManualReview: boolean;
   assignedManagerEmail?: string | null;
   itemCount: number;
@@ -45,6 +54,18 @@ export type DraftOrderItem = {
   giftName?: string | null;
 };
 
+export type GiftOption = {
+  code: string;
+  name: string;
+};
+
+export type DraftProductOption = {
+  code: string;
+  name: string;
+  unitPrice: number;
+  giftOptions: GiftOption[];
+};
+
 export type AuditLog = {
   id: string;
   actorEmail: string;
@@ -55,15 +76,27 @@ export type AuditLog = {
   createdAt: string;
 };
 
+export type CustomerOption = {
+  customerIdentityId: string;
+  fullName?: string | null;
+  phoneNumber?: string | null;
+  shippingAddress?: string | null;
+  totalOrders: number;
+  successfulDeliveries: number;
+  failedDeliveries: number;
+  lastInteractionAt?: string | null;
+};
+
 export type DraftOrderDetail = {
   id: string;
   draftCode: string;
   facebookPageId?: string | null;
+  customerIdentityId?: string | null;
   customerName?: string | null;
   customerPhone: string;
   shippingAddress: string;
-  status: string;
-  riskLevel: string;
+  status: DraftOrderStatus | number | null;
+  riskLevel: RiskLevel | number | null;
   riskSummary?: string | null;
   requiresManualReview: boolean;
   merchandiseTotal: number;
@@ -77,7 +110,10 @@ export type DraftOrderDetail = {
   reviewedByEmail?: string | null;
   submittedAt?: string | null;
   submittedByEmail?: string | null;
+  isEditable: boolean;
+  linkedCustomer?: CustomerOption | null;
   items: DraftOrderItem[];
+  availableProducts: DraftProductOption[];
   auditLogs: AuditLog[];
 };
 
@@ -85,8 +121,8 @@ export type SupportCaseListItem = {
   id: string;
   facebookPSID: string;
   facebookPageId?: string | null;
-  reason: string;
-  status: string;
+  reason: SupportCaseReason | number | null;
+  status: SupportCaseStatus | number | null;
   summary: string;
   assignedToEmail?: string | null;
   createdAt: string;
@@ -98,8 +134,8 @@ export type SupportCaseDetail = {
   id: string;
   facebookPSID: string;
   facebookPageId?: string | null;
-  reason: string;
-  status: string;
+  reason: SupportCaseReason | number | null;
+  status: SupportCaseStatus | number | null;
   summary: string;
   transcriptExcerpt: string;
   assignedToEmail?: string | null;
@@ -135,4 +171,18 @@ export type CommandResult = {
   succeeded: boolean;
   message: string;
   externalReference?: string | null;
+};
+
+export type UpdateDraftOrderItemInput = {
+  productCode: string;
+  quantity: number;
+  giftCode?: string | null;
+};
+
+export type UpdateDraftOrderInput = {
+  customerIdentityId?: string | null;
+  customerName?: string | null;
+  customerPhone: string;
+  shippingAddress: string;
+  items: UpdateDraftOrderItemInput[];
 };

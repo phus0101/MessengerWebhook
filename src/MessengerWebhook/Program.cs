@@ -2,19 +2,33 @@ using System.Threading.Channels;
 using MessengerWebhook.BackgroundServices;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Data;
+using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
+using MessengerWebhook.Endpoints;
 using MessengerWebhook.Middleware;
 using MessengerWebhook.Models;
+using MessengerWebhook.Services.Admin;
 using MessengerWebhook.Services;
 using MessengerWebhook.Services.AI;
 using MessengerWebhook.Services.AI.Handlers;
 using MessengerWebhook.Services.AI.Strategies;
+using MessengerWebhook.Services.Customers;
+using MessengerWebhook.Services.DraftOrders;
+using MessengerWebhook.Services.Knowledge;
+using MessengerWebhook.Services.LiveComments;
+using MessengerWebhook.Services.Nobita;
+using MessengerWebhook.Services.Policy;
 using MessengerWebhook.Services.ProductMapping;
 using MessengerWebhook.Services.GiftSelection;
 using MessengerWebhook.Services.Freeship;
 using MessengerWebhook.Services.QuickReply;
+using MessengerWebhook.Services.Support;
+using MessengerWebhook.Services.Support.EmailTemplates;
+using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.StateMachine;
 using MessengerWebhook.StateMachine.Handlers;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -42,6 +56,55 @@ builder.Services.Configure<WebhookOptions>(
     builder.Configuration.GetSection(WebhookOptions.SectionName));
 builder.Services.Configure<GeminiOptions>(
     builder.Configuration.GetSection(GeminiOptions.SectionName));
+builder.Services.Configure<NobitaOptions>(
+    builder.Configuration.GetSection(NobitaOptions.SectionName));
+builder.Services.Configure<SupportOptions>(
+    builder.Configuration.GetSection(SupportOptions.SectionName));
+builder.Services.Configure<SalesBotOptions>(
+    builder.Configuration.GetSection(SalesBotOptions.SectionName));
+builder.Services.Configure<AdminOptions>(
+    builder.Configuration.GetSection(AdminOptions.SectionName));
+builder.Services.Configure<EmailOptions>(
+    builder.Configuration.GetSection(EmailOptions.SectionName));
+builder.Services.Configure<LiveCommentOptions>(
+    builder.Configuration.GetSection(LiveCommentOptions.SectionName));
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
+builder.Services
+    .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        var adminOptions = builder.Configuration.GetSection(AdminOptions.SectionName).Get<AdminOptions>() ?? new AdminOptions();
+        options.Cookie.Name = adminOptions.CookieName;
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.LoginPath = adminOptions.LoginPath;
+        options.SlidingExpiration = true;
+        options.Events.OnRedirectToLogin = context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/admin/api"))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            }
+
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/admin/api"))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            }
+
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
+    });
+builder.Services.AddAuthorization();
 
 // Configure PostgreSQL DbContext
 builder.Services.AddDbContext<MessengerBotDbContext>(options =>
@@ -68,6 +131,25 @@ builder.Services.AddMemoryCache(options =>
 // Register services
 builder.Services.AddSingleton<ISignatureValidator, SignatureValidator>();
 builder.Services.AddScoped<WebhookProcessor>();
+builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddScoped<IPolicyGuardService, PolicyGuardService>();
+builder.Services.AddScoped<IRiskMessageSanitizer, RiskMessageSanitizer>();
+builder.Services.AddScoped<IBotLockService, BotLockService>();
+builder.Services.AddScoped<ICaseEscalationService, CaseEscalationService>();
+builder.Services.AddScoped<IKnowledgeImportService, KnowledgeImportService>();
+builder.Services.AddScoped<ILiveCommentAutomationService, LiveCommentAutomationService>();
+builder.Services.AddScoped<ICustomerIntelligenceService, CustomerIntelligenceService>();
+builder.Services.AddScoped<IDraftOrderService, DraftOrderService>();
+builder.Services.AddScoped<IAdminAuthService, AdminAuthService>();
+builder.Services.AddScoped<IAdminAuditService, AdminAuditService>();
+builder.Services.AddScoped<IAdminDashboardQueryService, AdminDashboardQueryService>();
+builder.Services.AddScoped<IAdminDraftOrderService, AdminDraftOrderService>();
+builder.Services.AddScoped<INobitaSubmissionService, NobitaSubmissionService>();
+builder.Services.AddScoped<ISupportCaseManagementService, SupportCaseManagementService>();
+builder.Services.AddScoped<IEmailNotificationService, EmailNotificationService>();
+builder.Services.AddScoped<IEmailTemplateService, EmailTemplateService>();
+builder.Services.AddScoped<ISupportCaseTokenService, SupportCaseTokenService>();
+builder.Services.AddScoped<IPasswordHasher<ManagerProfile>, PasswordHasher<ManagerProfile>>();
 
 // Register repositories
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
@@ -93,6 +175,12 @@ builder.Services.AddScoped<IStateMachine, ConversationStateMachine>();
 
 // Register state handlers
 builder.Services.AddScoped<IStateHandler, IdleStateHandler>();
+builder.Services.AddScoped<IStateHandler, QuickReplySalesStateHandler>();
+builder.Services.AddScoped<IStateHandler, ConsultingStateHandler>();
+builder.Services.AddScoped<IStateHandler, CollectingInfoStateHandler>();
+builder.Services.AddScoped<IStateHandler, DraftOrderStateHandler>();
+builder.Services.AddScoped<IStateHandler, CompleteStateHandler>();
+builder.Services.AddScoped<IStateHandler, HumanHandoffStateHandler>();
 builder.Services.AddScoped<IStateHandler, GreetingStateHandler>();
 builder.Services.AddScoped<IStateHandler, MainMenuStateHandler>();
 builder.Services.AddScoped<IStateHandler, BrowsingProductsStateHandler>();
@@ -156,10 +244,24 @@ builder.Services.AddHttpClient<IMessengerService, MessengerService>()
         options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10);
     });
 
+builder.Services.AddHttpClient<INobitaClient, NobitaClient>((sp, client) =>
+{
+    var options = sp.GetRequiredService<IOptions<NobitaOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+
+    if (!string.IsNullOrWhiteSpace(options.ApiKey))
+    {
+        client.DefaultRequestHeaders.Remove("X-Api-Key");
+        client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
+    }
+});
+
 // Register background services
 builder.Services.AddHostedService<WebhookProcessingService>();
 builder.Services.AddHostedService<SessionCleanupService>();
 builder.Services.AddHostedService<MessageCleanupService>();
+builder.Services.AddHostedService<BotLockCleanupService>();
 
 // Configure Channel for async event processing
 var channel = Channel.CreateBounded<MessagingEvent>(
@@ -191,20 +293,32 @@ if (app.Environment.IsDevelopment())
 // Validate critical configuration on startup
 var facebookOpts = app.Services.GetRequiredService<IOptions<FacebookOptions>>().Value;
 var webhookOpts = app.Services.GetRequiredService<IOptions<WebhookOptions>>().Value;
+using var validationScope = app.Services.CreateScope();
+var validationDbContext = validationScope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+var hasPageAccessTokenOverride = await validationDbContext.FacebookPageConfigs
+    .IgnoreQueryFilters()
+    .AnyAsync(x => x.IsActive && !string.IsNullOrWhiteSpace(x.PageAccessToken));
 
-if (string.IsNullOrWhiteSpace(facebookOpts.AppSecret))
-    throw new InvalidOperationException("Facebook:AppSecret is required. Configure via User Secrets or environment variables.");
-if (string.IsNullOrWhiteSpace(facebookOpts.PageAccessToken))
-    throw new InvalidOperationException("Facebook:PageAccessToken is required. Configure via User Secrets or environment variables.");
-if (string.IsNullOrWhiteSpace(webhookOpts.VerifyToken))
-    throw new InvalidOperationException("Webhook:VerifyToken is required. Configure via User Secrets or environment variables.");
+// if (string.IsNullOrWhiteSpace(facebookOpts.AppSecret))
+//     throw new InvalidOperationException("Facebook:AppSecret is required. Configure via User Secrets or environment variables.");
+// if (string.IsNullOrWhiteSpace(facebookOpts.PageAccessToken) && !hasPageAccessTokenOverride)
+//     throw new InvalidOperationException("Facebook:PageAccessToken is required. Configure via User Secrets or environment variables.");
+// if (string.IsNullOrWhiteSpace(webhookOpts.VerifyToken))
+//     throw new InvalidOperationException("Webhook:VerifyToken is required. Configure via User Secrets or environment variables.");
 
 var geminiOpts = app.Services.GetRequiredService<IOptions<GeminiOptions>>().Value;
 if (string.IsNullOrWhiteSpace(geminiOpts.ApiKey))
     throw new InvalidOperationException("Gemini:ApiKey is required. Configure via User Secrets or environment variables.");
 
 // Add signature validation middleware
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseMiddleware<SignatureValidationMiddleware>();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseMiddleware<TenantResolutionMiddleware>();
+app.UseMiddleware<AdminTenantContextMiddleware>();
+app.UseAntiforgery();
 
 // Health check endpoint with detailed response
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
@@ -263,6 +377,7 @@ app.MapGet("/webhook", (
 app.MapPost("/webhook", async (
     WebhookEvent webhookEvent,
     Channel<MessagingEvent> channel,
+    IServiceScopeFactory scopeFactory,
     ILogger<Program> logger) =>
 {
     if (webhookEvent.Object != "page")
@@ -274,10 +389,53 @@ app.MapPost("/webhook", async (
     var eventCount = 0;
     foreach (var entry in webhookEvent.Entry)
     {
-        foreach (var messagingEvent in entry.Messaging)
+        // Handle messaging events (messages, postbacks)
+        if (entry.Messaging != null)
         {
-            await channel.Writer.WriteAsync(messagingEvent);
-            eventCount++;
+            foreach (var messagingEvent in entry.Messaging)
+            {
+                await channel.Writer.WriteAsync(messagingEvent);
+                eventCount++;
+            }
+        }
+
+        // Handle feed changes (live_comments)
+        if (entry.Changes != null)
+        {
+            foreach (var change in entry.Changes)
+            {
+                if (change.Field == "live_comments" && change.Value?.CommentId != null)
+                {
+                    // Process live comment in background
+                    _ = Task.Run(async () =>
+                    {
+                        using var scope = scopeFactory.CreateScope();
+                        var liveCommentService = scope.ServiceProvider.GetRequiredService<ILiveCommentAutomationService>();
+                        var commentLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+                        try
+                        {
+                            var shouldHandle = await liveCommentService.ShouldHandleCommentAsync(
+                                change.Value.Message ?? string.Empty);
+
+                            if (shouldHandle)
+                            {
+                                await liveCommentService.ProcessCommentAsync(
+                                    change.Value.CommentId,
+                                    change.Value.From?.Id ?? string.Empty,
+                                    change.Value.Message ?? string.Empty,
+                                    change.Value.PostId ?? string.Empty);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            commentLogger.LogError(ex, "Error processing live comment {CommentId}", change.Value.CommentId);
+                        }
+                    });
+
+                    eventCount++;
+                }
+            }
         }
     }
 
@@ -304,6 +462,15 @@ app.MapGet("/", () => Results.Ok(new {
     status = "running",
     service = "MessengerWebhook"
 }));
+
+app.MapInternalOperationsEndpoints();
+app.MapAdminAuthEndpoints();
+app.MapAdminOperationsEndpoints();
+app.MapFallbackToFile("/admin/{*path:nonfile}", "admin/index.html");
+
+using var adminBootstrapScope = app.Services.CreateScope();
+var adminAuthService = adminBootstrapScope.ServiceProvider.GetRequiredService<IAdminAuthService>();
+await adminAuthService.EnsureBootstrapManagerAsync();
 
 app.Run();
 

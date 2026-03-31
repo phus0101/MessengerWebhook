@@ -1,7 +1,7 @@
 namespace MessengerWebhook.Services.Freeship;
 
 /// <summary>
-/// Calculator for freeship eligibility and shipping fees
+/// Calculator for freeship eligibility and shipping fees.
 /// </summary>
 public class FreeshipCalculator : IFreeshipCalculator
 {
@@ -11,9 +11,10 @@ public class FreeshipCalculator : IFreeshipCalculator
     public bool IsEligibleForFreeship(List<string> productCodes)
     {
         if (productCodes == null || productCodes.Count == 0)
+        {
             return false;
+        }
 
-        // Eligible if: >= 2 products OR contains COMBO_2
         return productCodes.Count >= 2 ||
                productCodes.Any(code => code.Equals(ComboProductCode, StringComparison.OrdinalIgnoreCase));
     }
@@ -26,7 +27,7 @@ public class FreeshipCalculator : IFreeshipCalculator
     public string GetFreeshipMessage(bool isEligible)
     {
         return isEligible
-            ? "(Miễn phí vận chuyển)"
-            : $"(Phí vận chuyển: {ShippingFee:N0}đ)";
+            ? "Mien phi van chuyen"
+            : $"Phi van chuyen tam tinh: {ShippingFee:N0}d";
     }
 }

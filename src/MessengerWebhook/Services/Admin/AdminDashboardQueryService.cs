@@ -54,6 +54,7 @@ public class AdminDashboardQueryService : IAdminDashboardQueryService
         var draft = await FilterDraftOrders(user)
             .AsNoTracking()
             .Include(x => x.Items)
+            .Include(x => x.CustomerIdentity)
             .FirstOrDefaultAsync(x => x.Id == draftOrderId, cancellationToken);
 
         if (draft == null)
@@ -61,11 +62,13 @@ public class AdminDashboardQueryService : IAdminDashboardQueryService
             return null;
         }
 
+        var availableProducts = await GetDraftProductOptionsAsync(user, cancellationToken);
         var auditLogs = await GetAuditLogsAsync(user, "draft-order", draft.Id.ToString(), cancellationToken);
         return new AdminDraftOrderDetailDto(
             draft.Id,
             draft.DraftCode,
             draft.FacebookPageId,
+            draft.CustomerIdentityId,
             draft.CustomerName,
             draft.CustomerPhone,
             draft.ShippingAddress,
@@ -84,8 +87,51 @@ public class AdminDashboardQueryService : IAdminDashboardQueryService
             draft.ReviewedByEmail,
             draft.SubmittedAt,
             draft.SubmittedByEmail,
+            draft.Status != DraftOrderStatus.SubmittedToNobita,
+            MapCustomerOption(draft.CustomerIdentity),
             draft.Items.Select(x => new AdminDraftOrderItemDto(x.Id, x.ProductCode, x.ProductName, x.Quantity, x.UnitPrice, x.GiftCode, x.GiftName)).ToList(),
+            availableProducts,
             auditLogs);
+    }
+
+    public async Task<IReadOnlyList<AdminCustomerOptionDto>> SearchCustomersAsync(AdminUserContext user, string? query, CancellationToken cancellationToken = default)
+    {
+        var normalizedQuery = query?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedQuery))
+        {
+            return Array.Empty<AdminCustomerOptionDto>();
+        }
+
+        return await FilterCustomers(user)
+            .AsNoTracking()
+            .Where(x =>
+                (x.PhoneNumber != null && x.PhoneNumber.Contains(normalizedQuery)) ||
+                (x.FullName != null && x.FullName.Contains(normalizedQuery)) ||
+                (x.ShippingAddress != null && x.ShippingAddress.Contains(normalizedQuery)))
+            .OrderByDescending(x => x.PhoneNumber == normalizedQuery)
+            .ThenByDescending(x => x.FullName == normalizedQuery)
+            .ThenByDescending(x => x.LastInteractionAt)
+            .Take(20)
+            .Select(x => new AdminCustomerOptionDto(
+                x.Id,
+                x.FullName,
+                x.PhoneNumber,
+                x.ShippingAddress,
+                x.TotalOrders,
+                x.SuccessfulDeliveries,
+                x.FailedDeliveries,
+                x.LastInteractionAt))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AdminGiftOptionDto>> GetGiftOptionsAsync(AdminUserContext user, CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Gifts
+            .AsNoTracking()
+            .Where(x => x.TenantId == user.TenantId && x.IsActive)
+            .OrderBy(x => x.Name)
+            .Select(x => new AdminGiftOptionDto(x.Code, x.Name))
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<AdminSupportCaseListItemDto>> GetSupportCasesAsync(AdminUserContext user, CancellationToken cancellationToken = default)
@@ -173,19 +219,26 @@ public class AdminDashboardQueryService : IAdminDashboardQueryService
     {
         return _dbContext.DraftOrders
             .Where(x => x.TenantId == user.TenantId &&
-                        (user.FacebookPageId == null || x.FacebookPageId == user.FacebookPageId));
+                        (user.CanAccessAllPagesInTenant || user.FacebookPageId == null || x.FacebookPageId == user.FacebookPageId));
     }
 
     private IQueryable<HumanSupportCase> FilterSupportCases(AdminUserContext user)
     {
         return _dbContext.HumanSupportCases
             .Where(x => x.TenantId == user.TenantId &&
-                        (user.FacebookPageId == null || x.FacebookPageId == user.FacebookPageId));
+                        (user.CanAccessAllPagesInTenant || user.FacebookPageId == null || x.FacebookPageId == user.FacebookPageId));
+    }
+
+    private IQueryable<CustomerIdentity> FilterCustomers(AdminUserContext user)
+    {
+        return _dbContext.CustomerIdentities
+            .Where(x => x.TenantId == user.TenantId &&
+                        (user.CanAccessAllPagesInTenant || user.FacebookPageId == null || x.FacebookPageId == null || x.FacebookPageId == user.FacebookPageId));
     }
 
     private IQueryable<Product> FilterProducts(AdminUserContext user)
     {
-        return _dbContext.Products.Where(x => x.TenantId == user.TenantId);
+        return _dbContext.Products.Where(x => x.TenantId == user.TenantId || x.TenantId == null);
     }
 
     private Task<List<AdminAuditLogDto>> GetAuditLogsAsync(
@@ -209,5 +262,67 @@ public class AdminDashboardQueryService : IAdminDashboardQueryService
                 x.Details,
                 x.CreatedAt))
             .ToListAsync(cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<AdminDraftProductOptionDto>> GetDraftProductOptionsAsync(AdminUserContext user, CancellationToken cancellationToken)
+    {
+        var products = await FilterProducts(user)
+            .AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.Name)
+            .Select(x => new
+            {
+                x.Code,
+                x.Name,
+                x.BasePrice
+            })
+            .ToListAsync(cancellationToken);
+
+        var productCodes = products.Select(x => x.Code).ToList();
+        var giftMappings = await _dbContext.ProductGiftMappings
+            .AsNoTracking()
+            .Where(x => (x.TenantId == user.TenantId || x.TenantId == null) && productCodes.Contains(x.ProductCode))
+            .Join(
+                _dbContext.Gifts.AsNoTracking().Where(x => (x.TenantId == user.TenantId || x.TenantId == null) && x.IsActive),
+                mapping => mapping.GiftCode,
+                gift => gift.Code,
+                (mapping, gift) => new
+                {
+                    mapping.ProductCode,
+                    mapping.Priority,
+                    GiftCode = gift.Code,
+                    GiftName = gift.Name
+                })
+            .ToListAsync(cancellationToken);
+
+        return products
+            .Select(product => new AdminDraftProductOptionDto(
+                product.Code,
+                product.Name,
+                product.BasePrice,
+                giftMappings
+                    .Where(x => string.Equals(x.ProductCode, product.Code, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(x => x.Priority)
+                    .Select(x => new AdminGiftOptionDto(x.GiftCode, x.GiftName))
+                    .ToList()))
+            .ToList();
+    }
+
+    private static AdminCustomerOptionDto? MapCustomerOption(CustomerIdentity? customer)
+    {
+        if (customer == null)
+        {
+            return null;
+        }
+
+        return new AdminCustomerOptionDto(
+            customer.Id,
+            customer.FullName,
+            customer.PhoneNumber,
+            customer.ShippingAddress,
+            customer.TotalOrders,
+            customer.SuccessfulDeliveries,
+            customer.FailedDeliveries,
+            customer.LastInteractionAt);
     }
 }

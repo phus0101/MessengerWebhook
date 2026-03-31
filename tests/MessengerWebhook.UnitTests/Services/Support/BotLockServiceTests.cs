@@ -1,9 +1,11 @@
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Data;
 using MessengerWebhook.Data.Entities;
+using MessengerWebhook.Services.Admin;
 using MessengerWebhook.Services.Support;
 using MessengerWebhook.Services.Tenants;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 
@@ -13,6 +15,7 @@ public class BotLockServiceTests : IDisposable
 {
     private readonly MessengerBotDbContext _dbContext;
     private readonly Mock<ITenantContext> _tenantContext;
+    private readonly Mock<IAdminAuditService> _auditService;
     private readonly BotLockService _service;
 
     public BotLockServiceTests()
@@ -26,12 +29,16 @@ public class BotLockServiceTests : IDisposable
         _tenantContext.Setup(x => x.TenantId).Returns(Guid.NewGuid());
         _tenantContext.Setup(x => x.FacebookPageId).Returns("page123");
 
+        _auditService = new Mock<IAdminAuditService>();
+
         var supportOptions = Options.Create(new SupportOptions
         {
             BotLockTimeoutMinutes = 60
         });
 
-        _service = new BotLockService(_dbContext, _tenantContext.Object, supportOptions);
+        var logger = new Mock<ILogger<BotLockService>>();
+
+        _service = new BotLockService(_dbContext, _tenantContext.Object, _auditService.Object, supportOptions, logger.Object);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
+using MessengerWebhook.Services.Customers;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
 using Microsoft.Extensions.Logging;
@@ -10,6 +11,7 @@ namespace MessengerWebhook.StateMachine;
 public class ConversationStateMachine : IStateMachine
 {
     private readonly ISessionRepository _sessionRepository;
+    private readonly ICustomerIntelligenceService _customerIntelligenceService;
     private readonly ILogger<ConversationStateMachine> _logger;
     private readonly Dictionary<ConversationState, IStateHandler> _handlers;
     private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(15);
@@ -19,13 +21,28 @@ public class ConversationStateMachine : IStateMachine
         ISessionRepository sessionRepository,
         IEnumerable<IStateHandler> handlers,
         ILogger<ConversationStateMachine> logger)
+        : this(sessionRepository, handlers, new NullCustomerIntelligenceService(), logger)
+    {
+    }
+
+    public ConversationStateMachine(
+        ISessionRepository sessionRepository,
+        IEnumerable<IStateHandler> handlers,
+        ICustomerIntelligenceService customerIntelligenceService,
+        ILogger<ConversationStateMachine> logger)
     {
         _sessionRepository = sessionRepository;
+        _customerIntelligenceService = customerIntelligenceService;
         _logger = logger;
         _handlers = handlers.ToDictionary(h => h.HandledState, h => h);
     }
 
-    public async Task<StateContext> LoadOrCreateAsync(string psid)
+    public Task<StateContext> LoadOrCreateAsync(string psid)
+    {
+        return LoadOrCreateAsync(psid, null);
+    }
+
+    public async Task<StateContext> LoadOrCreateAsync(string psid, string? pageId)
     {
         var session = await _sessionRepository.GetByPSIDAsync(psid);
 
@@ -35,12 +52,18 @@ public class ConversationStateMachine : IStateMachine
             session = new ConversationSession
             {
                 FacebookPSID = psid,
+                FacebookPageId = pageId,
                 CurrentState = ConversationState.Idle,
                 CreatedAt = DateTime.UtcNow,
                 LastActivityAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.Add(AbsoluteTimeout)
             };
             session = await _sessionRepository.CreateAsync(session);
+        }
+        else if (!string.IsNullOrWhiteSpace(pageId) && string.IsNullOrWhiteSpace(session.FacebookPageId))
+        {
+            session.FacebookPageId = pageId;
+            await _sessionRepository.UpdateAsync(session);
         }
 
         var context = MapToContext(session);
@@ -61,6 +84,7 @@ public class ConversationStateMachine : IStateMachine
             await _sessionRepository.UpdateAsync(session);
         }
 
+        await HydrateCustomerMemoryAsync(context, pageId ?? session.FacebookPageId);
         return context;
     }
 
@@ -114,9 +138,18 @@ public class ConversationStateMachine : IStateMachine
         _logger.LogDebug("Session saved for PSID: {PSID}", ctx.FacebookPSID);
     }
 
-    public async Task<string> ProcessMessageAsync(string psid, string message)
+    public Task<string> ProcessMessageAsync(string psid, string message)
     {
-        var context = await LoadOrCreateAsync(psid);
+        return ProcessMessageAsync(psid, message, null);
+    }
+
+    public async Task<string> ProcessMessageAsync(string psid, string message, string? pageId)
+    {
+        var context = await LoadOrCreateAsync(psid, pageId);
+        if (!string.IsNullOrWhiteSpace(pageId))
+        {
+            context.SetData("facebookPageId", pageId);
+        }
 
         _logger.LogInformation(
             "Processing message in state {State} for PSID: {PSID}",
@@ -184,6 +217,12 @@ public class ConversationStateMachine : IStateMachine
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(session.FacebookPageId) &&
+            !context.Data.ContainsKey("facebookPageId"))
+        {
+            context.SetData("facebookPageId", session.FacebookPageId);
+        }
+
         return context;
     }
 
@@ -195,5 +234,95 @@ public class ConversationStateMachine : IStateMachine
         }
 
         return DateTime.UtcNow > session.ExpiresAt.Value;
+    }
+
+    private async Task HydrateCustomerMemoryAsync(StateContext context, string? pageId)
+    {
+        if (!string.IsNullOrWhiteSpace(context.GetData<string>("customerPhone")) &&
+            !string.IsNullOrWhiteSpace(context.GetData<string>("shippingAddress")))
+        {
+            return;
+        }
+
+        var customer = await _customerIntelligenceService.GetExistingAsync(
+            context.FacebookPSID,
+            pageId);
+        if (customer == null)
+        {
+            return;
+        }
+
+        var hydratedAnyField = false;
+
+        if (string.IsNullOrWhiteSpace(context.GetData<string>("customerName")) &&
+            !string.IsNullOrWhiteSpace(customer.FullName))
+        {
+            context.SetData("customerName", customer.FullName);
+            context.SetData("rememberedCustomerName", customer.FullName);
+        }
+
+        if (string.IsNullOrWhiteSpace(context.GetData<string>("customerPhone")) &&
+            !string.IsNullOrWhiteSpace(customer.PhoneNumber))
+        {
+            context.SetData("customerPhone", customer.PhoneNumber);
+            context.SetData("rememberedCustomerPhone", customer.PhoneNumber);
+            hydratedAnyField = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(context.GetData<string>("shippingAddress")) &&
+            !string.IsNullOrWhiteSpace(customer.ShippingAddress))
+        {
+            context.SetData("shippingAddress", customer.ShippingAddress);
+            context.SetData("rememberedShippingAddress", customer.ShippingAddress);
+            hydratedAnyField = true;
+        }
+
+        if (!hydratedAnyField)
+        {
+            return;
+        }
+
+        context.SetData("rememberedCustomerLastInteractionAt", customer.LastInteractionAt);
+        context.SetData("contactMemorySource", "customer-identity");
+        context.SetData("contactNeedsConfirmation", true);
+    }
+
+    private sealed class NullCustomerIntelligenceService : ICustomerIntelligenceService
+    {
+        public Task<CustomerIdentity?> GetExistingAsync(
+            string facebookPsid,
+            string? pageId = null,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<CustomerIdentity?>(null);
+        }
+
+        public Task<CustomerIdentity> GetOrCreateAsync(
+            string facebookPsid,
+            string? pageId = null,
+            string? phoneNumber = null,
+            string? fullName = null,
+            string? shippingAddress = null,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new CustomerIdentity
+            {
+                FacebookPSID = facebookPsid,
+                FacebookPageId = pageId,
+                PhoneNumber = phoneNumber,
+                FullName = fullName,
+                ShippingAddress = shippingAddress
+            });
+        }
+
+        public Task<VipProfile> GetVipProfileAsync(CustomerIdentity customer, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new VipProfile { CustomerIdentityId = customer.Id });
+        }
+
+        public Task<RiskSignal> BuildRiskSignalAsync(CustomerIdentity customer, Guid? draftOrderId = null, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new RiskSignal { CustomerIdentityId = customer.Id, DraftOrderId = draftOrderId });
+        }
     }
 }

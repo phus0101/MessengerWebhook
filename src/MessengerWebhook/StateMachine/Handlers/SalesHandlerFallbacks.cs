@@ -68,6 +68,14 @@ internal static class SalesHandlerFallbacks
 
     private sealed class EmptyCustomerIntelligenceService : ICustomerIntelligenceService
     {
+        public Task<CustomerIdentity?> GetExistingAsync(
+            string facebookPsid,
+            string? pageId = null,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<CustomerIdentity?>(null);
+        }
+
         public Task<CustomerIdentity> GetOrCreateAsync(
             string facebookPsid,
             string? pageId = null,

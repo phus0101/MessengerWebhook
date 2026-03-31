@@ -11,4 +11,6 @@ public class EmailOptions
     public string FromAddress { get; set; } = string.Empty;
     public string FromName { get; set; } = "Messenger Sales Bot";
     public bool EnableSsl { get; set; } = true;
+    public string BaseUrl { get; set; } = string.Empty;
+    public bool EnableHtmlEmails { get; set; } = true;
 }

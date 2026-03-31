@@ -28,7 +28,9 @@ public static class AdminAuthEndpointExtensions
                         user.Email,
                         user.FullName,
                         user.TenantId,
-                        user.FacebookPageId
+                        user.FacebookPageId,
+                        user.CanAccessAllPagesInTenant,
+                        user.VisibilityMode
                     }
             });
         });
@@ -62,7 +64,13 @@ public static class AdminAuthEndpointExtensions
                 result.Principal,
                 new AuthenticationProperties { IsPersistent = request.RememberMe });
 
-            await adminAuditService.LogAsync(result.User, "login", "admin-session", result.User.ManagerId.ToString(), null, cancellationToken);
+            await adminAuditService.LogAsync(
+                result.User,
+                "login",
+                "admin-session",
+                result.User.ManagerId.ToString(),
+                $"visibility={result.User.VisibilityMode}",
+                cancellationToken);
             return Results.Ok(new { success = true });
         });
 

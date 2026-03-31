@@ -9,9 +9,11 @@ public interface IQuickReplyHandler
     /// Handle Quick Reply event
     /// </summary>
     Task<string> HandleQuickReplyAsync(string senderId, string payload);
+    Task<string> HandleQuickReplyAsync(string senderId, string payload, string? pageId);
 
     /// <summary>
     /// Handle Postback event
     /// </summary>
     Task<string> HandlePostbackAsync(string senderId, string payload);
+    Task<string> HandlePostbackAsync(string senderId, string payload, string? pageId);
 }

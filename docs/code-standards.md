@@ -285,17 +285,51 @@ public class ProductRepository : IProductRepository
 
 ### Multi-Tenant Isolation
 
+**ITenantOwnedEntity Interface**:
+```csharp
+public interface ITenantOwnedEntity
+{
+    Guid TenantId { get; set; }
+}
+```
+
 **Global Query Filters** (in `DbContext`):
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
-    // Automatic tenant filtering
+    // Automatic tenant filtering applied to all ITenantOwnedEntity types
     modelBuilder.Entity<Product>()
         .HasQueryFilter(p => p.TenantId == _tenantContext.TenantId);
+
+    modelBuilder.Entity<CustomerIdentity>()
+        .HasQueryFilter(c => c.TenantId == _tenantContext.TenantId);
+
+    // ... applied to all 15 entity types
 
     // Index for performance
     modelBuilder.Entity<Product>()
         .HasIndex(p => new { p.TenantId, p.Category });
+}
+```
+
+**Tenant Context Resolution**:
+```csharp
+// Middleware resolves tenant from Facebook Page ID
+public class TenantResolutionMiddleware
+{
+    public async Task InvokeAsync(HttpContext context)
+    {
+        var pageId = ExtractPageIdFromRequest(context);
+        var tenant = await _dbContext.FacebookPageConfigs
+            .FirstOrDefaultAsync(p => p.FacebookPageId == pageId);
+
+        if (tenant != null)
+        {
+            _tenantContext.Initialize(tenant.TenantId, pageId, tenant.PageAccessToken);
+        }
+
+        await _next(context);
+    }
 }
 ```
 
@@ -304,6 +338,25 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 var allProducts = await _context.Products
     .IgnoreQueryFilters()
     .ToListAsync();
+```
+
+**Testing Tenant Isolation**:
+```csharp
+[Fact]
+public async Task Products_AreIsolatedByTenant()
+{
+    // Create products for two tenants
+    var product1 = new Product { TenantId = tenant1Id, Code = "T1_PROD" };
+    var product2 = new Product { TenantId = tenant2Id, Code = "T2_PROD" };
+
+    // Query as Tenant 1
+    tenantContext.Initialize(tenant1Id, "page1", null);
+    var tenant1Products = await dbContext.Products.ToListAsync();
+
+    // Should only see tenant1's products
+    Assert.Single(tenant1Products);
+    Assert.Equal("T1_PROD", tenant1Products[0].Code);
+}
 ```
 
 ### Gift and Product Mapping Repositories
@@ -371,25 +424,62 @@ public class GeminiService : IGeminiService
 ### Messenger API Service
 
 ```csharp
-public class MessengerApiService : IMessengerApiService
+public class MessengerService : IMessengerService
 {
     private readonly HttpClient _httpClient;
-    private readonly string _pageAccessToken;
+    private readonly FacebookOptions _options;
 
-    public async Task SendTextMessageAsync(string recipientId, string text)
+    public async Task<SendMessageResponse> SendTextMessageAsync(
+        string recipientId,
+        string text,
+        CancellationToken cancellationToken = default)
     {
-        var payload = new
-        {
-            recipient = new { id = recipientId },
-            message = new { text }
-        };
-
-        var response = await _httpClient.PostAsJsonAsync(
-            $"me/messages?access_token={_pageAccessToken}",
-            payload
+        var request = new SendMessageRequest(
+            new SendRecipient(recipientId),
+            new SendMessage(text)
         );
 
+        var pageAccessToken = await ResolvePageAccessTokenAsync();
+        var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/me/messages?access_token={pageAccessToken}";
+
+        var response = await _httpClient.PostAsJsonAsync(url, request, cancellationToken);
         response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<SendMessageResponse>(cancellationToken: cancellationToken);
+    }
+
+    public async Task<SendMessageResponse> SendQuickReplyAsync(
+        string recipientId,
+        string text,
+        List<QuickReplyButton> quickReplies,
+        CancellationToken cancellationToken = default)
+    {
+        if (quickReplies.Count > 13)
+        {
+            throw new ArgumentException("Facebook allows max 13 quick replies", nameof(quickReplies));
+        }
+
+        var request = new SendQuickReplyRequest(
+            new SendRecipient(recipientId),
+            new SendMessageWithQuickReplies(text, quickReplies)
+        );
+
+        var pageAccessToken = await ResolvePageAccessTokenAsync();
+        var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/me/messages?access_token={pageAccessToken}";
+
+        var response = await _httpClient.PostAsJsonAsync(url, request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<SendMessageResponse>(cancellationToken: cancellationToken);
+    }
+
+    public async Task<bool> HideCommentAsync(string commentId, CancellationToken cancellationToken = default)
+    {
+        var pageAccessToken = await ResolvePageAccessTokenAsync();
+        var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/{commentId}?is_hidden=true&access_token={pageAccessToken}";
+
+        var response = await _httpClient.PostAsync(url, null, cancellationToken);
+        return response.IsSuccessStatusCode;
     }
 }
 ```
@@ -501,6 +591,40 @@ public class ConversationStateMachineTests
         Assert.NotNull(context);
         Assert.Equal(ConversationState.Idle, context.CurrentState);
         _mockRepo.Verify(r => r.CreateAsync(It.IsAny<ConversationSession>()), Times.Once);
+    }
+}
+```
+
+### Integration Test with Multi-Tenancy
+
+```csharp
+public class TenantIsolationTests : IClassFixture<CustomWebApplicationFactory>
+{
+    private readonly CustomWebApplicationFactory _factory;
+
+    [Fact]
+    public async Task Products_AreIsolatedByTenant()
+    {
+        var tenant1Id = Guid.NewGuid();
+        var tenant2Id = Guid.NewGuid();
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+
+        // Create products for two different tenants
+        tenantContext.Clear();
+        var product1 = new Product { TenantId = tenant1Id, Code = "T1_PROD" };
+        var product2 = new Product { TenantId = tenant2Id, Code = "T2_PROD" };
+        dbContext.Products.AddRange(product1, product2);
+        await dbContext.SaveChangesAsync();
+
+        // Query as Tenant 1
+        tenantContext.Initialize(tenant1Id, "page1", null);
+        var tenant1Products = await dbContext.Products.ToListAsync();
+
+        Assert.Single(tenant1Products);
+        Assert.Equal(product1.Code, tenant1Products[0].Code);
     }
 }
 ```

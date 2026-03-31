@@ -4,6 +4,11 @@ namespace MessengerWebhook.Services.Customers;
 
 public interface ICustomerIntelligenceService
 {
+    Task<CustomerIdentity?> GetExistingAsync(
+        string facebookPsid,
+        string? pageId = null,
+        CancellationToken cancellationToken = default);
+
     Task<CustomerIdentity> GetOrCreateAsync(
         string facebookPsid,
         string? pageId = null,

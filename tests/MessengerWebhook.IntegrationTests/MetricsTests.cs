@@ -12,6 +12,7 @@ public class MetricsTests : IClassFixture<CustomWebApplicationFactory>
 
     public MetricsTests(CustomWebApplicationFactory factory)
     {
+        factory.ResetStateAsync().GetAwaiter().GetResult();
         _client = factory.CreateClient();
     }
 

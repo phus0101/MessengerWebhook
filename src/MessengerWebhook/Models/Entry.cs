@@ -1,10 +1,13 @@
+using System.Text.Json.Serialization;
+
 namespace MessengerWebhook.Models;
 
 /// <summary>
-/// Webhook entry containing messaging events
+/// Webhook entry containing messaging events or feed changes
 /// </summary>
 public record Entry(
     string Id,
     long Time,
-    MessagingEvent[] Messaging
+    [property: JsonPropertyName("messaging")] MessagingEvent[]? Messaging,
+    [property: JsonPropertyName("changes")] FeedChange[]? Changes
 );

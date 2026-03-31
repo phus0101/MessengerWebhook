@@ -90,7 +90,15 @@ public abstract class SalesStateHandlerBase : IStateHandler
         }
 
         var offerResponse = await TryBuildOfferResponseAsync(ctx, message);
-        SalesMessageParser.CaptureCustomerDetails(ctx, message);
+        await SalesMessageParser.CaptureCustomerDetailsAsync(ctx, message, GeminiService, Logger);
+
+        Logger.LogInformation(
+            "After CaptureCustomerDetails - PSID: {PSID}, HasProduct: {HasProduct}, HasRequiredContact: {HasRequiredContact}, NeedsConfirmation: {NeedsConfirmation}",
+            ctx.FacebookPSID,
+            HasSelectedProduct(ctx),
+            SalesMessageParser.HasRequiredContact(ctx),
+            ctx.GetData<bool?>("contactNeedsConfirmation") ?? false
+        );
 
         if (HasSelectedProduct(ctx) && SalesMessageParser.HasRequiredContact(ctx))
         {
@@ -190,30 +198,27 @@ Khach vua nhan: "{message}"
 San pham dang quan tam: {(productCodes.Count == 0 ? "chua xac dinh" : string.Join(", ", productCodes))}
 Thong tin da co: {contactSummary}
 {vipInstruction}
-{ctaContext}
+
 Quy tac:
 - Tra loi tu nhien, ngan gon, giong nhan vien page.
 - Khong tu y them qua, freeship, giam gia, huy don, hoan tien.
 - Neu khach hoi FAQ/policy thi tra loi trong pham vi an toan.
-- Phan cuoi LUON LUON moi khach gui thong tin con thieu.
+
+{ctaContext}
 """;
 
         var response = await GeminiService.SendMessageAsync(ctx.FacebookPSID, prompt, history);
 
-        // Validation: Check if CTA present
-        var hasCtaKeywords = new[] { "gui", "len don", "dia chi", "so dien thoai" }
+        // Validation: Log if CTA missing but trust AI to follow instruction
+        var hasCtaKeywords = new[] { "gui", "len don", "dia chi", "so dien thoai", "xac nhan", "chon san pham" }
             .Any(keyword => response.ToLower().Contains(keyword));
 
         if (!hasCtaKeywords)
         {
             Logger.LogWarning(
-                "Response missing CTA for {PSID}, adding fallback",
+                "Response may be missing CTA for {PSID}. AI should follow CTA instruction in prompt.",
                 ctx.FacebookPSID
             );
-
-            // Fallback to context-based CTA
-            var fallbackCta = BuildCtaContext(ctx);
-            response += $" {fallbackCta}";
         }
 
         return response;
@@ -251,25 +256,43 @@ Khach hang VIP:
     private static string BuildCtaContext(StateContext ctx)
     {
         var hasProduct = (ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>()).Count > 0;
+        var needsConfirmation = ctx.GetData<bool?>("contactNeedsConfirmation") == true;
         var missingInfo = GetMissingContactInfo(ctx);
 
-        if (missingInfo.Count == 0)
+        // Case 1: Existing customer with data loaded from DB - need confirmation (ONLY if not yet confirmed)
+        if (needsConfirmation && missingInfo.Count == 0)
         {
-            return """
-Ket thuc: Moi khach xac nhan thong tin de len don.
+            var phone = ctx.GetData<string>("customerPhone");
+            var address = ctx.GetData<string>("shippingAddress");
+            return $"""
+CTA Instruction: Customer is returning - their info was loaded from previous orders. Naturally confirm their existing info before creating order. Use friendly tone like:
+"Em thay chi da dat hang truoc day roi a. Chi van dung SDT {phone} va dia chi {address} dung khong a?"
+or "Chi oi, em thay thong tin cu cua chi la SDT {phone} va dia chi {address}. Chi xac nhan lai giup em nhe."
+
+IMPORTANT: If customer already confirmed (said "dung roi", "ok", "van dung", etc.), DO NOT ask again. Move to creating order.
 """;
         }
 
+        // Case 2: All info collected and confirmed - ready to create order
+        if (missingInfo.Count == 0 && !needsConfirmation)
+        {
+            return """
+CTA Instruction: All information is confirmed. Naturally tell customer you're creating the order now. Use friendly tone like "Da em len don cho chi ngay nhe" or "Em chot don cho chi lien a".
+""";
+        }
+
+        // Case 3: Has product but missing some contact info - ask for missing pieces
         if (hasProduct)
         {
             var missing = string.Join(" va ", missingInfo);
             return $"""
-Ket thuc: Moi khach gui {missing} de len don.
+CTA Instruction: Naturally ask customer to provide missing info ({missing}) to complete the order. Use friendly tone like "Chi gui em {missing} de em len don nha" or "Em can {missing} cua chi de len don a".
 """;
         }
 
+        // Case 4: No product selected yet - ask to choose product and provide info
         return """
-Ket thuc: Moi khach chon san pham (Kem Chong Nang, Kem Lua, hoac combo) va gui thong tin de len don.
+CTA Instruction: Naturally ask customer to choose a product (Kem Chong Nang, Kem Lua, or combo) and provide contact info. Use friendly tone like "Chi chon san pham va gui thong tin cho em nha".
 """;
     }
 

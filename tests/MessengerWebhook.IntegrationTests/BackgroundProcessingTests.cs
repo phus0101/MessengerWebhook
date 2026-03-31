@@ -1,178 +1,67 @@
+using System.Diagnostics;
 using System.Net;
-using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Channels;
 using FluentAssertions;
-using MessengerWebhook.BackgroundServices;
-using MessengerWebhook.Models;
-using MessengerWebhook.Services;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.Configuration;
+using MessengerWebhook.Data;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Moq;
-using Xunit;
 using Xunit.Abstractions;
 
 namespace MessengerWebhook.IntegrationTests;
 
-public class BackgroundProcessingTests : IClassFixture<WebApplicationFactory<Program>>
+public class BackgroundProcessingTests : IClassFixture<CustomWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly CustomWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private readonly ITestOutputHelper _output;
-    private readonly string _appSecret;
 
-    public BackgroundProcessingTests(
-        WebApplicationFactory<Program> factory,
-        ITestOutputHelper output)
+    public BackgroundProcessingTests(CustomWebApplicationFactory factory, ITestOutputHelper output)
     {
-        _factory = factory.WithWebHostBuilder(builder =>
-        {
-            builder.ConfigureAppConfiguration((context, config) =>
-            {
-                config.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["Facebook:AppSecret"] = "test_secret_for_integration_tests",
-                    ["Facebook:PageAccessToken"] = "test_page_token",
-                    ["Webhook:VerifyToken"] = "test_verify_token"
-                });
-            });
-
-            builder.ConfigureServices(services =>
-            {
-                // Mock IMessengerService to avoid real API calls
-                var mockMessengerService = new Mock<IMessengerService>();
-                mockMessengerService
-                    .Setup(m => m.SendTextMessageAsync(It.IsAny<string>(), It.IsAny<string>()))
-                    .ReturnsAsync(new SendMessageResponse("test_recipient", "test_message_id"));
-
-                services.AddSingleton(mockMessengerService.Object);
-            });
-        });
-
-        _client = _factory.CreateClient();
-        _appSecret = "test_secret_for_integration_tests";
+        _factory = factory;
+        _factory.ResetStateAsync().GetAwaiter().GetResult();
+        _client = factory.CreateClient();
         _output = output;
-    }
-
-    private string ComputeSignature(string rawBody)
-    {
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_appSecret));
-        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(rawBody));
-        return "sha256=" + Convert.ToHexString(hash).ToLower();
     }
 
     [Fact]
     public async Task BackgroundService_ProcessesQueuedEvents_Successfully()
     {
-        // Arrange
-        var payload = new
-        {
-            @object = "page",
-            entry = new[]
-            {
-                new
-                {
-                    id = "page123",
-                    time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    messaging = new[]
-                    {
-                        new
-                        {
-                            sender = new { id = "sender123" },
-                            recipient = new { id = "page123" },
-                            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                            message = new
-                            {
-                                mid = "mid.test123",
-                                text = "Hello from integration test"
-                            }
-                        }
-                    }
-                }
-            }
-        };
+        var response = await PostWebhookAsync("sender-processing-1", "mid.processing.1", "Tôi muốn mua kem chống nắng");
 
-        var json = JsonSerializer.Serialize(payload);
-        var signature = ComputeSignature(json);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-        content.Headers.Add("X-Hub-Signature-256", signature);
-
-        // Act
-        var response = await _client.PostAsync("/webhook", content);
-
-        // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await WaitForAsync(() => _factory.MessengerSpy.Messages.Any(x => x.RecipientId == "sender-processing-1"));
 
-        // Give background service time to process
-        await Task.Delay(1000);
-
-        _output.WriteLine("Event queued and processed successfully");
+        _factory.MessengerSpy.Messages.Last(x => x.RecipientId == "sender-processing-1").Text.Should().Contain("Kem Chống Nắng");
     }
 
     [Fact]
     public async Task BackgroundService_HandlesIdempotency_SkipsDuplicates()
     {
-        // Arrange
-        var messageId = $"mid.duplicate-{Guid.NewGuid()}";
+        var response1 = await PostWebhookAsync("sender-duplicate-1", "mid.duplicate.1", "Tôi muốn mua kem chống nắng");
+        var response2 = await PostWebhookAsync("sender-duplicate-1", "mid.duplicate.1", "Tôi muốn mua kem chống nắng");
 
-        var payload = new
-        {
-            @object = "page",
-            entry = new[]
-            {
-                new
-                {
-                    id = "page123",
-                    time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    messaging = new[]
-                    {
-                        new
-                        {
-                            sender = new { id = "sender456" },
-                            recipient = new { id = "page123" },
-                            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                            message = new
-                            {
-                                mid = messageId,
-                                text = "Duplicate test message"
-                            }
-                        }
-                    }
-                }
-            }
-        };
-
-        var json = JsonSerializer.Serialize(payload);
-        var signature = ComputeSignature(json);
-
-        var content1 = new StringContent(json, Encoding.UTF8, "application/json");
-        content1.Headers.Add("X-Hub-Signature-256", signature);
-
-        var content2 = new StringContent(json, Encoding.UTF8, "application/json");
-        content2.Headers.Add("X-Hub-Signature-256", signature);
-
-        // Act - Send same message twice
-        var response1 = await _client.PostAsync("/webhook", content1);
-        await Task.Delay(500); // Let first message process
-
-        var response2 = await _client.PostAsync("/webhook", content2);
-        await Task.Delay(500); // Let second message attempt to process
-
-        // Assert
         response1.StatusCode.Should().Be(HttpStatusCode.OK);
         response2.StatusCode.Should().Be(HttpStatusCode.OK);
+        await WaitForAsync(() => _factory.MessengerSpy.Messages.Any(x => x.RecipientId == "sender-duplicate-1"));
 
-        _output.WriteLine($"Duplicate message {messageId} handled correctly");
+        _factory.MessengerSpy.Messages.Count(x => x.RecipientId == "sender-duplicate-1").Should().Be(1);
+        _output.WriteLine("Duplicate webhook message was only processed once.");
+    }
+
+    [Fact]
+    public async Task BackgroundService_RespectsBotLock_AndSkipsReply()
+    {
+        var response = await PostWebhookAsync("psid-case-primary", "mid.locked.1", "Tôi muốn mua kem chống nắng");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await Task.Delay(500);
+        _factory.MessengerSpy.Messages.Should().BeEmpty();
     }
 
     [Fact]
     public async Task BackgroundService_ProcessesPostback_Successfully()
     {
-        // Arrange
         var payload = new
         {
             @object = "page",
@@ -180,14 +69,14 @@ public class BackgroundProcessingTests : IClassFixture<WebApplicationFactory<Pro
             {
                 new
                 {
-                    id = "page123",
+                    id = _factory.PrimaryPageId,
                     time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     messaging = new[]
                     {
                         new
                         {
-                            sender = new { id = "sender789" },
-                            recipient = new { id = "page123" },
+                            sender = new { id = "sender-postback-1" },
+                            recipient = new { id = _factory.PrimaryPageId },
                             timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                             postback = new
                             {
@@ -200,28 +89,51 @@ public class BackgroundProcessingTests : IClassFixture<WebApplicationFactory<Pro
             }
         };
 
-        var json = JsonSerializer.Serialize(payload);
-        var signature = ComputeSignature(json);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-        content.Headers.Add("X-Hub-Signature-256", signature);
+        var response = await PostSignedJsonAsync(JsonSerializer.Serialize(payload));
 
-        // Act
-        var response = await _client.PostAsync("/webhook", content);
-
-        // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        await Task.Delay(1000);
-
-        _output.WriteLine("Postback event processed successfully");
+        await WaitForAsync(() => _factory.MessengerSpy.Messages.Any(x => x.RecipientId == "sender-postback-1"));
+        _factory.MessengerSpy.Messages.Last(x => x.RecipientId == "sender-postback-1").Text.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
     public async Task BackgroundService_ProcessingLatency_UnderFiveSeconds()
     {
-        // Arrange
-        var startTime = DateTimeOffset.UtcNow;
+        var stopwatch = Stopwatch.StartNew();
+        var response = await PostWebhookAsync("sender-latency-1", "mid.latency.1", "Tôi muốn mua kem lụa");
 
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await WaitForAsync(() => _factory.MessengerSpy.Messages.Any(x => x.RecipientId == "sender-latency-1"));
+        stopwatch.Stop();
+
+        stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
+        _output.WriteLine($"Processing latency: {stopwatch.Elapsed.TotalMilliseconds}ms");
+    }
+
+    [Fact]
+    public async Task BackgroundService_CreatesDraftAfterCollectingContactInfo()
+    {
+        await PostWebhookAsync("sender-draft-1", "mid.draft.1", "Tôi muốn mua kem chống nắng");
+        await WaitForAsync(() => _factory.MessengerSpy.Messages.Any(x => x.RecipientId == "sender-draft-1"));
+        _factory.MessengerSpy.Clear();
+
+        var response = await PostWebhookAsync(
+            "sender-draft-1",
+            "mid.draft.2",
+            "Số của chị là 0901234567, địa chỉ 12 Trần Hưng Đạo quận 1");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await WaitForAsync(() => _factory.MessengerSpy.Messages.Any(x => x.RecipientId == "sender-draft-1"));
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+        var draft = dbContext.DraftOrders.Single(x => x.FacebookPSID == "sender-draft-1");
+        draft.CustomerPhone.Should().Be("0901234567");
+        draft.ShippingAddress.Should().Contain("12 Trần Hưng Đạo");
+    }
+
+    private Task<HttpResponseMessage> PostWebhookAsync(string senderId, string messageId, string text)
+    {
         var payload = new
         {
             @object = "page",
@@ -229,19 +141,19 @@ public class BackgroundProcessingTests : IClassFixture<WebApplicationFactory<Pro
             {
                 new
                 {
-                    id = "page123",
+                    id = _factory.PrimaryPageId,
                     time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     messaging = new[]
                     {
                         new
                         {
-                            sender = new { id = "sender999" },
-                            recipient = new { id = "page123" },
+                            sender = new { id = senderId },
+                            recipient = new { id = _factory.PrimaryPageId },
                             timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                             message = new
                             {
-                                mid = $"mid.latency-{Guid.NewGuid()}",
-                                text = "Latency test message"
+                                mid = messageId,
+                                text
                             }
                         }
                     }
@@ -249,105 +161,37 @@ public class BackgroundProcessingTests : IClassFixture<WebApplicationFactory<Pro
             }
         };
 
-        var json = JsonSerializer.Serialize(payload);
+        return PostSignedJsonAsync(JsonSerializer.Serialize(payload));
+    }
+
+    private async Task<HttpResponseMessage> PostSignedJsonAsync(string json)
+    {
         var signature = ComputeSignature(json);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         content.Headers.Add("X-Hub-Signature-256", signature);
-
-        // Act
-        var response = await _client.PostAsync("/webhook", content);
-
-        // Wait for processing with timeout
-        await Task.Delay(2000);
-
-        var endTime = DateTimeOffset.UtcNow;
-        var latency = (endTime - startTime).TotalSeconds;
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        latency.Should().BeLessThan(5, "Processing should complete within 5 seconds");
-
-        _output.WriteLine($"Processing latency: {latency:F2}s");
+        return await _client.PostAsync("/webhook", content);
     }
 
-    [Fact]
-    public async Task BackgroundService_GracefulShutdown_CompletesProcessing()
+    private string ComputeSignature(string rawBody)
     {
-        // Arrange
-        var channel = Channel.CreateUnbounded<MessagingEvent>();
-        var serviceProvider = _factory.Services;
-
-        // Queue an event
-        var messagingEvent = new MessagingEvent(
-            Sender: new Sender("sender123"),
-            Recipient: new Recipient("page123"),
-            Timestamp: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            Message: new Message($"mid.shutdown-{Guid.NewGuid()}", "Shutdown test", null, null),
-            Postback: null
-        );
-
-        await channel.Writer.WriteAsync(messagingEvent);
-
-        // Act - Service should process event before shutdown
-        await Task.Delay(1000);
-
-        // Assert - No exceptions during shutdown
-        _output.WriteLine("Graceful shutdown test completed");
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_factory.AppSecret));
+        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(rawBody));
+        return "sha256=" + Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    [Fact]
-    public async Task BackgroundService_MultipleEvents_ProcessedInOrder()
+    private static async Task WaitForAsync(Func<bool> condition, int timeoutMs = 4000)
     {
-        // Arrange
-        var messageIds = new List<string>();
-
-        // Send 3 events in sequence
-        for (int i = 0; i < 3; i++)
+        var started = Stopwatch.StartNew();
+        while (started.ElapsedMilliseconds < timeoutMs)
         {
-            var messageId = $"mid.order-{i}-{Guid.NewGuid()}";
-            messageIds.Add(messageId);
-
-            var payload = new
+            if (condition())
             {
-                @object = "page",
-                entry = new[]
-                {
-                    new
-                    {
-                        id = "page123",
-                        time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                        messaging = new[]
-                        {
-                            new
-                            {
-                                sender = new { id = $"sender{i}" },
-                                recipient = new { id = "page123" },
-                                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                                message = new
-                                {
-                                    mid = messageId,
-                                    text = $"Message {i}"
-                                }
-                            }
-                        }
-                    }
-                }
-            };
+                return;
+            }
 
-            var json = JsonSerializer.Serialize(payload);
-            var signature = ComputeSignature(json);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-            content.Headers.Add("X-Hub-Signature-256", signature);
-
-            // Act
-            var response = await _client.PostAsync("/webhook", content);
-            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            await Task.Delay(100);
         }
 
-        // Wait for all to process
-        await Task.Delay(2000);
-
-        // Assert
-        _output.WriteLine($"Processed {messageIds.Count} events in sequence");
+        condition().Should().BeTrue("the background worker should finish inside the timeout");
     }
 }

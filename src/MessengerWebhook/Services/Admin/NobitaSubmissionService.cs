@@ -152,7 +152,7 @@ public class NobitaSubmissionService : INobitaSubmissionService
         try
         {
             var products = await _dbContext.Products
-                .Where(x => draft.Items.Select(i => i.ProductCode).Contains(x.Code) && x.TenantId == user.TenantId)
+                .Where(x => draft.Items.Select(i => i.ProductCode).Contains(x.Code) && (x.TenantId == user.TenantId || x.TenantId == null))
                 .ToDictionaryAsync(x => x.Code, cancellationToken);
 
             var orderId = await _nobitaClient.CreateOrderAsync(
@@ -205,7 +205,7 @@ public class NobitaSubmissionService : INobitaSubmissionService
         }
 
         var products = await _dbContext.Products
-            .Where(x => draft.Items.Select(i => i.ProductCode).Contains(x.Code) && x.TenantId == user.TenantId)
+            .Where(x => draft.Items.Select(i => i.ProductCode).Contains(x.Code) && (x.TenantId == user.TenantId || x.TenantId == null))
             .ToListAsync(cancellationToken);
 
         var missingMappings = products
@@ -236,7 +236,7 @@ public class NobitaSubmissionService : INobitaSubmissionService
             .FirstOrDefaultAsync(
                 x => x.Id == draftOrderId &&
                      x.TenantId == user.TenantId &&
-                     (user.FacebookPageId == null || x.FacebookPageId == user.FacebookPageId),
+                     (user.CanAccessAllPagesInTenant || user.FacebookPageId == null || x.FacebookPageId == user.FacebookPageId),
                 cancellationToken);
     }
 }

@@ -19,6 +19,11 @@ public interface IProductMappingService
     Task<Product?> GetProductByCodeAsync(string code);
 
     /// <summary>
+    /// Resolve a product from a free-form customer message
+    /// </summary>
+    Task<Product?> GetProductByMessageAsync(string message);
+
+    /// <summary>
     /// Check if payload format is valid
     /// </summary>
     bool IsValidPayload(string payload);

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { StatusPill } from "../components/status-pill";
 import { api } from "../lib/api";
+import { getAdminEnumPresentation } from "../lib/admin-enums";
 import { formatDate } from "../lib/format";
 
 export function SupportCasesPage() {
@@ -19,7 +20,7 @@ export function SupportCasesPage() {
         </div>
       </div>
 
-      {supportCasesQuery.isLoading ? <div className="card">Đang tải support cases...</div> : null}
+      {supportCasesQuery.isLoading ? <div className="card">Dang tai support cases...</div> : null}
       {supportCasesQuery.isError ? <div className="error-box">{(supportCasesQuery.error as Error).message}</div> : null}
 
       {supportCasesQuery.data ? (
@@ -29,9 +30,9 @@ export function SupportCasesPage() {
               <tr>
                 <th>Case</th>
                 <th>PSID</th>
-                <th>Lý do</th>
-                <th>Trạng thái</th>
-                <th>Tạo lúc</th>
+                <th>Ly do</th>
+                <th>Trang thai</th>
+                <th>Tao luc</th>
               </tr>
             </thead>
             <tbody>
@@ -42,8 +43,8 @@ export function SupportCasesPage() {
                     <div>{supportCase.summary}</div>
                   </td>
                   <td>{supportCase.facebookPSID}</td>
-                  <td>{supportCase.reason}</td>
-                  <td><StatusPill value={supportCase.status} /></td>
+                  <td>{getAdminEnumPresentation(supportCase.reason, "support-reason").label}</td>
+                  <td><StatusPill kind="support-status" value={supportCase.status} /></td>
                   <td>{formatDate(supportCase.createdAt)}</td>
                 </tr>
               ))}

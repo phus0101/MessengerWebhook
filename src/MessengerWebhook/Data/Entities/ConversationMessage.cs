@@ -1,8 +1,9 @@
 namespace MessengerWebhook.Data.Entities;
 
-public class ConversationMessage
+public class ConversationMessage : ITenantOwnedEntity
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
+    public Guid? TenantId { get; set; }
     public string SessionId { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;  // "user" or "model"
     public string Content { get; set; } = string.Empty;

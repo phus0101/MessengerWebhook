@@ -78,7 +78,7 @@ public class SupportCaseManagementService : ISupportCaseManagementService
         return _dbContext.HumanSupportCases.FirstOrDefaultAsync(
             x => x.Id == caseId &&
                  x.TenantId == actor.TenantId &&
-                 (actor.FacebookPageId == null || x.FacebookPageId == actor.FacebookPageId),
+                 (actor.CanAccessAllPagesInTenant || actor.FacebookPageId == null || x.FacebookPageId == actor.FacebookPageId),
             cancellationToken);
     }
 }

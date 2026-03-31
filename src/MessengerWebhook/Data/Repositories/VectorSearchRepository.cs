@@ -32,9 +32,7 @@ public class VectorSearchRepository : IVectorSearchRepository
 
         // Use raw SQL for pgvector cosine similarity search
         var sql = @"
-            SELECT ""Id"", ""Name"", ""Description"", ""Brand"", ""Category"", ""BasePrice"",
-                   ""IngredientsJson"", ""SkinTypesJson"", ""SkinConcernsJson"", ""pH"", ""Texture"",
-                   ""ContraindicationsJson"", ""IsActive"", ""CreatedAt"", ""UpdatedAt"",
+            SELECT *,
                    1 - (""Embedding"" <=> @embedding::vector) AS similarity
             FROM ""Products""
             WHERE ""Embedding"" IS NOT NULL

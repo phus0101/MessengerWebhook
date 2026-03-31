@@ -2,6 +2,7 @@ using MessengerWebhook.Configuration;
 using MessengerWebhook.Data;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Services.Nobita;
+using MessengerWebhook.Services.Policy;
 using MessengerWebhook.Services.Tenants;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -13,18 +14,34 @@ public class CustomerIntelligenceService : ICustomerIntelligenceService
     private readonly MessengerBotDbContext _dbContext;
     private readonly ITenantContext _tenantContext;
     private readonly INobitaClient _nobitaClient;
+    private readonly IRiskMessageSanitizer _sanitizer;
     private readonly SalesBotOptions _options;
 
     public CustomerIntelligenceService(
         MessengerBotDbContext dbContext,
         ITenantContext tenantContext,
         INobitaClient nobitaClient,
+        IRiskMessageSanitizer sanitizer,
         IOptions<SalesBotOptions> options)
     {
         _dbContext = dbContext;
         _tenantContext = tenantContext;
         _nobitaClient = nobitaClient;
+        _sanitizer = sanitizer;
         _options = options.Value;
+    }
+
+    public async Task<CustomerIdentity?> GetExistingAsync(
+        string facebookPsid,
+        string? pageId = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.CustomerIdentities
+            .Include(x => x.VipProfile)
+            .Where(x => x.FacebookPSID == facebookPsid)
+            .OrderByDescending(x => x.FacebookPageId == (pageId ?? _tenantContext.FacebookPageId))
+            .ThenByDescending(x => x.LastInteractionAt)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<CustomerIdentity> GetOrCreateAsync(
@@ -35,9 +52,7 @@ public class CustomerIntelligenceService : ICustomerIntelligenceService
         string? shippingAddress = null,
         CancellationToken cancellationToken = default)
     {
-        var customer = await _dbContext.CustomerIdentities
-            .Include(x => x.VipProfile)
-            .FirstOrDefaultAsync(x => x.FacebookPSID == facebookPsid, cancellationToken);
+        var customer = await GetExistingAsync(facebookPsid, pageId, cancellationToken);
 
         if (customer == null)
         {
@@ -118,6 +133,7 @@ public class CustomerIntelligenceService : ICustomerIntelligenceService
             Reason = riskLevel == RiskLevel.High
                 ? "Customer has elevated delivery risk and should be manually reviewed"
                 : "No critical risk detected",
+            CustomerMessage = _sanitizer.SanitizeForCustomer(riskLevel),
             RequiresManualReview = riskLevel == RiskLevel.High
         };
 

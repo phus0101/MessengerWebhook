@@ -33,6 +33,7 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
         var product = new Product
         {
             Id = Guid.NewGuid().ToString(),
+            Code = $"VECTOR_{Guid.NewGuid():N}",
             Name = name,
             Description = "Test description",
             Brand = "Test Brand",
@@ -148,6 +149,7 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
         var inactiveProduct = new Product
         {
             Id = Guid.NewGuid().ToString(),
+            Code = $"VECTOR_{Guid.NewGuid():N}",
             Name = "Inactive Product",
             Description = "Test",
             Brand = "Test",

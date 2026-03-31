@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import { useAuth } from "../app/auth";
 import { StatusPill } from "../components/status-pill";
 import { api } from "../lib/api";
+import { getAdminEnumPresentation } from "../lib/admin-enums";
 import { formatDate } from "../lib/format";
 
 export function SupportCaseDetailPage() {
@@ -54,14 +55,14 @@ export function SupportCaseDetailPage() {
         </div>
       </div>
 
-      {detailQuery.isLoading ? <div className="card">Đang tải case...</div> : null}
+      {detailQuery.isLoading ? <div className="card">Dang tai case...</div> : null}
       {detailQuery.isError ? <div className="error-box">{(detailQuery.error as Error).message}</div> : null}
 
       {supportCase ? (
         <div className="detail-grid">
           <div className="card stack">
-            <div className="detail-row"><span>Trạng thái</span><StatusPill value={supportCase.status} /></div>
-            <div className="detail-row"><span>Lý do</span><strong>{supportCase.reason}</strong></div>
+            <div className="detail-row"><span>Trang thai</span><StatusPill kind="support-status" value={supportCase.status} /></div>
+            <div className="detail-row"><span>Ly do</span><strong>{getAdminEnumPresentation(supportCase.reason, "support-reason").label}</strong></div>
             <div className="detail-row"><span>PSID</span><strong>{supportCase.facebookPSID}</strong></div>
             <div className="detail-row"><span>Assigned</span><strong>{supportCase.assignedToEmail ?? "N/A"}</strong></div>
             <p>{supportCase.summary}</p>

@@ -45,8 +45,8 @@ export function DraftOrdersPage() {
                     <strong>{draft.customerName ?? "Khách Messenger"}</strong>
                     <div>{draft.customerPhone}</div>
                   </td>
-                  <td><StatusPill value={draft.status} /></td>
-                  <td><StatusPill value={draft.riskLevel} /></td>
+                  <td><StatusPill kind="draft-status" value={draft.status} /></td>
+                  <td><StatusPill kind="risk-level" value={draft.riskLevel} /></td>
                   <td>{formatMoney(draft.grandTotal)}</td>
                   <td>{formatDate(draft.createdAt)}</td>
                 </tr>

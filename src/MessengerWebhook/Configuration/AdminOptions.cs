@@ -9,4 +9,10 @@ public class AdminOptions
     public string BootstrapEmail { get; set; } = string.Empty;
     public string BootstrapPassword { get; set; } = string.Empty;
     public string BootstrapFullName { get; set; } = "Admin";
+    public bool SeedDemoWorkspaceIfMissing { get; set; }
+    public bool AllowTenantWideVisibilityInDevelopment { get; set; }
+    public string BootstrapTenantCode { get; set; } = "mui-xu-dev";
+    public string BootstrapTenantName { get; set; } = "Mui Xu Local Dev";
+    public string BootstrapPageId { get; set; } = "DEV_PAGE_1";
+    public string BootstrapPageName { get; set; } = "Mui Xu Dev Page";
 }

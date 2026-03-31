@@ -10,6 +10,7 @@ public class WebhookVerificationTests : IClassFixture<CustomWebApplicationFactor
     public WebhookVerificationTests(CustomWebApplicationFactory factory)
     {
         _factory = factory;
+        _factory.ResetStateAsync().GetAwaiter().GetResult();
         _client = _factory.CreateClient();
     }
 
@@ -18,7 +19,7 @@ public class WebhookVerificationTests : IClassFixture<CustomWebApplicationFactor
     {
         // Arrange
         var mode = "subscribe";
-        var verifyToken = "test_verify_token_12345";
+        var verifyToken = _factory.VerifyToken;
         var challenge = "test_challenge_string";
 
         // Act
@@ -36,7 +37,7 @@ public class WebhookVerificationTests : IClassFixture<CustomWebApplicationFactor
     {
         // Arrange
         var mode = "invalid_mode";
-        var verifyToken = "test_verify_token_12345";
+        var verifyToken = _factory.VerifyToken;
         var challenge = "test_challenge_string";
 
         // Act
@@ -67,7 +68,7 @@ public class WebhookVerificationTests : IClassFixture<CustomWebApplicationFactor
     public async Task GetWebhook_WithMissingMode_Returns400()
     {
         // Arrange
-        var verifyToken = "test_verify_token_12345";
+        var verifyToken = _factory.VerifyToken;
         var challenge = "test_challenge_string";
 
         // Act
@@ -99,7 +100,7 @@ public class WebhookVerificationTests : IClassFixture<CustomWebApplicationFactor
     {
         // Arrange
         var mode = "subscribe";
-        var verifyToken = "test_verify_token_12345";
+        var verifyToken = _factory.VerifyToken;
 
         // Act
         var response = await _client.GetAsync(

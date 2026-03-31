@@ -5,10 +5,12 @@ namespace MessengerWebhook.Data.Entities;
 /// <summary>
 /// Mapping between products and gifts for promotions
 /// </summary>
-public class ProductGiftMapping
+public class ProductGiftMapping : ITenantOwnedEntity
 {
     [Key]
     public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid? TenantId { get; set; }
 
     [Required]
     [MaxLength(50)]

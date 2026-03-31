@@ -149,6 +149,123 @@ Nhiệm vụ: Giúp khách hàng tìm sản phẩm phù hợp với loại da v�
 Quy tắc: Trả lời ngắn gọn (2-3 câu), đặt câu hỏi làm rõ nhu cầu, KHÔNG tự tạo thông tin sản phẩm.";
     }
 
+    public async Task<ConfirmationDetectionResult> DetectConfirmationAsync(
+        string message,
+        string contextPhone,
+        string contextAddress,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_options.EnableAiConfirmationDetection)
+        {
+            return new ConfirmationDetectionResult
+            {
+                IsConfirming = false,
+                Confidence = 0.0,
+                Reason = "AI confirmation detection is disabled",
+                DetectionMethod = "fallback"
+            };
+        }
+
+        var prompt = $@"You are a Vietnamese customer service intent classifier.
+
+Customer message: ""{message}""
+Context: Customer previously provided phone={contextPhone}, address={contextAddress}. Bot asked if they want to reuse this info.
+
+Task: Determine if the customer is CONFIRMING they want to reuse the remembered contact info.
+
+Confirmation examples:
+- ""dung roi"" (yes correct)
+- ""ok em"" (ok)
+- ""van dung"" (still use it)
+- ""len don luon"" (create order now)
+
+NOT confirmation examples:
+- ""ship bao lau?"" (question about shipping time)
+- ""ship nhanh khong?"" (question about fast shipping)
+- ""gia bao nhieu?"" (question about price)
+
+Respond ONLY with valid JSON:
+{{
+  ""isConfirming"": true/false,
+  ""confidence"": 0.0-1.0,
+  ""reason"": ""brief explanation in English""
+}}";
+
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromMilliseconds(500));
+
+            var request = new
+            {
+                contents = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        parts = new[] { new { text = prompt } }
+                    }
+                },
+                generationConfig = new
+                {
+                    temperature = 0.1,
+                    maxOutputTokens = 100
+                }
+            };
+
+            var url = $"https://generativelanguage.googleapis.com/v1/models/{_options.FlashLiteModel}:generateContent";
+            var response = await _httpClient.PostAsJsonAsync(url, request, cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Gemini confirmation detection API error: {StatusCode}", response.StatusCode);
+                return FallbackResult("API error");
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<GeminiResponse>(cts.Token);
+            var responseText = result?.Candidates?[0]?.Content?.Parts?[0]?.Text;
+
+            if (string.IsNullOrWhiteSpace(responseText))
+            {
+                return FallbackResult("Empty response");
+            }
+
+            var jsonResult = System.Text.Json.JsonSerializer.Deserialize<ConfirmationDetectionResult>(responseText);
+            if (jsonResult == null)
+            {
+                return FallbackResult("Invalid JSON");
+            }
+
+            jsonResult.DetectionMethod = "ai-reasoning";
+            _logger.LogInformation(
+                "AI confirmation detection: IsConfirming={IsConfirming}, Confidence={Confidence}, Message='{Message}'",
+                jsonResult.IsConfirming, jsonResult.Confidence, message);
+
+            return jsonResult;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("AI confirmation detection timeout for message: '{Message}'", message);
+            return FallbackResult("Timeout");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AI confirmation detection error for message: '{Message}'", message);
+            return FallbackResult($"Exception: {ex.Message}");
+        }
+    }
+
+    private static ConfirmationDetectionResult FallbackResult(string reason)
+    {
+        return new ConfirmationDetectionResult
+        {
+            IsConfirming = false,
+            Confidence = 0.0,
+            Reason = reason,
+            DetectionMethod = "fallback"
+        };
+    }
+
     private object[] BuildContents(string message, List<ConversationMessage> history)
     {
         var contents = new List<object>();
@@ -176,9 +293,11 @@ Quy tắc: Trả lời ngắn gọn (2-3 câu), đặt câu hỏi làm rõ nhu c
 
         foreach (var msg in historyToSend)
         {
+            // Map role: "assistant" -> "model" for Gemini API compatibility
+            var role = msg.Role == "assistant" ? "model" : msg.Role;
             contents.Add(new
             {
-                role = msg.Role,
+                role = role,
                 parts = new[] { new { text = msg.Content } }
             });
         }

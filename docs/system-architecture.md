@@ -38,7 +38,7 @@ Multi-tenant conversational commerce platform for cosmetics retail via Facebook 
 - `VectorSearchRepository`: Semantic product search
 
 **Messenger Services** (`Services/Messenger/`):
-- `MessengerApiService`: Send API integration
+- `MessengerService`: Send API integration (text messages, quick replies, comment hiding)
 - `WebhookProcessor`: Incoming message routing
 
 **Quick Reply Services** (`Services/QuickReply/`, `Services/ProductMapping/`, `Services/GiftSelection/`, `Services/Freeship/`):
@@ -46,6 +46,9 @@ Multi-tenant conversational commerce platform for cosmetics retail via Facebook 
 - `ProductMappingService`: Maps payload codes to products
 - `GiftSelectionService`: Selects gifts based on product mappings
 - `FreeshipCalculator`: Determines freeship eligibility
+
+**Live Comment Services** (`Services/LiveComments/`):
+- `LiveCommentAutomationService`: Handles Facebook livestream comments with automated responses and quick reply buttons
 
 ### 3. State Machine Layer
 
@@ -158,6 +161,11 @@ Facebook → WebhookController → WebhookProcessor → StateMachine → StateHa
 - HMAC-SHA256 verification
 - Prevents unauthorized webhook calls
 
+**TenantResolutionMiddleware**:
+- Resolves tenant context from Facebook Page ID
+- Initializes ITenantContext for request scope
+- Enables multi-tenant data isolation
+
 ## Data Flow
 
 ### Incoming Message Flow
@@ -259,16 +267,28 @@ Facebook → WebhookController → WebhookProcessor → StateMachine → StateHa
 **Strategy**: Shared schema with row-level security (RLS)
 
 **Implementation**:
-- Every table has `tenant_id` column
-- EF Core global query filters
-- PostgreSQL RLS policies
+- Every table implementing `ITenantOwnedEntity` has `tenant_id` column
+- EF Core global query filters applied to all 15 entity types
 - Tenant resolution via `facebook_page_id` lookup
+- `ITenantContext` service provides current tenant scope
 
 **Isolation**:
 ```csharp
+// Global query filters in DbContext
 modelBuilder.Entity<Product>()
     .HasQueryFilter(p => p.TenantId == _tenantContext.TenantId);
+
+// Applied to all ITenantOwnedEntity types:
+// - Products, CustomerIdentities, DraftOrders, ConversationSessions
+// - VipProfiles, RiskSignals, HumanSupportCases, BotConversationLocks
+// - KnowledgeSnapshots, AdminAuditLogs, ManagerProfiles, FacebookPageConfigs
+// - Gifts, ProductGiftMappings, ConversationMessages
 ```
+
+**Testing**:
+- 6 integration tests verify tenant isolation across entity types
+- Tests confirm cross-tenant queries return no data
+- Located in `tests/MessengerWebhook.IntegrationTests/TenantIsolationTests.cs`
 
 ## Security
 
@@ -278,14 +298,16 @@ modelBuilder.Entity<Product>()
 - HTTPS only
 
 **Data Security**:
-- Tenant isolation via RLS
-- No cross-tenant data leakage
+- Tenant isolation via global query filters on all ITenantOwnedEntity types
+- No cross-tenant data leakage (verified by integration tests)
 - Audit logging for sensitive operations
+- TenantId indexed on all tenant-owned tables
 
 **API Security**:
 - Rate limiting (planned)
 - Input validation
 - SQL injection prevention via EF Core
+- Facebook Graph API rate limit handling (429 responses)
 
 ## Performance Considerations
 

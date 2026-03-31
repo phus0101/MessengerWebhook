@@ -1,11 +1,13 @@
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
-using System.Text.RegularExpressions;
 
 namespace MessengerWebhook.Services.ProductMapping;
 
 /// <summary>
-/// Service for mapping Quick Reply/Postback payloads to products
+/// Maps quick reply payloads and customer language into product records.
 /// </summary>
 public class ProductMappingService : IProductMappingService
 {
@@ -20,40 +22,83 @@ public class ProductMappingService : IProductMappingService
     public async Task<Product?> GetProductByPayloadAsync(string payload)
     {
         if (!IsValidPayload(payload))
+        {
             return null;
+        }
 
-        // Extract product code from payload
-        // Format: "PRODUCT_{CODE}" -> CODE
-        var code = payload.Replace("PRODUCT_", "", StringComparison.OrdinalIgnoreCase);
-
-        // Validate extracted code format (alphanumeric and underscore only)
-        if (!IsValidProductCode(code))
-            return null;
-
-        return await GetProductByCodeAsync(code);
+        var code = payload.Replace("PRODUCT_", string.Empty, StringComparison.OrdinalIgnoreCase);
+        return IsValidProductCode(code) ? await GetProductByCodeAsync(code) : null;
     }
 
-    public async Task<Product?> GetProductByCodeAsync(string code)
+    public Task<Product?> GetProductByCodeAsync(string code)
     {
-        return await _productRepository.GetByCodeAsync(code);
+        return _productRepository.GetByCodeAsync(code);
+    }
+
+    public async Task<Product?> GetProductByMessageAsync(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        var normalized = Normalize(message);
+        if (ContainsAny(normalized, "kem chong nang", "chong nang", "kcn"))
+        {
+            return await GetProductByCodeAsync("KCN");
+        }
+
+        if (ContainsAny(normalized, "kem lua", "lua"))
+        {
+            return await GetProductByCodeAsync("KL");
+        }
+
+        if (ContainsAny(normalized, "freeship", "2 san pham", "combo 2", "combo"))
+        {
+            return await GetProductByCodeAsync("COMBO_2");
+        }
+
+        return null;
     }
 
     public bool IsValidPayload(string payload)
     {
-        if (string.IsNullOrWhiteSpace(payload))
-            return false;
-
-        // Valid format: "PRODUCT_{CODE}"
-        return payload.StartsWith("PRODUCT_", StringComparison.OrdinalIgnoreCase)
-               && payload.Length > 8;
+        return !string.IsNullOrWhiteSpace(payload) &&
+               payload.StartsWith("PRODUCT_", StringComparison.OrdinalIgnoreCase) &&
+               payload.Length > "PRODUCT_".Length;
     }
 
-    private bool IsValidProductCode(string code)
+    private static bool ContainsAny(string text, params string[] values)
     {
-        if (string.IsNullOrWhiteSpace(code))
-            return false;
+        return values.Any(value => text.Contains(value, StringComparison.Ordinal));
+    }
 
-        // Only allow alphanumeric characters and underscores
-        return ProductCodeRegex.IsMatch(code);
+    private static bool IsValidProductCode(string code)
+    {
+        return !string.IsNullOrWhiteSpace(code) && ProductCodeRegex.IsMatch(code);
+    }
+
+    private static string Normalize(string input)
+    {
+        var decomposed = input.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
+        var buffer = new List<char>(decomposed.Length);
+
+        foreach (var character in decomposed)
+        {
+            var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(character);
+            if (unicodeCategory == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            buffer.Add(character switch
+            {
+                'đ' => 'd',
+                'Đ' => 'd',
+                _ => character
+            });
+        }
+
+        return new string(buffer.ToArray()).Normalize(NormalizationForm.FormC);
     }
 }

@@ -16,7 +16,7 @@ public class GeminiRetryHandler : DelegatingHandler
     {
         _logger = logger;
         var maxRetries = options.Value.MaxRetries;
-        _retryPolicy = Policy
+        _retryPolicy = Polly.Policy
             .HandleResult<HttpResponseMessage>(r =>
                 r.StatusCode == HttpStatusCode.TooManyRequests ||
                 r.StatusCode == HttpStatusCode.ServiceUnavailable)

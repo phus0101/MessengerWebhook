@@ -1,5 +1,6 @@
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
+using MessengerWebhook.Services.Customers;
 using MessengerWebhook.StateMachine;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
@@ -13,18 +14,28 @@ namespace MessengerWebhook.UnitTests.StateMachine;
 public class ConversationStateMachineTests
 {
     private readonly Mock<ISessionRepository> _mockRepository;
+    private readonly Mock<ICustomerIntelligenceService> _mockCustomerIntelligenceService;
     private readonly Mock<ILogger<ConversationStateMachine>> _mockLogger;
     private readonly ConversationStateMachine _stateMachine;
 
     public ConversationStateMachineTests()
     {
         _mockRepository = new Mock<ISessionRepository>();
+        _mockCustomerIntelligenceService = new Mock<ICustomerIntelligenceService>();
         _mockLogger = new Mock<ILogger<ConversationStateMachine>>();
 
         // Create empty handler collection for unit tests (handlers tested separately)
         var handlers = Enumerable.Empty<IStateHandler>();
 
-        _stateMachine = new ConversationStateMachine(_mockRepository.Object, handlers, _mockLogger.Object);
+        _mockCustomerIntelligenceService
+            .Setup(x => x.GetExistingAsync(It.IsAny<string>(), It.IsAny<string?>(), default))
+            .ReturnsAsync((CustomerIdentity?)null);
+
+        _stateMachine = new ConversationStateMachine(
+            _mockRepository.Object,
+            handlers,
+            _mockCustomerIntelligenceService.Object,
+            _mockLogger.Object);
     }
 
     [Fact]
@@ -329,5 +340,115 @@ public class ConversationStateMachineTests
         // Assert
         Assert.NotNull(context.Data);
         Assert.Empty(context.Data);
+    }
+
+    [Fact]
+    public async Task LoadOrCreateAsync_HydratesRememberedContact_WhenContextIsEmpty()
+    {
+        var psid = "returning-psid";
+        var session = new ConversationSession
+        {
+            Id = "session-remembered-1",
+            FacebookPSID = psid,
+            FacebookPageId = "PAGE_1",
+            CurrentState = ConversationState.Idle,
+            LastActivityAt = DateTime.UtcNow.AddMinutes(-2),
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(58)
+        };
+        _mockRepository.Setup(r => r.GetByPSIDAsync(psid)).ReturnsAsync(session);
+        _mockCustomerIntelligenceService
+            .Setup(x => x.GetExistingAsync(psid, "PAGE_1", default))
+            .ReturnsAsync(new CustomerIdentity
+            {
+                FacebookPSID = psid,
+                FacebookPageId = "PAGE_1",
+                PhoneNumber = "0901234567",
+                ShippingAddress = "12 Tran Hung Dao",
+                FullName = "Khach cu"
+            });
+
+        var context = await _stateMachine.LoadOrCreateAsync(psid, "PAGE_1");
+
+        Assert.Equal("0901234567", context.GetData<string>("customerPhone"));
+        Assert.Equal("12 Tran Hung Dao", context.GetData<string>("shippingAddress"));
+        Assert.True(context.GetData<bool?>("contactNeedsConfirmation"));
+        Assert.Equal("customer-identity", context.GetData<string>("contactMemorySource"));
+    }
+
+    [Fact]
+    public async Task LoadOrCreateAsync_DoesNotOverwriteExistingContact_WhenSessionAlreadyHasValues()
+    {
+        var psid = "returning-psid-2";
+        var session = new ConversationSession
+        {
+            Id = "session-remembered-2",
+            FacebookPSID = psid,
+            FacebookPageId = "PAGE_1",
+            CurrentState = ConversationState.CollectingInfo,
+            ContextJson = JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["customerPhone"] = "0999999999",
+                ["shippingAddress"] = "99 Le Loi"
+            }),
+            LastActivityAt = DateTime.UtcNow.AddMinutes(-2),
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(58)
+        };
+        _mockRepository.Setup(r => r.GetByPSIDAsync(psid)).ReturnsAsync(session);
+        _mockCustomerIntelligenceService
+            .Setup(x => x.GetExistingAsync(psid, "PAGE_1", default))
+            .ReturnsAsync(new CustomerIdentity
+            {
+                FacebookPSID = psid,
+                FacebookPageId = "PAGE_1",
+                PhoneNumber = "0901234567",
+                ShippingAddress = "12 Tran Hung Dao"
+            });
+
+        var context = await _stateMachine.LoadOrCreateAsync(psid, "PAGE_1");
+
+        Assert.Equal("0999999999", context.GetData<string>("customerPhone"));
+        Assert.Equal("99 Le Loi", context.GetData<string>("shippingAddress"));
+        Assert.Null(context.GetData<bool?>("contactNeedsConfirmation"));
+    }
+
+    [Fact]
+    public async Task LoadOrCreateAsync_RestoresRememberedContact_AfterTimeoutReset()
+    {
+        var psid = "returning-timeout-psid";
+        var session = new ConversationSession
+        {
+            Id = "session-timeout-1",
+            FacebookPSID = psid,
+            FacebookPageId = "PAGE_1",
+            CurrentState = ConversationState.CollectingInfo,
+            ContextJson = JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["selectedProductCodes"] = new List<string> { "KCN" }
+            }),
+            LastActivityAt = DateTime.UtcNow.AddMinutes(-20),
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(40)
+        };
+        _mockRepository.Setup(r => r.GetByPSIDAsync(psid)).ReturnsAsync(session);
+        _mockCustomerIntelligenceService
+            .Setup(x => x.GetExistingAsync(psid, "PAGE_1", default))
+            .ReturnsAsync(new CustomerIdentity
+            {
+                FacebookPSID = psid,
+                FacebookPageId = "PAGE_1",
+                PhoneNumber = "0901234567",
+                ShippingAddress = "12 Tran Hung Dao"
+            });
+
+        var context = await _stateMachine.LoadOrCreateAsync(psid, "PAGE_1");
+
+        Assert.Equal(ConversationState.Idle, context.CurrentState);
+        Assert.Equal("0901234567", context.GetData<string>("customerPhone"));
+        Assert.Equal("12 Tran Hung Dao", context.GetData<string>("shippingAddress"));
+        _mockRepository.Verify(r => r.UpdateAsync(It.Is<ConversationSession>(s =>
+            s.CurrentState == ConversationState.Idle &&
+            s.ContextJson == null)), Times.Once);
     }
 }

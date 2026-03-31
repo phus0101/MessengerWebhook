@@ -7,8 +7,11 @@ public sealed record AdminUserContext(
     Guid TenantId,
     string Email,
     string FullName,
-    string? FacebookPageId)
+    string? FacebookPageId,
+    bool CanAccessAllPagesInTenant = false)
 {
+    public string VisibilityMode => CanAccessAllPagesInTenant ? "tenant-wide" : "page-scoped";
+
     public static AdminUserContext? FromPrincipal(ClaimsPrincipal principal)
     {
         if (principal.Identity?.IsAuthenticated != true)
@@ -34,6 +37,8 @@ public sealed record AdminUserContext(
             parsedTenantId,
             email,
             fullName,
-            principal.FindFirstValue(AdminClaimTypes.FacebookPageId));
+            principal.FindFirstValue(AdminClaimTypes.FacebookPageId),
+            bool.TryParse(principal.FindFirstValue(AdminClaimTypes.TenantWideVisibility), out var canAccessAllPagesInTenant) &&
+            canAccessAllPagesInTenant);
     }
 }

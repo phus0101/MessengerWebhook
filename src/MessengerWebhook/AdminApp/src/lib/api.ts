@@ -1,13 +1,15 @@
 import type {
   AuthState,
   CommandResult,
+  CustomerOption,
   DashboardOverview,
   DraftOrderDetail,
   DraftOrderListItem,
   NobitaProductOption,
   ProductMapping,
   SupportCaseDetail,
-  SupportCaseListItem
+  SupportCaseListItem,
+  UpdateDraftOrderInput
 } from "./types";
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -51,6 +53,17 @@ export const api = {
   },
   getDraftOrder(id: string) {
     return fetch(`/admin/api/draft-orders/${id}`, { credentials: "include" }).then((response) => readJson<DraftOrderDetail>(response));
+  },
+  searchCustomers(query: string) {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) {
+      return Promise.resolve([] as CustomerOption[]);
+    }
+
+    return fetch(`/admin/api/customers?query=${encodeURIComponent(normalizedQuery)}`, { credentials: "include" }).then((response) => readJson<CustomerOption[]>(response));
+  },
+  updateDraft(id: string, payload: UpdateDraftOrderInput, csrfToken: string) {
+    return postJson<CommandResult>(`/admin/api/draft-orders/${id}/update`, csrfToken, payload);
   },
   approveSubmit(id: string, csrfToken: string) {
     return postJson<CommandResult>(`/admin/api/draft-orders/${id}/approve-submit`, csrfToken);
