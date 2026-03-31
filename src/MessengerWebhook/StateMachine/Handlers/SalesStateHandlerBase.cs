@@ -1,0 +1,305 @@
+using MessengerWebhook.Configuration;
+using MessengerWebhook.Data.Entities;
+using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.Customers;
+using MessengerWebhook.Services.DraftOrders;
+using MessengerWebhook.Services.Freeship;
+using MessengerWebhook.Services.GiftSelection;
+using MessengerWebhook.Services.Policy;
+using MessengerWebhook.Services.ProductMapping;
+using MessengerWebhook.Services.Support;
+using MessengerWebhook.StateMachine.Models;
+using Microsoft.Extensions.Options;
+using AiConversationMessage = MessengerWebhook.Services.AI.Models.ConversationMessage;
+
+namespace MessengerWebhook.StateMachine.Handlers;
+
+public abstract class SalesStateHandlerBase : IStateHandler
+{
+    protected readonly IGeminiService GeminiService;
+    protected readonly IPolicyGuardService PolicyGuardService;
+    protected readonly IProductMappingService ProductMappingService;
+    protected readonly IGiftSelectionService GiftSelectionService;
+    protected readonly IFreeshipCalculator FreeshipCalculator;
+    protected readonly ICaseEscalationService CaseEscalationService;
+    protected readonly IDraftOrderService DraftOrderService;
+    protected readonly ICustomerIntelligenceService CustomerIntelligenceService;
+    protected readonly SalesBotOptions SalesBotOptions;
+    protected readonly ILogger Logger;
+
+    public abstract ConversationState HandledState { get; }
+
+    protected SalesStateHandlerBase(
+        IGeminiService geminiService,
+        IPolicyGuardService policyGuardService,
+        IProductMappingService productMappingService,
+        IGiftSelectionService giftSelectionService,
+        IFreeshipCalculator freeshipCalculator,
+        ICaseEscalationService caseEscalationService,
+        IDraftOrderService draftOrderService,
+        ICustomerIntelligenceService customerIntelligenceService,
+        IOptions<SalesBotOptions> salesBotOptions,
+        ILogger logger)
+    {
+        GeminiService = geminiService;
+        PolicyGuardService = policyGuardService;
+        ProductMappingService = productMappingService;
+        GiftSelectionService = giftSelectionService;
+        FreeshipCalculator = freeshipCalculator;
+        CaseEscalationService = caseEscalationService;
+        DraftOrderService = draftOrderService;
+        CustomerIntelligenceService = customerIntelligenceService;
+        SalesBotOptions = salesBotOptions.Value;
+        Logger = logger;
+    }
+
+    public async Task<string> HandleAsync(StateContext ctx, string message)
+    {
+        try
+        {
+            Logger.LogInformation("Handling state {State} for PSID: {PSID}", HandledState, ctx.FacebookPSID);
+            return await HandleInternalAsync(ctx, message);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Sales state error in {State} for PSID {PSID}", HandledState, ctx.FacebookPSID);
+            ctx.CurrentState = ConversationState.Error;
+            return "Dạ em đang bị nghen ở hệ thống một chút. Chị nhắn lại giúp em sau it phut nha.";
+        }
+    }
+
+    protected abstract Task<string> HandleInternalAsync(StateContext ctx, string message);
+
+    protected async Task<string> HandleSalesConversationAsync(StateContext ctx, string message)
+    {
+        AddToHistory(ctx, "user", message);
+        var decision = PolicyGuardService.Evaluate(message);
+        if (decision.RequiresEscalation)
+        {
+            var supportCase = await CaseEscalationService.EscalateAsync(
+                ctx.FacebookPSID,
+                decision.Reason,
+                decision.Summary,
+                message);
+
+            ctx.SetData("supportCaseId", supportCase.Id);
+            ctx.CurrentState = ConversationState.HumanHandoff;
+            var handoffResponse = SalesBotOptions.UnsupportedFallbackMessage;
+            AddToHistory(ctx, "assistant", handoffResponse);
+            return handoffResponse;
+        }
+
+        var offerResponse = await TryBuildOfferResponseAsync(ctx, message);
+        SalesMessageParser.CaptureCustomerDetails(ctx, message);
+
+        if (HasSelectedProduct(ctx) && SalesMessageParser.HasRequiredContact(ctx))
+        {
+            var draft = await DraftOrderService.CreateFromContextAsync(ctx);
+            ctx.SetData("draftOrderId", draft.Id);
+            ctx.SetData("draftOrderCode", draft.DraftCode);
+            ctx.CurrentState = ConversationState.Complete;
+
+            var confirmation = BuildDraftConfirmation(draft);
+            AddToHistory(ctx, "assistant", confirmation);
+            return confirmation;
+        }
+
+        if (!string.IsNullOrWhiteSpace(offerResponse))
+        {
+            ctx.CurrentState = ConversationState.CollectingInfo;
+            AddToHistory(ctx, "assistant", offerResponse);
+            return offerResponse;
+        }
+
+        ctx.CurrentState = HasSelectedProduct(ctx) ? ConversationState.CollectingInfo : ConversationState.Consulting;
+        var reply = await BuildNaturalReplyAsync(ctx, message);
+        AddToHistory(ctx, "assistant", reply);
+        return reply;
+    }
+
+    protected string BuildHumanHandoffReply()
+    {
+        return SalesBotOptions.UnsupportedFallbackMessage;
+    }
+
+    protected static void AddToHistory(StateContext ctx, string role, string content)
+    {
+        var history = ctx.GetData<List<AiConversationMessage>>("conversationHistory") ?? new List<AiConversationMessage>();
+        history.Add(new AiConversationMessage { Role = role, Content = content, Timestamp = DateTime.UtcNow });
+        ctx.SetData("conversationHistory", history);
+    }
+
+    protected List<AiConversationMessage> GetHistory(StateContext ctx)
+    {
+        return ctx.GetData<List<AiConversationMessage>>("conversationHistory") ?? new List<AiConversationMessage>();
+    }
+
+    private async Task<string?> TryBuildOfferResponseAsync(StateContext ctx, string message)
+    {
+        var product = await ProductMappingService.GetProductByMessageAsync(message);
+        if (product == null)
+        {
+            return null;
+        }
+
+        ctx.SetData("selectedProductCodes", new List<string> { product.Code });
+        var gift = await GiftSelectionService.SelectGiftForProductAsync(product.Code);
+        var shippingFee = FreeshipCalculator.CalculateShippingFee(new List<string> { product.Code });
+        ctx.SetData("selectedGiftCode", gift?.Code ?? string.Empty);
+        ctx.SetData("selectedGiftName", gift?.Name ?? string.Empty);
+        ctx.SetData("shippingFee", shippingFee);
+
+        // Get VIP profile for natural greeting
+        var vipProfile = await GetVipProfileAsync(ctx);
+        var lines = new List<string>();
+
+        // Add VIP greeting if applicable
+        if (vipProfile != null && vipProfile.IsVip && !string.IsNullOrWhiteSpace(vipProfile.GreetingStyle))
+        {
+            lines.Add(vipProfile.GreetingStyle);
+            lines.Add(string.Empty);
+        }
+
+        lines.Add($"Em len thong tin cho {product.Name} roi nha.");
+        if (gift != null)
+        {
+            lines.Add($"Qua tang kem theo: {gift.Name}.");
+        }
+
+        lines.Add($"Chinh sach ship: {FreeshipCalculator.GetFreeshipMessage(shippingFee == 0)}");
+        lines.Add(string.Empty);
+        lines.Add(SalesMessageParser.BuildMissingInfoPrompt(ctx));
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private async Task<string> BuildNaturalReplyAsync(StateContext ctx, string message)
+    {
+        var history = GetHistory(ctx);
+        var productCodes = ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>();
+        var contactSummary = GetContactSummary(ctx);
+
+        // Get VIP profile BEFORE building prompt
+        var vipProfile = await GetVipProfileAsync(ctx);
+        var vipInstruction = BuildVipInstruction(vipProfile);
+
+        // Build CTA context
+        var ctaContext = BuildCtaContext(ctx);
+
+        var prompt = $"""
+Khach vua nhan: "{message}"
+San pham dang quan tam: {(productCodes.Count == 0 ? "chua xac dinh" : string.Join(", ", productCodes))}
+Thong tin da co: {contactSummary}
+{vipInstruction}
+{ctaContext}
+Quy tac:
+- Tra loi tu nhien, ngan gon, giong nhan vien page.
+- Khong tu y them qua, freeship, giam gia, huy don, hoan tien.
+- Neu khach hoi FAQ/policy thi tra loi trong pham vi an toan.
+- Phan cuoi LUON LUON moi khach gui thong tin con thieu.
+""";
+
+        var response = await GeminiService.SendMessageAsync(ctx.FacebookPSID, prompt, history);
+
+        // Validation: Check if CTA present
+        var hasCtaKeywords = new[] { "gui", "len don", "dia chi", "so dien thoai" }
+            .Any(keyword => response.ToLower().Contains(keyword));
+
+        if (!hasCtaKeywords)
+        {
+            Logger.LogWarning(
+                "Response missing CTA for {PSID}, adding fallback",
+                ctx.FacebookPSID
+            );
+
+            // Fallback to context-based CTA
+            var fallbackCta = BuildCtaContext(ctx);
+            response += $" {fallbackCta}";
+        }
+
+        return response;
+    }
+
+    private async Task<VipProfile?> GetVipProfileAsync(StateContext ctx)
+    {
+        var customer = await CustomerIntelligenceService.GetExistingAsync(
+            ctx.FacebookPSID,
+            ctx.GetData<string>("facebookPageId"))
+            ?? await CustomerIntelligenceService.GetOrCreateAsync(
+                ctx.FacebookPSID,
+                ctx.GetData<string>("facebookPageId"),
+                ctx.GetData<string>("customerPhone"));
+
+        if (customer == null)
+            return null;
+
+        return await CustomerIntelligenceService.GetVipProfileAsync(customer);
+    }
+
+    private static string BuildVipInstruction(VipProfile? vipProfile)
+    {
+        if (vipProfile == null || !vipProfile.IsVip || string.IsNullOrWhiteSpace(vipProfile.GreetingStyle))
+            return string.Empty;
+
+        return $"""
+Khach hang VIP:
+- Dung giong dieu than mat, gan gui hon (VD: "chi iu", "chi yeu")
+- Mo dau bang: "{vipProfile.GreetingStyle}"
+- KHONG doi chinh sach gia, chi doi giong dieu
+""";
+    }
+
+    private static string BuildCtaContext(StateContext ctx)
+    {
+        var hasProduct = (ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>()).Count > 0;
+        var missingInfo = GetMissingContactInfo(ctx);
+
+        if (missingInfo.Count == 0)
+        {
+            return """
+Ket thuc: Moi khach xac nhan thong tin de len don.
+""";
+        }
+
+        if (hasProduct)
+        {
+            var missing = string.Join(" va ", missingInfo);
+            return $"""
+Ket thuc: Moi khach gui {missing} de len don.
+""";
+        }
+
+        return """
+Ket thuc: Moi khach chon san pham (Kem Chong Nang, Kem Lua, hoac combo) va gui thong tin de len don.
+""";
+    }
+
+    private static List<string> GetMissingContactInfo(StateContext ctx)
+    {
+        var missing = new List<string>();
+        if (string.IsNullOrWhiteSpace(ctx.GetData<string>("customerPhone")))
+            missing.Add("so dien thoai");
+        if (string.IsNullOrWhiteSpace(ctx.GetData<string>("shippingAddress")))
+            missing.Add("dia chi");
+        return missing;
+    }
+
+    private static string BuildDraftConfirmation(DraftOrder draftOrder)
+    {
+        // Use neutral message for all customers - don't expose risk assessment
+        // Internal risk tracking remains intact in database
+        return $"Dạ em da len don nhap {draftOrder.DraftCode} roi a. Ben em se co ban kiem tra lai thong tin va chot giao hang cho minh nha.";
+    }
+
+    private static bool HasSelectedProduct(StateContext ctx)
+    {
+        return (ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>()).Count > 0;
+    }
+    private static string GetContactSummary(StateContext ctx)
+    {
+        var hasPhone = !string.IsNullOrWhiteSpace(ctx.GetData<string>("customerPhone"));
+        var hasAddress = !string.IsNullOrWhiteSpace(ctx.GetData<string>("shippingAddress"));
+        var needsConfirmation = ctx.GetData<bool?>("contactNeedsConfirmation") == true;
+
+        return $"SDT={(hasPhone ? (needsConfirmation ? "dang nho lai" : "da co") : "chua co")}, Dia chi={(hasAddress ? (needsConfirmation ? "dang nho lai" : "da co") : "chua co")}";
+    }
+}
