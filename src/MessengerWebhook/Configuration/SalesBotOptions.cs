@@ -12,6 +12,7 @@ public class SalesBotOptions
 
     public int VipOrderThreshold { get; set; } = 3;
     public decimal HighRiskThreshold { get; set; } = 0.50m;
+    public double IntentConfidenceThreshold { get; set; } = 0.7;
     public string UnsupportedFallbackMessage { get; set; } =
         "Da em xin phep chuyen chi qua ban ho tro cua Mui Xu de xu ly ky hon nha.";
 }

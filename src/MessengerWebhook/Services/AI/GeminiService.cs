@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using MessengerWebhook.Configuration;
+using MessengerWebhook.Models;
 using MessengerWebhook.Services.AI.Models;
 using MessengerWebhook.Services.AI.Strategies;
 using Microsoft.Extensions.Options;
@@ -260,6 +261,133 @@ Respond ONLY with valid JSON:
         return new ConfirmationDetectionResult
         {
             IsConfirming = false,
+            Confidence = 0.0,
+            Reason = reason,
+            DetectionMethod = "fallback"
+        };
+    }
+
+    public async Task<IntentDetectionResult> DetectIntentAsync(
+        string message,
+        ConversationState currentState,
+        bool hasProduct,
+        bool hasContact,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_options.EnableAiIntentDetection)
+        {
+            return IntentFallbackResult("AI intent detection is disabled");
+        }
+
+        var prompt = $@"You are a Vietnamese customer service intent classifier.
+
+Customer message: ""{message}""
+Context: State={currentState}, HasProduct={hasProduct}, HasContact={hasContact}
+
+Task: Classify customer intent into ONE of these categories:
+
+1. Browsing - exploring products, not ready to buy
+   Examples: ""tính xem"", ""xem thử"", ""có sản phẩm gì""
+
+2. Consulting - needs advice before buying
+   Examples: ""cần tư vấn"", ""cho em hỏi"", ""tư vấn thêm""
+
+3. ReadyToBuy - ready to place order NOW
+   Examples: ""đặt hàng"", ""chốt đơn"", ""lên đơn luôn"", ""mua luôn""
+
+4. Confirming - confirming previous info
+   Examples: ""đúng rồi"", ""ok em"", ""vâng ạ""
+
+5. Questioning - asking questions
+   Examples: ""ship bao lâu?"", ""giá bao nhiêu?"", ""có freeship không?""
+
+CRITICAL RULES:
+- If message contains ""cần tư vấn"" or ""tư vấn"" → ALWAYS return Consulting
+- If message contains ""đặt hàng"", ""chốt đơn"", ""mua luôn"" → ReadyToBuy
+- If message is a question (contains ?) → Questioning or Consulting
+
+Respond ONLY with valid JSON:
+{{
+  ""intent"": ""Browsing|Consulting|ReadyToBuy|Confirming|Questioning"",
+  ""confidence"": 0.0-1.0,
+  ""reason"": ""brief explanation in English""
+}}";
+
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromMilliseconds(500));
+
+            var request = new
+            {
+                contents = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        parts = new[] { new { text = prompt } }
+                    }
+                },
+                generationConfig = new
+                {
+                    temperature = 0.1,
+                    maxOutputTokens = 150
+                }
+            };
+
+            var url = $"https://generativelanguage.googleapis.com/v1/models/{_options.FlashLiteModel}:generateContent";
+            var response = await _httpClient.PostAsJsonAsync(url, request, cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Gemini intent detection API error: {StatusCode}", response.StatusCode);
+                return IntentFallbackResult("API error");
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<GeminiResponse>(cts.Token);
+            var responseText = result?.Candidates?[0]?.Content?.Parts?[0]?.Text;
+
+            if (string.IsNullOrWhiteSpace(responseText))
+            {
+                return IntentFallbackResult("Empty response");
+            }
+
+            var jsonOptions = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            };
+
+            var jsonResult = System.Text.Json.JsonSerializer.Deserialize<IntentDetectionResult>(responseText, jsonOptions);
+            if (jsonResult == null)
+            {
+                return IntentFallbackResult("Invalid JSON");
+            }
+
+            jsonResult.DetectionMethod = "ai-reasoning";
+            _logger.LogInformation(
+                "AI intent detection: Intent={Intent}, Confidence={Confidence}, Message='{Message}'",
+                jsonResult.Intent, jsonResult.Confidence, message);
+
+            return jsonResult;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("AI intent detection timeout for message: '{Message}'", message);
+            return IntentFallbackResult("Timeout");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AI intent detection error for message: '{Message}'", message);
+            return IntentFallbackResult($"Exception: {ex.Message}");
+        }
+    }
+
+    private static IntentDetectionResult IntentFallbackResult(string reason)
+    {
+        return new IntentDetectionResult
+        {
+            Intent = CustomerIntent.Consulting,
             Confidence = 0.0,
             Reason = reason,
             DetectionMethod = "fallback"

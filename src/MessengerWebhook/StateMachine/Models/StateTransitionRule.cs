@@ -1,3 +1,4 @@
+using MessengerWebhook.Models;
 using MessengerWebhook.Data.Entities;
 
 namespace MessengerWebhook.StateMachine.Models;

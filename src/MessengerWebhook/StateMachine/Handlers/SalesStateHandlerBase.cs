@@ -1,3 +1,4 @@
+using MessengerWebhook.Models;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Services.AI;
@@ -100,7 +101,32 @@ public abstract class SalesStateHandlerBase : IStateHandler
             ctx.GetData<bool?>("contactNeedsConfirmation") ?? false
         );
 
-        if (HasSelectedProduct(ctx) && SalesMessageParser.HasRequiredContact(ctx))
+        // AI Intent Detection - understand customer's true intent
+        var hasProduct = HasSelectedProduct(ctx);
+        var hasContact = SalesMessageParser.HasRequiredContact(ctx);
+        var intentResult = await GeminiService.DetectIntentAsync(
+            message,
+            ctx.CurrentState,
+            hasProduct,
+            hasContact,
+            CancellationToken.None);
+
+        Logger.LogInformation(
+            "AI Intent Detection - PSID: {PSID}, Intent: {Intent}, Confidence: {Confidence}, Method: {Method}",
+            ctx.FacebookPSID,
+            intentResult.Intent,
+            intentResult.Confidence,
+            intentResult.DetectionMethod
+        );
+
+        // Route based on AI-detected intent (only if confidence meets threshold)
+        var useAiIntent = intentResult.Confidence >= SalesBotOptions.IntentConfidenceThreshold;
+        var nextState = useAiIntent
+            ? DetermineNextState(intentResult.Intent, hasProduct, hasContact)
+            : (hasProduct ? ConversationState.CollectingInfo : ConversationState.Consulting);
+
+        // Create order only if customer is truly ready (ReadyToBuy intent + has all info + high confidence)
+        if (useAiIntent && intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy && hasProduct && hasContact)
         {
             var draft = await DraftOrderService.CreateFromContextAsync(ctx);
             ctx.SetData("draftOrderId", draft.Id);
@@ -112,14 +138,16 @@ public abstract class SalesStateHandlerBase : IStateHandler
             return confirmation;
         }
 
+        // Show product offer if available
         if (!string.IsNullOrWhiteSpace(offerResponse))
         {
-            ctx.CurrentState = ConversationState.CollectingInfo;
+            ctx.CurrentState = nextState;
             AddToHistory(ctx, "assistant", offerResponse);
             return offerResponse;
         }
 
-        ctx.CurrentState = HasSelectedProduct(ctx) ? ConversationState.CollectingInfo : ConversationState.Consulting;
+        // Continue conversation based on detected intent
+        ctx.CurrentState = nextState;
         var reply = await BuildNaturalReplyAsync(ctx, message);
         AddToHistory(ctx, "assistant", reply);
         return reply;
@@ -324,5 +352,38 @@ CTA Instruction: Naturally ask customer to choose a product (Kem Chong Nang, Kem
         var needsConfirmation = ctx.GetData<bool?>("contactNeedsConfirmation") == true;
 
         return $"SDT={(hasPhone ? (needsConfirmation ? "dang nho lai" : "da co") : "chua co")}, Dia chi={(hasAddress ? (needsConfirmation ? "dang nho lai" : "da co") : "chua co")}";
+    }
+
+    /// <summary>
+    /// Determines the next conversation state based on AI-detected customer intent.
+    /// Replaces brittle if-else logic with intelligent intent-based routing.
+    /// </summary>
+    private static ConversationState DetermineNextState(
+        Services.AI.Models.CustomerIntent intent,
+        bool hasProduct,
+        bool hasContact)
+    {
+        return intent switch
+        {
+            // Customer is browsing - keep them in consulting to help explore options
+            Services.AI.Models.CustomerIntent.Browsing => ConversationState.Consulting,
+
+            // Customer needs advice - stay in consulting state
+            Services.AI.Models.CustomerIntent.Consulting => ConversationState.Consulting,
+
+            // Customer is ready to buy - move to collecting info if missing data
+            Services.AI.Models.CustomerIntent.ReadyToBuy => hasProduct && hasContact
+                ? ConversationState.Complete  // Will be handled by order creation logic
+                : ConversationState.CollectingInfo,
+
+            // Customer is confirming info - stay in collecting info
+            Services.AI.Models.CustomerIntent.Confirming => ConversationState.CollectingInfo,
+
+            // Customer is asking questions - stay in consulting to answer
+            Services.AI.Models.CustomerIntent.Questioning => ConversationState.Consulting,
+
+            // Fallback - use product selection as indicator
+            _ => hasProduct ? ConversationState.CollectingInfo : ConversationState.Consulting
+        };
     }
 }

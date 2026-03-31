@@ -17,6 +17,8 @@ public class GeminiOptions
     public bool EnableAiConfirmationDetection { get; set; } = true;
     public double ConfirmationConfidenceThreshold { get; set; } = 0.7;
     public int ConfirmationCacheTtlMinutes { get; set; } = 5;
+    public bool EnableAiIntentDetection { get; set; } = true;
+    public double IntentConfidenceThreshold { get; set; } = 0.7;
     public RateLimitOptions RateLimits { get; set; } = new();
 }
 
