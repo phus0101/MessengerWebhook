@@ -154,14 +154,24 @@ public class PineconeVectorService : IVectorSearchService
                 request,
                 cancellationToken: cancellationToken);
 
-            var results = response.Matches.Select(m => new ProductSearchResult
+            if (response.Matches == null || response.Matches.Count() == 0)
             {
-                ProductId = m.Metadata?["product_id"]?.ToString() ?? string.Empty,
-                Name = m.Metadata?["name"]?.ToString() ?? string.Empty,
-                Category = m.Metadata?["category"]?.ToString() ?? string.Empty,
-                Price = m.Metadata?["price"] != null ? Convert.ToDecimal(m.Metadata["price"]) : 0,
-                Score = m.Score ?? 0f
-            }).ToList();
+                _logger.LogInformation(
+                    "No similar products found for query in namespace {Namespace}",
+                    tenantId);
+                return new List<ProductSearchResult>();
+            }
+
+            var results = response.Matches
+                .Where(m => m.Metadata != null)
+                .Select(m => new ProductSearchResult
+                {
+                    ProductId = m.Metadata!["product_id"]?.ToString() ?? string.Empty,
+                    Name = m.Metadata["name"]?.ToString() ?? string.Empty,
+                    Category = m.Metadata["category"]?.ToString() ?? string.Empty,
+                    Price = m.Metadata["price"] != null ? Convert.ToDecimal(m.Metadata["price"]) : 0,
+                    Score = m.Score ?? 0f
+                }).ToList();
 
             _logger.LogInformation(
                 "Found {Count} similar products for query in namespace {Namespace}",
@@ -240,7 +250,12 @@ public class PineconeVectorService : IVectorSearchService
 
     private string GetTenantNamespace()
     {
-        return _tenantContext.TenantId?.ToString() ?? "default";
+        if (!_tenantContext.TenantId.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Tenant context not resolved. Vector operations require tenant isolation.");
+        }
+        return _tenantContext.TenantId.Value.ToString();
     }
 
     private static Metadata ConvertToMetadata(Dictionary<string, object> dict)
@@ -249,6 +264,8 @@ public class PineconeVectorService : IVectorSearchService
         foreach (var kvp in dict)
         {
             // Implicit conversion via MetadataValue operators
+            // Note: Pinecone only supports string, double, bool
+            // Precision loss for decimal/long is acceptable for metadata filtering
             metadata[kvp.Key] = kvp.Value switch
             {
                 string s => s,
@@ -258,7 +275,7 @@ public class PineconeVectorService : IVectorSearchService
                 float f => (double)f,
                 decimal dec => (double)dec,
                 bool b => b,
-                _ => kvp.Value.ToString()
+                _ => kvp.Value.ToString() ?? string.Empty
             };
         }
         return metadata;
