@@ -1,0 +1,337 @@
+{
+  "model": "text-embedding-004",
+  "timestamp": "2026-04-01 13:16:55",
+  "summary": {
+    "total_queries": 13,
+    "correct": 13,
+    "accuracy": 100.0,
+    "avg_latency_ms": 686.0736700204702
+  },
+  "results": [
+    {
+      "query": "kem chống nắng cho da dầu",
+      "query_type": "semantic",
+      "top_3_products": [
+        [
+          "Kem chống nắng vật lý Múi Xù",
+          0.7314661454810742
+        ],
+        [
+          "Sữa rửa mặt cho da dầu",
+          0.7107422159146215
+        ],
+        [
+          "Kem dưỡng ẩm cho da khô",
+          0.6608721067034228
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 642.3311233520508,
+      "similarity_scores": [
+        0.7314661454810742,
+        0.7107422159146215,
+        0.6608721067034228
+      ]
+    },
+    {
+      "query": "sản phẩm trị nám hiệu quả",
+      "query_type": "semantic",
+      "top_3_products": [
+        [
+          "Serum trị nám và tàn nhang",
+          0.778694487964899
+        ],
+        [
+          "Serum Vitamin C làm sáng da",
+          0.7456116680779853
+        ],
+        [
+          "Combo làm trắng da toàn thân",
+          0.7093586688022744
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 720.5789089202881,
+      "similarity_scores": [
+        0.778694487964899,
+        0.7456116680779853,
+        0.7093586688022744
+      ]
+    },
+    {
+      "query": "làm sạch da mặt cho da nhờn",
+      "query_type": "semantic",
+      "top_3_products": [
+        [
+          "Sữa rửa mặt cho da dầu",
+          0.7440456032847502
+        ],
+        [
+          "Toner cân bằng da cho da nhạy cảm",
+          0.6594182356041964
+        ],
+        [
+          "Combo làm trắng da toàn thân",
+          0.6526049923442697
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 695.3322887420654,
+      "similarity_scores": [
+        0.7440456032847502,
+        0.6594182356041964,
+        0.6526049923442697
+      ]
+    },
+    {
+      "query": "dưỡng ẩm cho da khô",
+      "query_type": "semantic",
+      "top_3_products": [
+        [
+          "Kem dưỡng ẩm cho da khô",
+          0.7820520901706262
+        ],
+        [
+          "Toner cân bằng da cho da nhạy cảm",
+          0.6867540653422939
+        ],
+        [
+          "Mặt nạ ngủ dưỡng trắng",
+          0.6854123182674244
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 664.7458076477051,
+      "similarity_scores": [
+        0.7820520901706262,
+        0.6867540653422939,
+        0.6854123182674244
+      ]
+    },
+    {
+      "query": "Múi Xù",
+      "query_type": "exact",
+      "top_3_products": [
+        [
+          "Kem chống nắng vật lý Múi Xù",
+          0.7762554755158065
+        ],
+        [
+          "Mặt nạ ngủ dưỡng trắng",
+          0.6457125848931577
+        ],
+        [
+          "Kem dưỡng ẩm cho da khô",
+          0.6428831142225447
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 742.5246238708496,
+      "similarity_scores": [
+        0.7762554755158065,
+        0.6457125848931577,
+        0.6428831142225447
+      ]
+    },
+    {
+      "query": "combo làm trắng",
+      "query_type": "exact",
+      "top_3_products": [
+        [
+          "Combo làm trắng da toàn thân",
+          0.8047782327176148
+        ],
+        [
+          "Serum Vitamin C làm sáng da",
+          0.6998678175839983
+        ],
+        [
+          "Mặt nạ ngủ dưỡng trắng",
+          0.6983654894862908
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 685.0433349609375,
+      "similarity_scores": [
+        0.8047782327176148,
+        0.6998678175839983,
+        0.6983654894862908
+      ]
+    },
+    {
+      "query": "serum vitamin C",
+      "query_type": "mixed",
+      "top_3_products": [
+        [
+          "Serum Vitamin C làm sáng da",
+          0.7332365877528787
+        ],
+        [
+          "Combo làm trắng da toàn thân",
+          0.697058427984441
+        ],
+        [
+          "Serum trị nám và tàn nhang",
+          0.6756940714058015
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 686.375617980957,
+      "similarity_scores": [
+        0.7332365877528787,
+        0.697058427984441,
+        0.6756940714058015
+      ]
+    },
+    {
+      "query": "toner cho da nhạy cảm",
+      "query_type": "mixed",
+      "top_3_products": [
+        [
+          "Toner cân bằng da cho da nhạy cảm",
+          0.8120785136949802
+        ],
+        [
+          "Kem chống nắng vật lý Múi Xù",
+          0.6828443819558121
+        ],
+        [
+          "Serum trị nám và tàn nhang",
+          0.661823298168109
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 699.4585990905762,
+      "similarity_scores": [
+        0.8120785136949802,
+        0.6828443819558121,
+        0.661823298168109
+      ]
+    },
+    {
+      "query": "kem chong nang",
+      "query_type": "diacritics",
+      "top_3_products": [
+        [
+          "Kem chống nắng vật lý Múi Xù",
+          0.6663256282877075
+        ],
+        [
+          "Serum trị nám và tàn nhang",
+          0.653416456839495
+        ],
+        [
+          "Kem dưỡng ẩm cho da khô",
+          0.6529182763386426
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 731.6608428955078,
+      "similarity_scores": [
+        0.6663256282877075,
+        0.653416456839495,
+        0.6529182763386426
+      ]
+    },
+    {
+      "query": "sua rua mat",
+      "query_type": "diacritics",
+      "top_3_products": [
+        [
+          "Kem chống nắng vật lý Múi Xù",
+          0.6290143364087513
+        ],
+        [
+          "Sữa rửa mặt cho da dầu",
+          0.6222521041922114
+        ],
+        [
+          "Combo làm trắng da toàn thân",
+          0.6150850572189418
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 600.1105308532715,
+      "similarity_scores": [
+        0.6290143364087513,
+        0.6222521041922114,
+        0.6150850572189418
+      ]
+    },
+    {
+      "query": "kem chống nắng",
+      "query_type": "synonym",
+      "top_3_products": [
+        [
+          "Kem chống nắng vật lý Múi Xù",
+          0.7565667363932094
+        ],
+        [
+          "Kem dưỡng ẩm cho da khô",
+          0.6900539446633025
+        ],
+        [
+          "Combo làm trắng da toàn thân",
+          0.671447074918773
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 702.6870250701904,
+      "similarity_scores": [
+        0.7565667363932094,
+        0.6900539446633025,
+        0.671447074918773
+      ]
+    },
+    {
+      "query": "sản phẩm chống nắng",
+      "query_type": "synonym",
+      "top_3_products": [
+        [
+          "Kem chống nắng vật lý Múi Xù",
+          0.7626902699887873
+        ],
+        [
+          "Combo làm trắng da toàn thân",
+          0.68549486743756
+        ],
+        [
+          "Mặt nạ ngủ dưỡng trắng",
+          0.6819772678748535
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 657.8054428100586,
+      "similarity_scores": [
+        0.7626902699887873,
+        0.68549486743756,
+        0.6819772678748535
+      ]
+    },
+    {
+      "query": "mỹ phẩm làm trắng",
+      "query_type": "synonym",
+      "top_3_products": [
+        [
+          "Combo làm trắng da toàn thân",
+          0.7597314056623946
+        ],
+        [
+          "Mặt nạ ngủ dưỡng trắng",
+          0.7301781377583405
+        ],
+        [
+          "Serum Vitamin C làm sáng da",
+          0.7247622654608141
+        ]
+      ],
+      "expected_in_top_3": true,
+      "latency_ms": 690.3035640716553,
+      "similarity_scores": [
+        0.7597314056623946,
+        0.7301781377583405,
+        0.7247622654608141
+      ]
+    }
+  ]
+}

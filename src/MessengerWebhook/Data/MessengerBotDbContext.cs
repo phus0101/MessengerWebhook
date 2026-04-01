@@ -1,6 +1,8 @@
 using MessengerWebhook.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using MessengerWebhook.Services.Tenants;
+using Pgvector;
 
 namespace MessengerWebhook.Data;
 
@@ -46,6 +48,7 @@ public class MessengerBotDbContext : DbContext
     public DbSet<BotConversationLock> BotConversationLocks { get; set; }
     public DbSet<KnowledgeSnapshot> KnowledgeSnapshots { get; set; }
     public DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
+    public DbSet<ProductEmbedding> ProductEmbeddings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -192,6 +195,11 @@ public class MessengerBotDbContext : DbContext
 
         modelBuilder.Entity<AdminAuditLog>()
             .HasIndex(x => x.CreatedAt);
+
+        // ProductEmbedding indexes
+        modelBuilder.Entity<ProductEmbedding>()
+            .HasIndex(e => new { e.TenantId, e.ProductId })
+            .IsUnique();
 
         // Relationships
         modelBuilder.Entity<Product>()
@@ -360,6 +368,27 @@ public class MessengerBotDbContext : DbContext
         modelBuilder.Entity<RiskSignal>()
             .Property(r => r.Score)
             .HasPrecision(5, 2);
+
+        // ProductEmbedding configuration
+        modelBuilder.Entity<ProductEmbedding>(entity =>
+        {
+            entity.HasOne(e => e.Product)
+                .WithOne()
+                .HasForeignKey<ProductEmbedding>(e => e.ProductId)
+                .HasPrincipalKey<Product>(p => p.Id);
+
+            entity.Property(e => e.Embedding)
+                .HasColumnType("vector(768)")
+                .HasConversion(
+                    v => v.ToArray(),
+                    v => new Vector(v),
+                    new ValueComparer<Vector>(
+                        (v1, v2) => v1 != null && v2 != null && v1.ToArray().SequenceEqual(v2.ToArray()),
+                        v => v.GetHashCode(),
+                        v => new Vector(v.ToArray())
+                    )
+                );
+        });
     }
 
     private void ApplyTenantFilters(ModelBuilder modelBuilder)
@@ -431,6 +460,9 @@ public class MessengerBotDbContext : DbContext
             .HasQueryFilter(x => !IsTenantResolved || x.TenantId == null || x.TenantId == CurrentTenantId);
 
         modelBuilder.Entity<AdminAuditLog>()
+            .HasQueryFilter(x => !IsTenantResolved || x.TenantId == null || x.TenantId == CurrentTenantId);
+
+        modelBuilder.Entity<ProductEmbedding>()
             .HasQueryFilter(x => !IsTenantResolved || x.TenantId == null || x.TenantId == CurrentTenantId);
     }
 }

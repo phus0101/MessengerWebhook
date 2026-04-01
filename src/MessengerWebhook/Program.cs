@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using DotNetEnv;
 using MessengerWebhook.BackgroundServices;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Data;
@@ -10,6 +11,7 @@ using MessengerWebhook.Models;
 using MessengerWebhook.Services.Admin;
 using MessengerWebhook.Services;
 using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.AI.Embeddings;
 using MessengerWebhook.Services.AI.Handlers;
 using MessengerWebhook.Services.AI.Strategies;
 using MessengerWebhook.Services.Customers;
@@ -25,6 +27,7 @@ using MessengerWebhook.Services.QuickReply;
 using MessengerWebhook.Services.Support;
 using MessengerWebhook.Services.Support.EmailTemplates;
 using MessengerWebhook.Services.Tenants;
+using MessengerWebhook.Services.VectorSearch;
 using MessengerWebhook.StateMachine;
 using MessengerWebhook.StateMachine.Handlers;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -32,6 +35,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Pinecone;
 using Serilog;
 
 // Configure Serilog
@@ -45,6 +49,19 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Load .env file in Development
+if (builder.Environment.IsDevelopment())
+{
+    Env.Load();
+
+    // Map environment variables to configuration
+    var pineconeApiKey = Environment.GetEnvironmentVariable("PINECONE_API_KEY");
+    if (!string.IsNullOrWhiteSpace(pineconeApiKey))
+    {
+        builder.Configuration["Pinecone:ApiKey"] = pineconeApiKey;
+    }
+}
 
 // Use Serilog for logging
 builder.Host.UseSerilog();
@@ -68,6 +85,10 @@ builder.Services.Configure<EmailOptions>(
     builder.Configuration.GetSection(EmailOptions.SectionName));
 builder.Services.Configure<LiveCommentOptions>(
     builder.Configuration.GetSection(LiveCommentOptions.SectionName));
+builder.Services.Configure<VertexAIOptions>(
+    builder.Configuration.GetSection("VertexAI"));
+builder.Services.Configure<PineconeOptions>(
+    builder.Configuration.GetSection("Pinecone"));
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
@@ -106,9 +127,11 @@ builder.Services
     });
 builder.Services.AddAuthorization();
 
-// Configure PostgreSQL DbContext
+// Configure PostgreSQL DbContext with pgvector
 builder.Services.AddDbContext<MessengerBotDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        o => o.UseVector()));
 
 // Add health checks
 builder.Services.AddHealthChecks()
@@ -205,27 +228,43 @@ builder.Services.AddSingleton<IModelSelectionStrategy, HybridModelSelectionStrat
 builder.Services.AddTransient<GeminiAuthHandler>();
 builder.Services.AddTransient<GeminiRetryHandler>();
 
-// Configure HttpClient for GeminiService with handlers
-builder.Services.AddHttpClient<IGeminiService, GeminiService>((sp, client) =>
-{
-    var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
-    client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
-    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-})
-.AddHttpMessageHandler<GeminiAuthHandler>()
-.AddHttpMessageHandler<GeminiRetryHandler>()
-.SetHandlerLifetime(TimeSpan.FromMinutes(5));
+// Configure HttpClient for VertexAI Embedding Service
+builder.Services.AddHttpClient<IEmbeddingService, VertexAIEmbeddingService>()
+    .ConfigureHttpClient((sp, client) =>
+    {
+        var options = sp.GetRequiredService<IOptions<VertexAIOptions>>().Value;
+        client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+    });
 
-// Configure HttpClient for EmbeddingService (reuse same handlers)
-builder.Services.AddHttpClient<IEmbeddingService, GeminiEmbeddingService>((sp, client) =>
+// Register Pinecone client as singleton (thread-safe, reusable)
+builder.Services.AddSingleton<PineconeClient>(sp =>
 {
-    var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
-    client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
-    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-})
-.AddHttpMessageHandler<GeminiAuthHandler>()
-.AddHttpMessageHandler<GeminiRetryHandler>()
-.SetHandlerLifetime(TimeSpan.FromMinutes(5));
+    var options = sp.GetRequiredService<IOptions<PineconeOptions>>().Value;
+
+    if (string.IsNullOrWhiteSpace(options.ApiKey))
+    {
+        throw new InvalidOperationException(
+            "Pinecone:ApiKey is required. Set PINECONE_API_KEY in .env or User Secrets.");
+    }
+
+    return new PineconeClient(options.ApiKey);
+});
+
+// Register vector search services
+builder.Services.AddScoped<IVectorSearchService, PineconeVectorService>();
+builder.Services.AddScoped<ProductEmbeddingPipeline>();
+
+// Configure HttpClient for GeminiService with handlers
+builder.Services.AddHttpClient<IGeminiService, GeminiService>()
+    .ConfigureHttpClient((sp, client) =>
+    {
+        var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+        client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+        client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+    })
+    .AddHttpMessageHandler<GeminiAuthHandler>()
+    .AddHttpMessageHandler<GeminiRetryHandler>()
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
 // Configure HttpClient for MessengerService with Polly resilience
 builder.Services.AddHttpClient<IMessengerService, MessengerService>()
