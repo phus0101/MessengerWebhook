@@ -240,13 +240,6 @@ builder.Services.AddHttpClient<IEmbeddingService, VertexAIEmbeddingService>()
 builder.Services.AddSingleton<PineconeClient>(sp =>
 {
     var options = sp.GetRequiredService<IOptions<PineconeOptions>>().Value;
-
-    if (string.IsNullOrWhiteSpace(options.ApiKey))
-    {
-        throw new InvalidOperationException(
-            "Pinecone:ApiKey is required. Set PINECONE_API_KEY in .env or User Secrets.");
-    }
-
     return new PineconeClient(options.ApiKey);
 });
 
@@ -510,6 +503,20 @@ app.MapFallbackToFile("/admin/{*path:nonfile}", "admin/index.html");
 using var adminBootstrapScope = app.Services.CreateScope();
 var adminAuthService = adminBootstrapScope.ServiceProvider.GetRequiredService<IAdminAuthService>();
 await adminAuthService.EnsureBootstrapManagerAsync();
+
+// Validate Pinecone configuration at startup
+var pineconeOptions = app.Services.GetRequiredService<IOptions<PineconeOptions>>().Value;
+if (string.IsNullOrWhiteSpace(pineconeOptions.ApiKey))
+{
+    Log.Fatal("Pinecone:ApiKey is required. Set PINECONE_API_KEY in .env or User Secrets.");
+    throw new InvalidOperationException("Pinecone:ApiKey is required. Set PINECONE_API_KEY in .env or User Secrets.");
+}
+if (string.IsNullOrWhiteSpace(pineconeOptions.IndexName))
+{
+    Log.Fatal("Pinecone:IndexName is required in appsettings.json");
+    throw new InvalidOperationException("Pinecone:IndexName is required in appsettings.json");
+}
+Log.Information("Pinecone configuration validated: Index={IndexName}", pineconeOptions.IndexName);
 
 app.Run();
 

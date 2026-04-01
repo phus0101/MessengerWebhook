@@ -2,6 +2,8 @@ using MessengerWebhook.Configuration;
 using MessengerWebhook.Services.Tenants;
 using Microsoft.Extensions.Options;
 using Pinecone;
+using Polly;
+using Polly.Retry;
 
 namespace MessengerWebhook.Services.VectorSearch;
 
@@ -11,6 +13,7 @@ public class PineconeVectorService : IVectorSearchService
     private readonly ITenantContext _tenantContext;
     private readonly ILogger<PineconeVectorService> _logger;
     private readonly PineconeOptions _options;
+    private readonly AsyncRetryPolicy _retryPolicy;
 
     public PineconeVectorService(
         PineconeClient client,
@@ -22,6 +25,20 @@ public class PineconeVectorService : IVectorSearchService
         _tenantContext = tenantContext;
         _logger = logger;
         _options = options.Value;
+
+        // Retry policy for transient failures (network issues, rate limits)
+        _retryPolicy = Polly.Policy
+            .Handle<HttpRequestException>()
+            .Or<TaskCanceledException>()
+            .WaitAndRetryAsync(
+                retryCount: 3,
+                sleepDurationProvider: attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt)),
+                onRetry: (exception, timeSpan, retryCount, context) =>
+                {
+                    _logger.LogWarning(exception,
+                        "Pinecone API call failed. Retry {RetryCount}/3 after {Delay}s",
+                        retryCount, timeSpan.TotalSeconds);
+                });
     }
 
     public async Task<UpsertResult> UpsertProductAsync(
@@ -43,13 +60,14 @@ public class PineconeVectorService : IVectorSearchService
 
         try
         {
-            var response = await index.UpsertAsync(
-                new UpsertRequest
-                {
-                    Vectors = new[] { vector },
-                    Namespace = tenantId
-                },
-                cancellationToken: cancellationToken);
+            var response = await _retryPolicy.ExecuteAsync(async () =>
+                await index.UpsertAsync(
+                    new UpsertRequest
+                    {
+                        Vectors = new[] { vector },
+                        Namespace = tenantId
+                    },
+                    cancellationToken: cancellationToken));
 
             _logger.LogInformation(
                 "Upserted product {ProductId} to Pinecone namespace {Namespace}",
@@ -93,13 +111,14 @@ public class PineconeVectorService : IVectorSearchService
 
             try
             {
-                var response = await index.UpsertAsync(
-                    new UpsertRequest
-                    {
-                        Vectors = vectors,
-                        Namespace = tenantId
-                    },
-                    cancellationToken: cancellationToken);
+                var response = await _retryPolicy.ExecuteAsync(async () =>
+                    await index.UpsertAsync(
+                        new UpsertRequest
+                        {
+                            Vectors = vectors,
+                            Namespace = tenantId
+                        },
+                        cancellationToken: cancellationToken));
 
                 totalUpserted += (int)response.UpsertedCount;
 
@@ -150,9 +169,10 @@ public class PineconeVectorService : IVectorSearchService
 
         try
         {
-            var response = await index.QueryAsync(
-                request,
-                cancellationToken: cancellationToken);
+            var response = await _retryPolicy.ExecuteAsync(async () =>
+                await index.QueryAsync(
+                    request,
+                    cancellationToken: cancellationToken));
 
             if (response.Matches == null || response.Matches.Count() == 0)
             {
