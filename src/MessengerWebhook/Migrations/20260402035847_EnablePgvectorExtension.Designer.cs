@@ -6,14 +6,15 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using Pgvector;
 
 #nullable disable
 
 namespace MessengerWebhook.Data.Migrations
 {
     [DbContext(typeof(MessengerBotDbContext))]
-    [Migration("20260331084608_AddCustomerMessageToRiskSignal")]
-    partial class AddCustomerMessageToRiskSignal
+    [Migration("20260402035847_EnablePgvectorExtension")]
+    partial class EnablePgvectorExtension
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -947,6 +948,40 @@ namespace MessengerWebhook.Data.Migrations
                     b.ToTable("Products");
                 });
 
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.ProductEmbedding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Vector>("Embedding")
+                        .IsRequired()
+                        .HasColumnType("vector(768)");
+
+                    b.Property<string>("ProductId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "ProductId")
+                        .IsUnique();
+
+                    b.ToTable("ProductEmbeddings");
+                });
+
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ProductGiftMapping", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1378,6 +1413,17 @@ namespace MessengerWebhook.Data.Migrations
                     b.Navigation("Order");
 
                     b.Navigation("Variant");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.ProductEmbedding", b =>
+                {
+                    b.HasOne("MessengerWebhook.Data.Entities.Product", "Product")
+                        .WithOne()
+                        .HasForeignKey("MessengerWebhook.Data.Entities.ProductEmbedding", "ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ProductGiftMapping", b =>
