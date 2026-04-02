@@ -24,6 +24,7 @@ using MessengerWebhook.Services.ProductMapping;
 using MessengerWebhook.Services.GiftSelection;
 using MessengerWebhook.Services.Freeship;
 using MessengerWebhook.Services.QuickReply;
+using MessengerWebhook.Services.RAG;
 using MessengerWebhook.Services.Support;
 using MessengerWebhook.Services.Support.EmailTemplates;
 using MessengerWebhook.Services.Tenants;
@@ -231,12 +232,16 @@ builder.Services.AddTransient<GeminiAuthHandler>();
 builder.Services.AddTransient<GeminiRetryHandler>();
 
 // Configure HttpClient for VertexAI Embedding Service
-builder.Services.AddHttpClient<IEmbeddingService, VertexAIEmbeddingService>()
+// Register concrete type first for cache wrapper to resolve
+builder.Services.AddHttpClient<VertexAIEmbeddingService>()
     .ConfigureHttpClient((sp, client) =>
     {
         var options = sp.GetRequiredService<IOptions<VertexAIOptions>>().Value;
         client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
     });
+
+// Register interface mapping (will be overridden by cache wrapper if Redis enabled)
+builder.Services.AddScoped<IEmbeddingService, VertexAIEmbeddingService>();
 
 // Register Pinecone client as singleton (thread-safe, reusable)
 builder.Services.AddSingleton<PineconeClient>(sp =>
@@ -253,7 +258,16 @@ builder.Services.AddScoped<ProductEmbeddingPipeline>();
 // Register hybrid search services (Phase 3: RRF fusion)
 builder.Services.AddScoped<KeywordSearchService>();
 builder.Services.AddScoped<RRFFusionService>();
+// Register concrete type first for cache wrapper to resolve
+builder.Services.AddScoped<HybridSearchService>();
+// Register interface mapping (will be overridden by cache wrapper if Redis enabled)
 builder.Services.AddScoped<IHybridSearchService, HybridSearchService>();
+
+// Register RAG services (Phase 5: Integration)
+builder.Services.Configure<RAGOptions>(
+    builder.Configuration.GetSection(RAGOptions.SectionName));
+builder.Services.AddScoped<IContextAssembler, ContextAssembler>();
+builder.Services.AddScoped<IRAGService, RAGService>();
 
 // Add Redis distributed cache (Phase 4: Caching layer)
 var redisEnabled = builder.Configuration.GetValue<bool>("Redis:Enabled", false);

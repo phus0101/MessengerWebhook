@@ -280,26 +280,30 @@ public static class AdminOperationsEndpointExtensions
             _ = Task.Run(async () =>
             {
                 using var scope = scopeFactory.CreateScope();
-
-                // Set tenant context for background task
-                var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
-                tenantContext.Initialize(tenantId, null, null);
-
-                var pipeline = scope.ServiceProvider.GetRequiredService<ProductEmbeddingPipeline>();
                 var logger = scope.ServiceProvider.GetRequiredService<ILogger<ProductEmbeddingPipeline>>();
 
                 try
                 {
+                    logger.LogInformation("Starting background indexing job {JobId} for tenant {TenantId}", jobId, tenantId);
+
+                    // Set tenant context for background task
+                    var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+                    tenantContext.Initialize(tenantId, null, null);
+
+                    var pipeline = scope.ServiceProvider.GetRequiredService<ProductEmbeddingPipeline>();
                     await pipeline.IndexAllProductsAsync(jobId, cts.Token);
-                    logger.LogInformation("Completed indexing all products to Pinecone");
+
+                    logger.LogInformation("Completed indexing all products to Pinecone for job {JobId}", jobId);
                 }
                 catch (OperationCanceledException)
                 {
                     logger.LogWarning("Indexing job {JobId} was cancelled", jobId);
+                    progressTracker.FailJob(jobId, "Job was cancelled");
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Failed to index all products to Pinecone");
+                    logger.LogError(ex, "Failed to index all products to Pinecone for job {JobId}. Error: {Message}", jobId, ex.Message);
+                    progressTracker.FailJob(jobId, ex.Message);
                 }
             }, cts.Token);
 

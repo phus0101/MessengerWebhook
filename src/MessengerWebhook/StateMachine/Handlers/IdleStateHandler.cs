@@ -9,6 +9,7 @@ using MessengerWebhook.Services.GiftSelection;
 using MessengerWebhook.Services.Policy;
 using MessengerWebhook.Services.ProductMapping;
 using MessengerWebhook.Services.Support;
+using MessengerWebhook.Services.RAG;
 using Microsoft.Extensions.Options;
 
 namespace MessengerWebhook.StateMachine.Handlers;
@@ -29,7 +30,9 @@ public class IdleStateHandler : SalesStateHandlerBase
             SalesHandlerFallbacks.CaseEscalationService,
             SalesHandlerFallbacks.DraftOrderService,
             SalesHandlerFallbacks.CustomerIntelligenceService,
+            null,
             SalesHandlerFallbacks.Options,
+            SalesHandlerFallbacks.RagOptions,
             logger)
     {
     }
@@ -43,7 +46,9 @@ public class IdleStateHandler : SalesStateHandlerBase
         ICaseEscalationService caseEscalationService,
         IDraftOrderService draftOrderService,
         ICustomerIntelligenceService customerIntelligenceService,
+        IRAGService? ragService,
         IOptions<SalesBotOptions> salesBotOptions,
+        IOptions<RAGOptions> ragOptions,
         ILogger<IdleStateHandler> logger)
         : base(
             geminiService,
@@ -54,7 +59,9 @@ public class IdleStateHandler : SalesStateHandlerBase
             caseEscalationService,
             draftOrderService,
             customerIntelligenceService,
+            ragService,
             salesBotOptions,
+            ragOptions,
             logger)
     {
     }

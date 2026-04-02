@@ -45,7 +45,9 @@ public class IdleStateHandlerTests
             _caseEscalationService.Object,
             _draftOrderService.Object,
             _customerIntelligenceService.Object,
+            null,
             Options.Create(new SalesBotOptions()),
+            Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<IdleStateHandler>>());
     }
 

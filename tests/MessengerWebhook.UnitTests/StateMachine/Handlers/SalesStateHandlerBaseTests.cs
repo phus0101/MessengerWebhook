@@ -56,7 +56,9 @@ public class SalesStateHandlerBaseTests
             Mock.Of<ICaseEscalationService>(),
             _draftOrderService.Object,
             _customerService.Object,
+            null,
             Options.Create(_salesBotOptions),
+            Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
     }
 
@@ -95,8 +97,9 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<List<AiConversationMessage>>(),
-                null,
-                default))
+                It.IsAny<GeminiModelType?>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         // Act
@@ -142,8 +145,9 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<List<AiConversationMessage>>(),
-                null,
-                default))
+                It.IsAny<GeminiModelType?>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         _draftOrderService
@@ -198,8 +202,9 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<List<AiConversationMessage>>(),
-                null,
-                default))
+                It.IsAny<GeminiModelType?>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         // Act
@@ -245,8 +250,9 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<List<AiConversationMessage>>(),
-                null,
-                default))
+                It.IsAny<GeminiModelType?>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         // Act
@@ -291,8 +297,9 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<List<AiConversationMessage>>(),
-                null,
-                default))
+                It.IsAny<GeminiModelType?>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         // Act
@@ -317,7 +324,9 @@ public class SalesStateHandlerBaseTests
             ICaseEscalationService caseEscalationService,
             IDraftOrderService draftOrderService,
             ICustomerIntelligenceService customerIntelligenceService,
+            MessengerWebhook.Services.RAG.IRAGService? ragService,
             IOptions<SalesBotOptions> salesBotOptions,
+            IOptions<RAGOptions> ragOptions,
             ILogger<TestSalesStateHandler> logger)
             : base(
                 geminiService,
@@ -328,7 +337,9 @@ public class SalesStateHandlerBaseTests
                 caseEscalationService,
                 draftOrderService,
                 customerIntelligenceService,
+                ragService,
                 salesBotOptions,
+                ragOptions,
                 logger)
         {
         }

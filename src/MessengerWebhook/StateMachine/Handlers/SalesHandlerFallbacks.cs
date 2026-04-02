@@ -24,6 +24,7 @@ internal static class SalesHandlerFallbacks
     public static IDraftOrderService DraftOrderService { get; } = new EmptyDraftOrderService();
     public static ICustomerIntelligenceService CustomerIntelligenceService { get; } = new EmptyCustomerIntelligenceService();
     public static IOptions<SalesBotOptions> Options { get; } = Microsoft.Extensions.Options.Options.Create(new SalesBotOptions());
+    public static IOptions<RAGOptions> RagOptions { get; } = Microsoft.Extensions.Options.Options.Create(new RAGOptions { Enabled = false });
 
     private sealed class EmptyProductMappingService : IProductMappingService
     {

@@ -42,7 +42,9 @@ public class CompleteStateHandlerTests
             Mock.Of<ICaseEscalationService>(),
             Mock.Of<IDraftOrderService>(),
             _customerService.Object,
+            null,
             Options.Create(new SalesBotOptions()),
+            Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<CompleteStateHandler>>());
     }
 

@@ -8,6 +8,7 @@ using MessengerWebhook.Services.Freeship;
 using MessengerWebhook.Services.GiftSelection;
 using MessengerWebhook.Services.Policy;
 using MessengerWebhook.Services.ProductMapping;
+using MessengerWebhook.Services.RAG;
 using MessengerWebhook.Services.Support;
 using MessengerWebhook.StateMachine.Models;
 using Microsoft.Extensions.Options;
@@ -25,7 +26,9 @@ public abstract class SalesStateHandlerBase : IStateHandler
     protected readonly ICaseEscalationService CaseEscalationService;
     protected readonly IDraftOrderService DraftOrderService;
     protected readonly ICustomerIntelligenceService CustomerIntelligenceService;
+    protected readonly IRAGService? RagService;
     protected readonly SalesBotOptions SalesBotOptions;
+    protected readonly RAGOptions RagOptions;
     protected readonly ILogger Logger;
 
     public abstract ConversationState HandledState { get; }
@@ -39,7 +42,9 @@ public abstract class SalesStateHandlerBase : IStateHandler
         ICaseEscalationService caseEscalationService,
         IDraftOrderService draftOrderService,
         ICustomerIntelligenceService customerIntelligenceService,
+        IRAGService? ragService,
         IOptions<SalesBotOptions> salesBotOptions,
+        IOptions<RAGOptions> ragOptions,
         ILogger logger)
     {
         GeminiService = geminiService;
@@ -50,7 +55,9 @@ public abstract class SalesStateHandlerBase : IStateHandler
         CaseEscalationService = caseEscalationService;
         DraftOrderService = draftOrderService;
         CustomerIntelligenceService = customerIntelligenceService;
+        RagService = ragService;
         SalesBotOptions = salesBotOptions.Value;
+        RagOptions = ragOptions.Value;
         Logger = logger;
     }
 
@@ -294,6 +301,30 @@ public abstract class SalesStateHandlerBase : IStateHandler
         // Build CTA context with intent awareness
         var ctaContext = BuildCtaContext(ctx, intent);
 
+        // RAG context retrieval if enabled
+        string? ragContext = null;
+        if (RagOptions.Enabled && RagService != null)
+        {
+            try
+            {
+                var ragResult = await RagService.RetrieveContextAsync(
+                    message,
+                    topK: RagOptions.TopK);
+
+                ragContext = ragResult.FormattedContext;
+
+                Logger.LogInformation(
+                    "RAG retrieved {Count} products in {Ms}ms for PSID: {PSID}",
+                    ragResult.ProductIds.Count,
+                    ragResult.Metrics.TotalLatency.TotalMilliseconds,
+                    ctx.FacebookPSID);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "RAG retrieval failed, falling back to full context for PSID: {PSID}", ctx.FacebookPSID);
+            }
+        }
+
         var prompt = $"""
 Khach vua nhan: "{message}"
 San pham dang quan tam: {(productCodes.Count == 0 ? "chua xac dinh" : string.Join(", ", productCodes))}
@@ -308,7 +339,11 @@ Quy tac:
 {ctaContext}
 """;
 
-        var response = await GeminiService.SendMessageAsync(ctx.FacebookPSID, prompt, history);
+        var response = await GeminiService.SendMessageAsync(
+            ctx.FacebookPSID,
+            prompt,
+            history,
+            ragContext: ragContext);
 
         // Validation: Log if CTA missing but trust AI to follow instruction
         var hasCtaKeywords = new[] { "gui", "len don", "dia chi", "so dien thoai", "xac nhan", "chon san pham" }

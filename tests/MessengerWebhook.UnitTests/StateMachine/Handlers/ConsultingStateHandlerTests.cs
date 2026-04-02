@@ -61,7 +61,9 @@ public class ConsultingStateHandlerTests
             Mock.Of<ICaseEscalationService>(),
             draftOrderService.Object,
             customerService.Object,
+            null,
             Options.Create(new SalesBotOptions()),
+            Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<ConsultingStateHandler>>());
 
         var ctx = new StateContext { FacebookPSID = "psid-3", CurrentState = ConversationState.Consulting };

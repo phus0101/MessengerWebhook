@@ -543,7 +543,7 @@ public sealed class TestGeminiService : IGeminiService
 
     public IReadOnlyCollection<(string UserId, string Message)> Requests => _requests.ToArray();
 
-    public Task<string> SendMessageAsync(string userId, string message, List<MessengerWebhook.Services.AI.Models.ConversationMessage> history, MessengerWebhook.Services.AI.Models.GeminiModelType? modelOverride = null, CancellationToken cancellationToken = default)
+    public Task<string> SendMessageAsync(string userId, string message, List<MessengerWebhook.Services.AI.Models.ConversationMessage> history, MessengerWebhook.Services.AI.Models.GeminiModelType? modelOverride = null, string? ragContext = null, CancellationToken cancellationToken = default)
     {
         _requests.Enqueue((userId, message));
         return Task.FromResult("Da em ho tro chi ngay day a.");

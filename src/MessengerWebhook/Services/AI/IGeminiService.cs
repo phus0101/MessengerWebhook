@@ -11,6 +11,7 @@ public interface IGeminiService
         string message,
         List<AiConversationMessage> history,
         GeminiModelType? modelOverride = null,
+        string? ragContext = null,
         CancellationToken cancellationToken = default);
 
     IAsyncEnumerable<string> StreamMessageAsync(

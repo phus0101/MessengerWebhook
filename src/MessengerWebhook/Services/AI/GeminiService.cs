@@ -47,6 +47,7 @@ public class GeminiService : IGeminiService
         string message,
         List<ConversationMessage> history,
         GeminiModelType? modelOverride = null,
+        string? ragContext = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userId, nameof(userId));
@@ -72,7 +73,7 @@ public class GeminiService : IGeminiService
         // Build request
         var request = new
         {
-            contents = BuildContents(message, history),
+            contents = BuildContents(message, history, ragContext),
             generationConfig = new
             {
                 temperature = _options.Temperature,
@@ -130,7 +131,7 @@ public class GeminiService : IGeminiService
     {
         // Streaming implementation placeholder
         // For now, return the full response as a single chunk
-        var response = await SendMessageAsync(userId, message, history, modelOverride, cancellationToken);
+        var response = await SendMessageAsync(userId, message, history, modelOverride, null, cancellationToken);
         yield return response;
     }
 
@@ -428,15 +429,22 @@ Respond ONLY with valid JSON:
         };
     }
 
-    private object[] BuildContents(string message, List<ConversationMessage> history)
+    private object[] BuildContents(string message, List<ConversationMessage> history, string? ragContext = null)
     {
         var contents = new List<object>();
+
+        // Build system prompt with optional RAG context
+        var systemPrompt = GetSystemPrompt();
+        if (!string.IsNullOrEmpty(ragContext))
+        {
+            systemPrompt = $"{systemPrompt}\n\n{ragContext}";
+        }
 
         // Always add system prompt as first user message to ensure language detection works
         contents.Add(new
         {
             role = "user",
-            parts = new[] { new { text = GetSystemPrompt() } }
+            parts = new[] { new { text = systemPrompt } }
         });
         contents.Add(new
         {
