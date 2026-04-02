@@ -248,6 +248,11 @@ builder.Services.AddSingleton<IIndexingProgressTracker, IndexingProgressTracker>
 builder.Services.AddScoped<IVectorSearchService, PineconeVectorService>();
 builder.Services.AddScoped<ProductEmbeddingPipeline>();
 
+// Register hybrid search services (Phase 3: RRF fusion)
+builder.Services.AddScoped<KeywordSearchService>();
+builder.Services.AddScoped<RRFFusionService>();
+builder.Services.AddScoped<IHybridSearchService, HybridSearchService>();
+
 // Configure HttpClient for GeminiService with handlers
 builder.Services.AddHttpClient<IGeminiService, GeminiService>()
     .ConfigureHttpClient((sp, client) =>

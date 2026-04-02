@@ -6,6 +6,97 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Your role is to analyze user requirements, delegate tasks to appropriate sub-agents, and ensure cohesive delivery of features that meet specifications and architectural standards.
 
+## Quick Start
+
+### Prerequisites
+- .NET SDK 9.0.200+
+- Docker (for PostgreSQL)
+- Node.js 18+ (for admin UI)
+
+### Setup
+```bash
+# 1. Copy .env.example to .env and fill in API keys
+cp .env.example .env
+
+# 2. Start PostgreSQL (runs on port 5433)
+docker-compose up -d
+
+# 3. Run migrations
+dotnet ef database update --project src/MessengerWebhook
+
+# 4. Run app
+dotnet run --project src/MessengerWebhook
+# App runs on http://localhost:5030
+
+# 5. Admin UI (optional)
+cd src/MessengerWebhook/AdminApp
+npm install
+npm run dev
+```
+
+### Development Commands
+```bash
+# Hot reload during development
+dotnet watch --project src/MessengerWebhook
+
+# Run all tests
+dotnet test
+
+# Run specific test project
+dotnet test tests/MessengerWebhook.UnitTests
+dotnet test tests/MessengerWebhook.IntegrationTests
+
+# Build solution
+dotnet build
+
+# Create new migration
+dotnet ef migrations add MigrationName --project src/MessengerWebhook
+```
+
+## Tech Stack
+
+- **Backend:** ASP.NET Core 8.0 (minimal APIs)
+- **Database:** PostgreSQL 15+ with pgvector extension
+- **Vector Search:** Pinecone v2.0.0 (semantic product search)
+- **AI Services:** Google Gemini AI (embeddings + chat), Vertex AI
+- **Admin UI:** React + TypeScript + Vite
+- **Architecture:** Multi-tenant with TenantId isolation
+
+## Environment Variables
+
+Required API keys in `.env` file:
+
+```bash
+# Facebook Messenger
+FACEBOOK_APP_SECRET=xxx
+FACEBOOK_PAGE_ACCESS_TOKEN=xxx
+WEBHOOK_VERIFY_TOKEN=xxx
+
+# AI Services
+GEMINI_API_KEY=xxx
+VERTEX_AI_PROJECT_ID=xxx
+
+# Vector Search
+PINECONE_API_KEY=xxx
+
+# Email (optional)
+EMAIL_HOST=smtp.gmail.com
+EMAIL_USERNAME=xxx
+EMAIL_PASSWORD=xxx
+
+# Admin (optional)
+ADMIN_BOOTSTRAP_EMAIL=admin@example.com
+ADMIN_BOOTSTRAP_PASSWORD=xxx
+```
+
+## Database Gotchas
+
+- **Port 5433:** PostgreSQL runs on port 5433 (Docker), not default 5432
+- **pgvector Extension:** Required for vector embeddings. Auto-created in InitialCreate migration
+- **Tenant Isolation:** All queries MUST filter by TenantId for multi-tenant isolation
+- **Design-time Migrations:** Use `MessengerBotDbContextFactory` for EF Core migrations
+- **Connection String:** Check `appsettings.json` for correct port and credentials
+
 ## Workflows
 
 - Primary workflow: `./.claude/rules/primary-workflow.md`
