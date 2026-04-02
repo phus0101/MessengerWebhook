@@ -28,12 +28,14 @@ using MessengerWebhook.Services.Support;
 using MessengerWebhook.Services.Support.EmailTemplates;
 using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.Services.VectorSearch;
+using MessengerWebhook.Services.Cache;
 using MessengerWebhook.StateMachine;
 using MessengerWebhook.StateMachine.Handlers;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 using Pinecone;
 using Serilog;
@@ -252,6 +254,47 @@ builder.Services.AddScoped<ProductEmbeddingPipeline>();
 builder.Services.AddScoped<KeywordSearchService>();
 builder.Services.AddScoped<RRFFusionService>();
 builder.Services.AddScoped<IHybridSearchService, HybridSearchService>();
+
+// Add Redis distributed cache (Phase 4: Caching layer)
+var redisEnabled = builder.Configuration.GetValue<bool>("Redis:Enabled", false);
+if (redisEnabled)
+{
+    var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
+    if (!string.IsNullOrWhiteSpace(redisConnectionString))
+    {
+        builder.Services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = redisConnectionString;
+            options.InstanceName = builder.Configuration["Redis:InstanceName"];
+        });
+
+        // Register cache services
+        builder.Services.AddSingleton<CacheKeyGenerator>();
+        builder.Services.AddScoped<CacheInvalidationService>();
+
+        // Wrap services with caching (manual decoration)
+        builder.Services.AddScoped<IEmbeddingService>(sp =>
+        {
+            var innerService = sp.GetRequiredService<VertexAIEmbeddingService>();
+            var cache = sp.GetRequiredService<IDistributedCache>();
+            var keyGenerator = sp.GetRequiredService<CacheKeyGenerator>();
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var logger = sp.GetRequiredService<ILogger<EmbeddingCacheService>>();
+            return new EmbeddingCacheService(innerService, cache, keyGenerator, configuration, logger);
+        });
+
+        builder.Services.AddScoped<IHybridSearchService>(sp =>
+        {
+            var innerService = sp.GetRequiredService<HybridSearchService>();
+            var cache = sp.GetRequiredService<IDistributedCache>();
+            var keyGenerator = sp.GetRequiredService<CacheKeyGenerator>();
+            var tenantContext = sp.GetRequiredService<ITenantContext>();
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var logger = sp.GetRequiredService<ILogger<ResultCacheService>>();
+            return new ResultCacheService(innerService, cache, keyGenerator, tenantContext, configuration, logger);
+        });
+    }
+}
 
 // Configure HttpClient for GeminiService with handlers
 builder.Services.AddHttpClient<IGeminiService, GeminiService>()
