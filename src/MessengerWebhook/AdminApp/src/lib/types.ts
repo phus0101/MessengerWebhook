@@ -5,6 +5,19 @@ import type {
   SupportCaseStatus
 } from "./admin-enums";
 
+export type IndexingStatus = {
+  jobId: string;
+  status: "NotStarted" | "Running" | "Completed" | "Failed" | "Cancelled";
+  totalProducts: number;
+  indexedProducts: number;
+  progressPercentage: number;
+  currentProductId?: string | null;
+  currentProductName?: string | null;
+  startedAt: string;
+  completedAt?: string | null;
+  errorMessage?: string | null;
+};
+
 export type AdminUser = {
   managerId: string;
   email: string;

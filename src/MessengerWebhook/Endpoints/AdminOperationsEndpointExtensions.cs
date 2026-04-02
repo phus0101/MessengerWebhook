@@ -1,6 +1,9 @@
+using MessengerWebhook.Data;
 using MessengerWebhook.Services.Admin;
 using MessengerWebhook.Services.Support;
+using MessengerWebhook.Services.VectorSearch;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.EntityFrameworkCore;
 
 namespace MessengerWebhook.Endpoints;
 
@@ -242,6 +245,110 @@ public static class AdminOperationsEndpointExtensions
             if (user == null) return Results.Unauthorized();
             await botLockService.ExtendLockAsync(psid, 60, cancellationToken); // Extend by 60 minutes
             return Results.Ok(new { success = true });
+        });
+
+        group.MapPost("/vector-search/index-all", async (
+            HttpContext httpContext,
+            IAntiforgery antiforgery,
+            IServiceScopeFactory scopeFactory,
+            IIndexingProgressTracker progressTracker,
+            CancellationToken cancellationToken) =>
+        {
+            var antiForgeryError = await AdminApiEndpointHelpers.ValidateAntiforgeryAsync(httpContext, antiforgery);
+            if (antiForgeryError != null) return antiForgeryError;
+            var user = AdminApiEndpointHelpers.GetUser(httpContext);
+            if (user == null) return Results.Unauthorized();
+
+            // Check for active jobs
+            var activeJobs = progressTracker.GetActiveJobs();
+            if (activeJobs.Count > 0)
+            {
+                return Results.Conflict(new { error = "An indexing job is already running", jobId = activeJobs[0].JobId });
+            }
+
+            // Get product count first
+            using var countScope = scopeFactory.CreateScope();
+            var dbContext = countScope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+            var totalProducts = await dbContext.Products.CountAsync(cancellationToken);
+
+            // Create job
+            var jobId = progressTracker.CreateJob(totalProducts);
+
+            // Run indexing in background scope to avoid blocking
+            var cts = new CancellationTokenSource();
+            _ = Task.Run(async () =>
+            {
+                using var scope = scopeFactory.CreateScope();
+                var pipeline = scope.ServiceProvider.GetRequiredService<ProductEmbeddingPipeline>();
+                var logger = scope.ServiceProvider.GetRequiredService<ILogger<ProductEmbeddingPipeline>>();
+
+                try
+                {
+                    await pipeline.IndexAllProductsAsync(jobId, cts.Token);
+                    logger.LogInformation("Completed indexing all products to Pinecone");
+                }
+                catch (OperationCanceledException)
+                {
+                    logger.LogWarning("Indexing job {JobId} was cancelled", jobId);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to index all products to Pinecone");
+                }
+            }, cts.Token);
+
+            return Results.Ok(new { success = true, jobId, message = "Indexing started in background" });
+        });
+
+        group.MapPost("/vector-search/index-product/{productId}", async (
+            string productId,
+            HttpContext httpContext,
+            IAntiforgery antiforgery,
+            ProductEmbeddingPipeline pipeline,
+            CancellationToken cancellationToken) =>
+        {
+            var antiForgeryError = await AdminApiEndpointHelpers.ValidateAntiforgeryAsync(httpContext, antiforgery);
+            if (antiForgeryError != null) return antiForgeryError;
+            var user = AdminApiEndpointHelpers.GetUser(httpContext);
+            if (user == null) return Results.Unauthorized();
+
+            // Validate productId
+            if (string.IsNullOrWhiteSpace(productId))
+            {
+                return Results.BadRequest(new { error = "Product ID cannot be empty" });
+            }
+
+            await pipeline.IndexProductAsync(productId, cancellationToken);
+            return Results.Ok(new { success = true, productId });
+        });
+
+        group.MapGet("/vector-search/index-status/{jobId:guid}", (
+            Guid jobId,
+            HttpContext httpContext,
+            IIndexingProgressTracker progressTracker) =>
+        {
+            var user = AdminApiEndpointHelpers.GetUser(httpContext);
+            if (user == null) return Results.Unauthorized();
+
+            var job = progressTracker.GetJob(jobId);
+            if (job == null)
+            {
+                return Results.NotFound(new { error = "Job not found or expired" });
+            }
+
+            return Results.Ok(new
+            {
+                jobId = job.JobId,
+                status = job.Status.ToString(),
+                totalProducts = job.TotalProducts,
+                indexedProducts = job.IndexedProducts,
+                progressPercentage = job.ProgressPercentage,
+                currentProductId = job.CurrentProductId,
+                currentProductName = job.CurrentProductName,
+                startedAt = job.StartedAt,
+                completedAt = job.CompletedAt,
+                errorMessage = job.ErrorMessage
+            });
         });
 
         return group;

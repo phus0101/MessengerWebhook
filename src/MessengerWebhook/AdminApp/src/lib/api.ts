@@ -5,6 +5,7 @@ import type {
   DashboardOverview,
   DraftOrderDetail,
   DraftOrderListItem,
+  IndexingStatus,
   NobitaProductOption,
   ProductMapping,
   SupportCaseDetail,
@@ -102,5 +103,11 @@ export const api = {
   },
   syncNobitaProducts(search: string, csrfToken: string) {
     return postJson<ProductMapping[]>(`/admin/api/nobita/products/sync`, csrfToken, { search });
+  },
+  startIndexing(csrfToken: string) {
+    return postJson<{ success: boolean; jobId: string; message: string }>(`/admin/api/vector-search/index-all`, csrfToken);
+  },
+  getIndexingStatus(jobId: string) {
+    return fetch(`/admin/api/vector-search/index-status/${jobId}`, { credentials: "include" }).then((response) => readJson<IndexingStatus>(response));
   }
 };

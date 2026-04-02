@@ -244,6 +244,7 @@ builder.Services.AddSingleton<PineconeClient>(sp =>
 });
 
 // Register vector search services
+builder.Services.AddSingleton<IIndexingProgressTracker, IndexingProgressTracker>();
 builder.Services.AddScoped<IVectorSearchService, PineconeVectorService>();
 builder.Services.AddScoped<ProductEmbeddingPipeline>();
 

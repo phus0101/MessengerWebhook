@@ -12,17 +12,20 @@ public class ProductEmbeddingPipeline
     private readonly IVectorSearchService _vectorSearch;
     private readonly MessengerBotDbContext _dbContext;
     private readonly ILogger<ProductEmbeddingPipeline> _logger;
+    private readonly IIndexingProgressTracker? _progressTracker;
 
     public ProductEmbeddingPipeline(
         IEmbeddingService embeddingService,
         IVectorSearchService vectorSearch,
         MessengerBotDbContext dbContext,
-        ILogger<ProductEmbeddingPipeline> logger)
+        ILogger<ProductEmbeddingPipeline> logger,
+        IIndexingProgressTracker? progressTracker = null)
     {
         _embeddingService = embeddingService;
         _vectorSearch = vectorSearch;
         _dbContext = dbContext;
         _logger = logger;
+        _progressTracker = progressTracker;
     }
 
     public async Task IndexProductAsync(
@@ -89,6 +92,7 @@ public class ProductEmbeddingPipeline
     }
 
     public async Task IndexAllProductsAsync(
+        Guid? jobId = null,
         CancellationToken cancellationToken = default)
     {
         var products = await _dbContext.Products.ToListAsync(cancellationToken);
@@ -98,60 +102,109 @@ public class ProductEmbeddingPipeline
             products.Count);
 
         var batchSize = 10;
-        for (int i = 0; i < products.Count; i += batchSize)
+        var indexedCount = 0;
+
+        try
         {
-            var batch = products.Skip(i).Take(batchSize).ToList();
-
-            var texts = batch.Select(BuildProductText).ToList();
-            var embeddings = await _embeddingService.EmbedBatchAsync(
-                texts,
-                cancellationToken);
-
-            // Save to pgvector first
-            foreach (var (product, idx) in batch.Select((p, i) => (p, i)))
+            for (int i = 0; i < products.Count; i += batchSize)
             {
-                var productEmbedding = new ProductEmbedding
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = product.TenantId,
-                    ProductId = product.Id,
-                    Embedding = new Vector(embeddings[idx]),
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                _dbContext.ProductEmbeddings.Add(productEmbedding);
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            await _dbContext.SaveChangesAsync(cancellationToken);
+                var batch = products.Skip(i).Take(batchSize).ToList();
 
-            // Upsert batch to Pinecone with graceful degradation
-            try
-            {
-                var pineconeBatch = batch.Select((product, idx) => (
-                    productId: product.Id,
-                    embedding: embeddings[idx],
-                    metadata: BuildMetadata(product)
-                )).ToList();
-
-                await _vectorSearch.UpsertBatchAsync(
-                    pineconeBatch,
+                var texts = batch.Select(BuildProductText).ToList();
+                var embeddings = await _embeddingService.EmbedBatchAsync(
+                    texts,
                     cancellationToken);
 
-                _logger.LogInformation(
-                    "Indexed batch {Current}/{Total} to both pgvector and Pinecone",
-                    Math.Min(i + batchSize, products.Count),
-                    products.Count);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex,
-                    "Pinecone batch upsert failed for batch starting at {Index}. pgvector succeeded.",
-                    i);
-                // Don't throw - dual storage strategy
-            }
-        }
+                // Load existing embeddings to check for upsert
+                var productIds = batch.Select(p => p.Id).ToList();
+                var existingEmbeddings = await _dbContext.ProductEmbeddings
+                    .Where(e => productIds.Contains(e.ProductId))
+                    .ToDictionaryAsync(e => e.ProductId, cancellationToken);
 
-        _logger.LogInformation("Batch indexing complete");
+                // Upsert to pgvector
+                foreach (var (product, idx) in batch.Select((p, i) => (p, i)))
+                {
+                    if (existingEmbeddings.TryGetValue(product.Id, out var existing))
+                    {
+                        existing.Embedding = new Vector(embeddings[idx]);
+                        existing.UpdatedAt = DateTime.UtcNow;
+                    }
+                    else
+                    {
+                        var productEmbedding = new ProductEmbedding
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = product.TenantId,
+                            ProductId = product.Id,
+                            Embedding = new Vector(embeddings[idx]),
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        _dbContext.ProductEmbeddings.Add(productEmbedding);
+                    }
+                }
+
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                // Upsert batch to Pinecone with graceful degradation
+                try
+                {
+                    var pineconeBatch = batch.Select((product, idx) => (
+                        productId: product.Id,
+                        embedding: embeddings[idx],
+                        metadata: BuildMetadata(product)
+                    )).ToList();
+
+                    await _vectorSearch.UpsertBatchAsync(
+                        pineconeBatch,
+                        cancellationToken);
+
+                    indexedCount += batch.Count;
+
+                    // Report progress
+                    if (jobId.HasValue && _progressTracker != null)
+                    {
+                        var currentProduct = batch.Last();
+                        _progressTracker.UpdateProgress(
+                            jobId.Value,
+                            indexedCount,
+                            currentProduct.Id,
+                            currentProduct.Name);
+                    }
+
+                    _logger.LogInformation(
+                        "Indexed batch {Current}/{Total} to both pgvector and Pinecone",
+                        Math.Min(i + batchSize, products.Count),
+                        products.Count);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Pinecone batch upsert failed for batch starting at {Index}. pgvector succeeded.",
+                        i);
+                    // Don't throw - dual storage strategy
+                }
+            }
+
+            // Mark job as completed
+            if (jobId.HasValue && _progressTracker != null)
+            {
+                _progressTracker.CompleteJob(jobId.Value);
+            }
+
+            _logger.LogInformation("Batch indexing complete");
+        }
+        catch (Exception ex)
+        {
+            // Mark job as failed
+            if (jobId.HasValue && _progressTracker != null)
+            {
+                _progressTracker.FailJob(jobId.Value, ex.Message);
+            }
+            throw;
+        }
     }
 
     private string BuildProductText(Product product)
