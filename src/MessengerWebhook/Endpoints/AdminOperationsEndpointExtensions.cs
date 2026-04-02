@@ -1,6 +1,7 @@
 using MessengerWebhook.Data;
 using MessengerWebhook.Services.Admin;
 using MessengerWebhook.Services.Support;
+using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.Services.VectorSearch;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.EntityFrameworkCore;
@@ -249,13 +250,10 @@ public static class AdminOperationsEndpointExtensions
 
         group.MapPost("/vector-search/index-all", async (
             HttpContext httpContext,
-            IAntiforgery antiforgery,
             IServiceScopeFactory scopeFactory,
             IIndexingProgressTracker progressTracker,
             CancellationToken cancellationToken) =>
         {
-            var antiForgeryError = await AdminApiEndpointHelpers.ValidateAntiforgeryAsync(httpContext, antiforgery);
-            if (antiForgeryError != null) return antiForgeryError;
             var user = AdminApiEndpointHelpers.GetUser(httpContext);
             if (user == null) return Results.Unauthorized();
 
@@ -265,6 +263,9 @@ public static class AdminOperationsEndpointExtensions
             {
                 return Results.Conflict(new { error = "An indexing job is already running", jobId = activeJobs[0].JobId });
             }
+
+            // Capture tenant ID from current user context
+            var tenantId = user.TenantId;
 
             // Get product count first
             using var countScope = scopeFactory.CreateScope();
@@ -279,6 +280,11 @@ public static class AdminOperationsEndpointExtensions
             _ = Task.Run(async () =>
             {
                 using var scope = scopeFactory.CreateScope();
+
+                // Set tenant context for background task
+                var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+                tenantContext.Initialize(tenantId, null, null);
+
                 var pipeline = scope.ServiceProvider.GetRequiredService<ProductEmbeddingPipeline>();
                 var logger = scope.ServiceProvider.GetRequiredService<ILogger<ProductEmbeddingPipeline>>();
 

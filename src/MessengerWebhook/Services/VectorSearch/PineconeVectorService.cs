@@ -75,7 +75,7 @@ public class PineconeVectorService : IVectorSearchService
 
             return new UpsertResult
             {
-                UpsertedCount = (int)response.UpsertedCount
+                UpsertedCount = (int)response.UpsertedCount.GetValueOrDefault()
             };
         }
         catch (Exception ex)
@@ -120,7 +120,7 @@ public class PineconeVectorService : IVectorSearchService
                         },
                         cancellationToken: cancellationToken));
 
-                totalUpserted += (int)response.UpsertedCount;
+                totalUpserted += (int)response.UpsertedCount.GetValueOrDefault();
 
                 _logger.LogInformation(
                     "Upserted batch {Current}/{Total} products to Pinecone",
