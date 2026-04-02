@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using Pgvector;
 
 #nullable disable
 
@@ -65,7 +66,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("ResourceType", "ResourceId");
 
-                    b.ToTable("AdminAuditLogs");
+                    b.ToTable("AdminAuditLogs", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.BotConversationLock", b =>
@@ -107,7 +108,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("FacebookPSID", "IsLocked");
 
-                    b.ToTable("BotConversationLocks");
+                    b.ToTable("BotConversationLocks", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Cart", b =>
@@ -134,7 +135,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("SessionId");
 
-                    b.ToTable("Carts");
+                    b.ToTable("Carts", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.CartItem", b =>
@@ -166,7 +167,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("VariantId");
 
-                    b.ToTable("CartItems");
+                    b.ToTable("CartItems", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Color", b =>
@@ -184,7 +185,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Colors");
+                    b.ToTable("Colors", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ConversationMessage", b =>
@@ -216,7 +217,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("SessionId");
 
-                    b.ToTable("ConversationMessages");
+                    b.ToTable("ConversationMessages", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ConversationSession", b =>
@@ -258,7 +259,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("LastActivityAt");
 
-                    b.ToTable("ConversationSessions");
+                    b.ToTable("ConversationSessions", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.CustomerIdentity", b =>
@@ -317,7 +318,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("CustomerIdentities");
+                    b.ToTable("CustomerIdentities", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.DraftOrder", b =>
@@ -431,7 +432,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("DraftOrders");
+                    b.ToTable("DraftOrders", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.DraftOrderItem", b =>
@@ -468,7 +469,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("DraftOrderId");
 
-                    b.ToTable("DraftOrderItems");
+                    b.ToTable("DraftOrderItems", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.FacebookPageConfig", b =>
@@ -519,7 +520,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("FacebookPageConfigs");
+                    b.ToTable("FacebookPageConfigs", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Gift", b =>
@@ -564,7 +565,7 @@ namespace MessengerWebhook.Migrations
                     b.HasIndex("TenantId", "Code")
                         .IsUnique();
 
-                    b.ToTable("Gifts");
+                    b.ToTable("Gifts", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.HumanSupportCase", b =>
@@ -641,7 +642,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("HumanSupportCases");
+                    b.ToTable("HumanSupportCases", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.IngredientCompatibility", b =>
@@ -671,7 +672,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("Ingredient1", "Ingredient2");
 
-                    b.ToTable("IngredientCompatibilities");
+                    b.ToTable("IngredientCompatibilities", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.KnowledgeSnapshot", b =>
@@ -715,7 +716,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("Category", "IsPublished");
 
-                    b.ToTable("KnowledgeSnapshots");
+                    b.ToTable("KnowledgeSnapshots", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ManagerProfile", b =>
@@ -776,7 +777,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("ManagerProfiles");
+                    b.ToTable("ManagerProfiles", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Order", b =>
@@ -827,7 +828,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("Orders");
+                    b.ToTable("Orders", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.OrderItem", b =>
@@ -860,7 +861,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("VariantId");
 
-                    b.ToTable("OrderItems");
+                    b.ToTable("OrderItems", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Product", b =>
@@ -941,7 +942,41 @@ namespace MessengerWebhook.Migrations
                     b.HasIndex("TenantId", "Code")
                         .IsUnique();
 
-                    b.ToTable("Products");
+                    b.ToTable("Products", (string)null);
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.ProductEmbedding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Vector>("Embedding")
+                        .IsRequired()
+                        .HasColumnType("vector(768)");
+
+                    b.Property<string>("ProductId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "ProductId")
+                        .IsUnique();
+
+                    b.ToTable("ProductEmbeddings", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ProductGiftMapping", b =>
@@ -978,7 +1013,7 @@ namespace MessengerWebhook.Migrations
                     b.HasIndex("TenantId", "ProductCode", "GiftCode")
                         .IsUnique();
 
-                    b.ToTable("ProductGiftMappings");
+                    b.ToTable("ProductGiftMappings", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ProductImage", b =>
@@ -1007,7 +1042,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("ProductId");
 
-                    b.ToTable("ProductImages");
+                    b.ToTable("ProductImages", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ProductVariant", b =>
@@ -1064,7 +1099,7 @@ namespace MessengerWebhook.Migrations
                     b.HasIndex("ProductId", "VolumeML", "Texture")
                         .IsUnique();
 
-                    b.ToTable("ProductVariants");
+                    b.ToTable("ProductVariants", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.RiskSignal", b =>
@@ -1115,7 +1150,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasIndex("Level");
 
-                    b.ToTable("RiskSignals");
+                    b.ToTable("RiskSignals", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Size", b =>
@@ -1133,7 +1168,7 @@ namespace MessengerWebhook.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Sizes");
+                    b.ToTable("Sizes", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.SkinProfile", b =>
@@ -1166,7 +1201,7 @@ namespace MessengerWebhook.Migrations
                     b.HasIndex("SessionId")
                         .IsUnique();
 
-                    b.ToTable("SkinProfiles");
+                    b.ToTable("SkinProfiles", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Tenant", b =>
@@ -1197,7 +1232,7 @@ namespace MessengerWebhook.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("Tenants");
+                    b.ToTable("Tenants", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.VipProfile", b =>
@@ -1240,7 +1275,7 @@ namespace MessengerWebhook.Migrations
                     b.HasIndex("CustomerIdentityId")
                         .IsUnique();
 
-                    b.ToTable("VipProfiles");
+                    b.ToTable("VipProfiles", (string)null);
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.Cart", b =>
@@ -1375,6 +1410,17 @@ namespace MessengerWebhook.Migrations
                     b.Navigation("Order");
 
                     b.Navigation("Variant");
+                });
+
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.ProductEmbedding", b =>
+                {
+                    b.HasOne("MessengerWebhook.Data.Entities.Product", "Product")
+                        .WithOne()
+                        .HasForeignKey("MessengerWebhook.Data.Entities.ProductEmbedding", "ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ProductGiftMapping", b =>

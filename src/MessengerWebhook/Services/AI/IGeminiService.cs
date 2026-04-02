@@ -48,6 +48,7 @@ public interface IGeminiService
     /// <param name="currentState">Current conversation state for context</param>
     /// <param name="hasProduct">Whether customer has selected a product</param>
     /// <param name="hasContact">Whether customer has provided contact info</param>
+    /// <param name="recentHistory">Recent conversation history (last 3 messages) for context</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Intent detection result with confidence score and reasoning</returns>
     Task<IntentDetectionResult> DetectIntentAsync(
@@ -55,5 +56,6 @@ public interface IGeminiService
         ConversationState currentState,
         bool hasProduct,
         bool hasContact,
+        List<AiConversationMessage>? recentHistory = null,
         CancellationToken cancellationToken = default);
 }

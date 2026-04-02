@@ -1,3 +1,4 @@
+using MessengerWebhook.Models;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Services.AI;
@@ -64,6 +65,22 @@ public class IdleStateHandlerTests
         _giftSelectionService
             .Setup(x => x.SelectGiftForProductAsync("KCN"))
             .ReturnsAsync(new Gift { Code = "GIFT", Name = "Quà mini" });
+
+        // Mock AI intent detection - customer saying "I want to buy" is ReadyToBuy intent
+        _geminiService
+            .Setup(x => x.DetectIntentAsync(
+                It.IsAny<string>(),
+                It.IsAny<ConversationState>(),
+                It.IsAny<bool>(),
+                It.IsAny<bool>(),
+                It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
+                default))
+            .ReturnsAsync(new MessengerWebhook.Services.AI.Models.IntentDetectionResult
+            {
+                Intent = MessengerWebhook.Services.AI.Models.CustomerIntent.ReadyToBuy,
+                Confidence = 0.9,
+                Reason = "Customer wants to buy product"
+            });
 
         var response = await _handler.HandleAsync(ctx, "Tôi muốn mua kem chống nắng");
 

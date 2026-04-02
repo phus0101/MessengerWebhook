@@ -1,3 +1,4 @@
+using MessengerWebhook.Models;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Services.AI;
 using MessengerWebhook.Services.AI.Models;

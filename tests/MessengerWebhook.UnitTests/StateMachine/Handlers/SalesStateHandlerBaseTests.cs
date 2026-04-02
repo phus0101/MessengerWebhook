@@ -66,9 +66,13 @@ public class SalesStateHandlerBaseTests
         // Arrange
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Consulting };
         ctx.SetData("selectedProductCodes", new List<string> { "KCN" });
+
+        // Set history with bot's consultation question as the last message
+        // Note: HandleSalesConversationAsync will add user message first, so bot message should be before that
         ctx.SetData("conversationHistory", new List<AiConversationMessage>
         {
-            new() { Role = "assistant", Content = "Chị cần tư vấn thêm về sản phẩm không ạ?", Timestamp = DateTime.UtcNow }
+            new() { Role = "user", Content = "Cho em xem sản phẩm", Timestamp = DateTime.UtcNow.AddMinutes(-2) },
+            new() { Role = "assistant", Content = "Chị cần tư vấn thêm về sản phẩm không ạ?", Timestamp = DateTime.UtcNow.AddMinutes(-1) }
         });
 
         _geminiService
@@ -86,6 +90,15 @@ public class SalesStateHandlerBaseTests
                 Reason = "Customer declined consultation"
             });
 
+        _geminiService
+            .Setup(x => x.SendMessageAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<List<AiConversationMessage>>(),
+                null,
+                default))
+            .ReturnsAsync("Dạ em tư vấn cho chị ạ");
+
         // Act
         await _handler.HandleAsync(ctx, "Không cần, em lên đơn luôn");
 
@@ -101,9 +114,12 @@ public class SalesStateHandlerBaseTests
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Consulting };
         ctx.SetData("selectedProductCodes", new List<string> { "KCN" });
         ctx.SetData("consultationRejectionCount", 1); // Already rejected once
+
+        // Set history with bot's consultation question
         ctx.SetData("conversationHistory", new List<AiConversationMessage>
         {
-            new() { Role = "assistant", Content = "Chị cần tư vấn thêm không ạ?", Timestamp = DateTime.UtcNow }
+            new() { Role = "user", Content = "Cho em xem sản phẩm", Timestamp = DateTime.UtcNow.AddMinutes(-2) },
+            new() { Role = "assistant", Content = "Chị cần tư vấn thêm không ạ?", Timestamp = DateTime.UtcNow.AddMinutes(-1) }
         });
 
         _geminiService
@@ -120,6 +136,15 @@ public class SalesStateHandlerBaseTests
                 Confidence = 0.9,
                 Reason = "Customer declined consultation again"
             });
+
+        _geminiService
+            .Setup(x => x.SendMessageAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<List<AiConversationMessage>>(),
+                null,
+                default))
+            .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         _draftOrderService
             .Setup(x => x.CreateFromContextAsync(It.IsAny<StateContext>(), default))
@@ -192,9 +217,12 @@ public class SalesStateHandlerBaseTests
         // Arrange
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Consulting };
         ctx.SetData("selectedProductCodes", new List<string> { "KCN" });
+
+        // Set history with bot message that is NOT a consultation question
         ctx.SetData("conversationHistory", new List<AiConversationMessage>
         {
-            new() { Role = "assistant", Content = "Dạ sản phẩm này có giá 350k ạ", Timestamp = DateTime.UtcNow }
+            new() { Role = "user", Content = "Giá bao nhiêu?", Timestamp = DateTime.UtcNow.AddMinutes(-2) },
+            new() { Role = "assistant", Content = "Dạ sản phẩm này có giá 350k ạ", Timestamp = DateTime.UtcNow.AddMinutes(-1) }
         });
 
         _geminiService
@@ -212,6 +240,15 @@ public class SalesStateHandlerBaseTests
                 Reason = "Customer ready to buy"
             });
 
+        _geminiService
+            .Setup(x => x.SendMessageAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<List<AiConversationMessage>>(),
+                null,
+                default))
+            .ReturnsAsync("Dạ em tư vấn cho chị ạ");
+
         // Act
         await _handler.HandleAsync(ctx, "Ok em lên đơn luôn");
 
@@ -226,9 +263,12 @@ public class SalesStateHandlerBaseTests
         // Arrange
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Consulting };
         ctx.SetData("selectedProductCodes", new List<string> { "KCN" });
+
+        // Set history with bot's consultation question
         ctx.SetData("conversationHistory", new List<AiConversationMessage>
         {
-            new() { Role = "assistant", Content = "Chị cần tư vấn thêm không ạ?", Timestamp = DateTime.UtcNow }
+            new() { Role = "user", Content = "Cho em xem sản phẩm", Timestamp = DateTime.UtcNow.AddMinutes(-2) },
+            new() { Role = "assistant", Content = "Chị cần tư vấn thêm không ạ?", Timestamp = DateTime.UtcNow.AddMinutes(-1) }
         });
 
         _geminiService
@@ -246,6 +286,15 @@ public class SalesStateHandlerBaseTests
                 Reason = "Low confidence"
             });
 
+        _geminiService
+            .Setup(x => x.SendMessageAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<List<AiConversationMessage>>(),
+                null,
+                default))
+            .ReturnsAsync("Dạ em tư vấn cho chị ạ");
+
         // Act
         await _handler.HandleAsync(ctx, "không");
 
@@ -255,7 +304,7 @@ public class SalesStateHandlerBaseTests
     }
 
     // Test handler implementation
-    private class TestSalesStateHandler : SalesStateHandlerBase
+    public class TestSalesStateHandler : SalesStateHandlerBase
     {
         public override ConversationState HandledState => ConversationState.Consulting;
 
@@ -286,7 +335,8 @@ public class SalesStateHandlerBaseTests
 
         protected override Task<string> HandleInternalAsync(StateContext ctx, string message)
         {
-            return Task.FromResult("Test response");
+            // Call base HandleSalesConversationAsync to test the tracking logic
+            return HandleSalesConversationAsync(ctx, message);
         }
     }
 }

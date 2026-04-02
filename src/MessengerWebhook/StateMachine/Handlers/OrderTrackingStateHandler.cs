@@ -16,7 +16,7 @@ public class OrderTrackingStateHandler : BaseStateHandler
     {
     }
 
-    protected override async Task<string> HandleInternalAsync(Models.StateContext ctx, string message)
+    protected override Task<string> HandleInternalAsync(Models.StateContext ctx, string message)
     {
         AddToHistory(ctx, "user", message);
 
@@ -35,7 +35,7 @@ public class OrderTrackingStateHandler : BaseStateHandler
 Bạn muốn làm gì?";
 
             AddToHistory(ctx, "model", response);
-            return response;
+            return Task.FromResult(response);
         }
 
         // Show tracking details
@@ -53,6 +53,6 @@ Dự kiến giao hàng: 3-5 ngày làm việc
 Gõ 'menu' để quay lại menu chính.";
 
         AddToHistory(ctx, "model", reply);
-        return reply;
+        return Task.FromResult(reply);
     }
 }

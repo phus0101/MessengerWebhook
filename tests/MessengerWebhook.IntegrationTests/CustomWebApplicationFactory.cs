@@ -1,10 +1,11 @@
+using MessengerWebhook.Models;
 using System.Collections.Concurrent;
 using MessengerWebhook.Data;
 using MessengerWebhook.Data.Entities;
-using MessengerWebhook.Models;
 using MessengerWebhook.Services;
 using MessengerWebhook.Services.Admin;
 using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.AI.Embeddings;
 using MessengerWebhook.Services.Nobita;
 using MessengerWebhook.Services.Support;
 using Microsoft.AspNetCore.Hosting;
@@ -579,6 +580,39 @@ public sealed class TestGeminiService : IGeminiService
         });
     }
 
+    public Task<MessengerWebhook.Services.AI.Models.IntentDetectionResult> DetectIntentAsync(
+        string message,
+        MessengerWebhook.Models.ConversationState currentState,
+        bool hasProduct,
+        bool hasContact,
+        List<MessengerWebhook.Services.AI.Models.ConversationMessage>? recentHistory = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Simple mock: detect intent based on keywords
+        var normalized = message.ToLowerInvariant();
+
+        var intent = normalized switch
+        {
+            var m when m.Contains("dat hang") || m.Contains("chot don") || m.Contains("mua luon")
+                => MessengerWebhook.Services.AI.Models.CustomerIntent.ReadyToBuy,
+            var m when m.Contains("tu van") || m.Contains("hoi")
+                => MessengerWebhook.Services.AI.Models.CustomerIntent.Consulting,
+            var m when m.Contains("dung roi") || m.Contains("ok") || m.Contains("van dung")
+                => MessengerWebhook.Services.AI.Models.CustomerIntent.Confirming,
+            var m when m.Contains("?")
+                => MessengerWebhook.Services.AI.Models.CustomerIntent.Questioning,
+            _ => MessengerWebhook.Services.AI.Models.CustomerIntent.Browsing
+        };
+
+        return Task.FromResult(new MessengerWebhook.Services.AI.Models.IntentDetectionResult
+        {
+            Intent = intent,
+            Confidence = 0.9,
+            Reason = "Test mock detection",
+            DetectionMethod = "test-mock"
+        });
+    }
+
     public void Clear()
     {
         while (_requests.TryDequeue(out _))
@@ -589,9 +623,14 @@ public sealed class TestGeminiService : IGeminiService
 
 public sealed class TestEmbeddingService : IEmbeddingService
 {
-    public Task<float[]> GenerateAsync(string text, CancellationToken ct = default)
+    public Task<float[]> EmbedAsync(string text, CancellationToken ct = default)
     {
         return Task.FromResult(Enumerable.Repeat(0.1f, 768).ToArray());
+    }
+
+    public Task<List<float[]>> EmbedBatchAsync(List<string> texts, CancellationToken ct = default)
+    {
+        return Task.FromResult(texts.Select(_ => Enumerable.Repeat(0.1f, 768).ToArray()).ToList());
     }
 
     public Task<List<float[]>> GenerateBatchAsync(List<string> texts, CancellationToken ct = default)

@@ -39,7 +39,7 @@ public class GeminiEmbeddingServiceTests
     }
 
     [Fact]
-    public async Task GenerateAsync_ValidText_Returns768DimensionEmbedding()
+    public async Task EmbedAsync_ValidText_Returns768DimensionEmbedding()
     {
         // Arrange
         var embedding = new float[768];
@@ -54,7 +54,7 @@ public class GeminiEmbeddingServiceTests
         var service = CreateService(handler);
 
         // Act
-        var result = await service.GenerateAsync("test product description");
+        var result = await service.EmbedAsync("test product description");
 
         // Assert
         result.Should().NotBeNull();
@@ -63,14 +63,14 @@ public class GeminiEmbeddingServiceTests
     }
 
     [Fact]
-    public async Task GenerateAsync_EmptyText_ThrowsArgumentException()
+    public async Task EmbedAsync_EmptyText_ThrowsArgumentException()
     {
         // Arrange
         var handler = MockHttpMessageHandler.CreateWithJsonResponse("{}");
         var service = CreateService(handler);
 
         // Act
-        var act = async () => await service.GenerateAsync("");
+        var act = async () => await service.EmbedAsync("");
 
         // Assert
         await act.Should().ThrowAsync<ArgumentException>()
@@ -78,14 +78,14 @@ public class GeminiEmbeddingServiceTests
     }
 
     [Fact]
-    public async Task GenerateAsync_NullText_ThrowsArgumentException()
+    public async Task EmbedAsync_NullText_ThrowsArgumentException()
     {
         // Arrange
         var handler = MockHttpMessageHandler.CreateWithJsonResponse("{}");
         var service = CreateService(handler);
 
         // Act
-        var act = async () => await service.GenerateAsync(null!);
+        var act = async () => await service.EmbedAsync(null!);
 
         // Assert
         await act.Should().ThrowAsync<ArgumentException>()
@@ -93,7 +93,7 @@ public class GeminiEmbeddingServiceTests
     }
 
     [Fact]
-    public async Task GenerateAsync_ApiError_ThrowsHttpRequestException()
+    public async Task EmbedAsync_ApiError_ThrowsHttpRequestException()
     {
         // Arrange
         var handler = MockHttpMessageHandler.CreateWithError(
@@ -102,7 +102,7 @@ public class GeminiEmbeddingServiceTests
         var service = CreateService(handler);
 
         // Act
-        var act = async () => await service.GenerateAsync("test text");
+        var act = async () => await service.EmbedAsync("test text");
 
         // Assert
         await act.Should().ThrowAsync<HttpRequestException>()
@@ -110,7 +110,7 @@ public class GeminiEmbeddingServiceTests
     }
 
     [Fact]
-    public async Task GenerateAsync_EmptyResult_ThrowsInvalidOperationException()
+    public async Task EmbedAsync_EmptyResult_ThrowsInvalidOperationException()
     {
         // Arrange
         var response = new EmbeddingResponse
@@ -122,7 +122,7 @@ public class GeminiEmbeddingServiceTests
         var service = CreateService(handler);
 
         // Act
-        var act = async () => await service.GenerateAsync("test text");
+        var act = async () => await service.EmbedAsync("test text");
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>()
@@ -130,7 +130,7 @@ public class GeminiEmbeddingServiceTests
     }
 
     [Fact]
-    public async Task GenerateBatchAsync_MultipleTexts_ReturnsCorrectCount()
+    public async Task EmbedBatchAsync_MultipleTexts_ReturnsCorrectCount()
     {
         // Arrange
         var embedding1 = new float[768];
@@ -156,7 +156,7 @@ public class GeminiEmbeddingServiceTests
         var texts = new List<string> { "text 1", "text 2" };
 
         // Act
-        var result = await service.GenerateBatchAsync(texts);
+        var result = await service.EmbedBatchAsync(texts);
 
         // Assert
         result.Should().HaveCount(2);
@@ -167,7 +167,7 @@ public class GeminiEmbeddingServiceTests
     }
 
     [Fact]
-    public async Task GenerateBatchAsync_Over100Texts_BatchesCorrectly()
+    public async Task EmbedBatchAsync_Over100Texts_BatchesCorrectly()
     {
         // Arrange
         var embedding = new float[768];
@@ -201,7 +201,7 @@ public class GeminiEmbeddingServiceTests
         var service = CreateService(handler);
 
         // Act
-        var result = await service.GenerateBatchAsync(texts);
+        var result = await service.EmbedBatchAsync(texts);
 
         // Assert
         result.Should().HaveCount(150);
@@ -209,21 +209,21 @@ public class GeminiEmbeddingServiceTests
     }
 
     [Fact]
-    public async Task GenerateBatchAsync_EmptyList_ReturnsEmptyList()
+    public async Task EmbedBatchAsync_EmptyList_ReturnsEmptyList()
     {
         // Arrange
         var handler = MockHttpMessageHandler.CreateWithJsonResponse("{}");
         var service = CreateService(handler);
 
         // Act
-        var result = await service.GenerateBatchAsync(new List<string>());
+        var result = await service.EmbedBatchAsync(new List<string>());
 
         // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task GenerateBatchAsync_ApiError_ThrowsHttpRequestException()
+    public async Task EmbedBatchAsync_ApiError_ThrowsHttpRequestException()
     {
         // Arrange
         var handler = MockHttpMessageHandler.CreateWithError(
@@ -234,7 +234,7 @@ public class GeminiEmbeddingServiceTests
         var texts = new List<string> { "text 1", "text 2" };
 
         // Act
-        var act = async () => await service.GenerateBatchAsync(texts);
+        var act = async () => await service.EmbedBatchAsync(texts);
 
         // Assert
         await act.Should().ThrowAsync<HttpRequestException>()

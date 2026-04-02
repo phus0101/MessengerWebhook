@@ -2,6 +2,7 @@ using MessengerWebhook.Models;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.AI.Embeddings;
 using Microsoft.Extensions.Logging;
 
 namespace MessengerWebhook.StateMachine.Handlers;
@@ -57,7 +58,7 @@ Keep response under 100 words.";
         var consultation = await GeminiService.SendMessageAsync(ctx.FacebookPSID, prompt, history);
 
         // Search for relevant products
-        var embedding = await _embeddingService.GenerateAsync(message);
+        var embedding = await _embeddingService.EmbedAsync(message);
         var products = await _vectorSearchRepository.SearchSimilarProductsAsync(embedding, limit: 3);
 
         var reply = consultation;

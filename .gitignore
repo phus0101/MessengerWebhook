@@ -107,6 +107,8 @@ bld/
 [Oo]bj/
 *.rsuser
 *.userosscache
-**/appsettings.Development.json
 secrets.json
 TestResults/
+.env
+.env.local
+.env.*.local

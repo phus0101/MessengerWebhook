@@ -1,8 +1,8 @@
 # Codebase Summary
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
-**Last Updated**: 2026-03-22
-**Phase**: Phase 3 Complete (State Machine)
+**Last Updated**: 2026-04-02
+**Phase**: Phase 3 Complete (Hybrid Search with RRF Fusion)
 
 ---
 
@@ -11,12 +11,14 @@
 Conversational commerce platform for cosmetics retail via Facebook Messenger. Built with ASP.NET Core 9.0, PostgreSQL with pgvector, and Google Gemini AI.
 
 **Key Features**:
-- AI-powered product recommendations
+- AI-powered product recommendations via Google Gemini 2.0 Flash
+- Hybrid search combining vector similarity + BM25 keyword search
+- Reciprocal Rank Fusion (RRF) for optimal result ranking
 - Skin analysis and personalized suggestions
 - Multi-step conversation flows (17 states)
-- Semantic product search via RAG
+- Semantic product search via Pinecone vector database
 - Session management with timeout handling
-- Multi-tenant architecture ready
+- Multi-tenant architecture with row-level security
 
 ---
 
@@ -27,8 +29,10 @@ Conversational commerce platform for cosmetics retail via Facebook Messenger. Bu
 | Framework | ASP.NET Core | 9.0 |
 | Language | C# | 12.0 |
 | Database | PostgreSQL + pgvector | 16 |
+| Vector DB | Pinecone | v2.0.0 |
 | ORM | Entity Framework Core | 9.0 |
 | AI | Google Gemini | 2.0 Flash |
+| Embeddings | Vertex AI text-embedding-004 | 768-dim |
 | Messaging | Facebook Messenger Platform | v21.0 |
 | Testing | xUnit + Testcontainers | Latest |
 | Containerization | Docker | Latest |
@@ -63,6 +67,11 @@ MessengerWebhook/
 │   │   │   ├── Handlers/        # Auth & retry handlers
 │   │   │   ├── Models/          # AI request/response models
 │   │   │   └── Strategies/      # Model selection strategies
+│   │   ├── VectorSearch/        # Hybrid search (Phase 3)
+│   │   │   ├── HybridSearchService.cs
+│   │   │   ├── KeywordSearchService.cs
+│   │   │   ├── RRFFusionService.cs
+│   │   │   └── PineconeVectorService.cs
 │   │   └── Messenger/           # Facebook Messenger API
 │   ├── StateMachine/
 │   │   ├── ConversationStateMachine.cs

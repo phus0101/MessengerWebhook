@@ -2,6 +2,7 @@ using MessengerWebhook.Models;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.AI.Embeddings;
 using Microsoft.Extensions.Logging;
 
 namespace MessengerWebhook.StateMachine.Handlers;
@@ -43,7 +44,7 @@ Respond with ONLY the skin type.";
 
         // Search for products suitable for this skin type
         var searchQuery = $"products for {skinType} skin";
-        var embedding = await _embeddingService.GenerateAsync(searchQuery);
+        var embedding = await _embeddingService.EmbedAsync(searchQuery);
         var products = await _vectorSearchRepository.SearchSimilarProductsAsync(embedding, limit: 5);
 
         ctx.CurrentState = ConversationState.BrowsingProducts;

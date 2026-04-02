@@ -44,6 +44,10 @@ public class CompleteStateHandler : SalesStateHandlerBase
 
     protected override Task<string> HandleInternalAsync(Models.StateContext ctx, string message)
     {
+        // Reset consultation rejection counter for next order
+        ctx.SetData("consultationRejectionCount", 0);
+        ctx.SetData("consultationDeclined", false);
+
         var draftCode = ctx.GetData<string>("draftOrderCode");
         var response = string.IsNullOrWhiteSpace(draftCode)
             ? "Dạ em da len don nhap cho chi roi a. Ben em se kiem tra lai thong tin va lien he xac nhan nha."

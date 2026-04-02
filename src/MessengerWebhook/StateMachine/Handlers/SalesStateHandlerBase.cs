@@ -65,7 +65,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
         {
             Logger.LogError(ex, "Sales state error in {State} for PSID {PSID}", HandledState, ctx.FacebookPSID);
             ctx.CurrentState = ConversationState.Error;
-            return "Dạ em đang bị nghen ở hệ thống một chút. Chị nhắn lại giúp em sau it phut nha.";
+            return "Dạ em đang bị nghẽn ở hệ thống một chút. Chị nhắn lại giúp em sau ít phút nha.";
         }
     }
 
@@ -90,7 +90,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             return handoffResponse;
         }
 
-        var offerResponse = await TryBuildOfferResponseAsync(ctx, message);
+        // Capture customer details first (phone, address, etc.)
         await SalesMessageParser.CaptureCustomerDetailsAsync(ctx, message, GeminiService, Logger);
 
         Logger.LogInformation(
@@ -101,14 +101,16 @@ public abstract class SalesStateHandlerBase : IStateHandler
             ctx.GetData<bool?>("contactNeedsConfirmation") ?? false
         );
 
-        // AI Intent Detection - understand customer's true intent
+        // AI Intent Detection - understand customer's true intent BEFORE building offer
         var hasProduct = HasSelectedProduct(ctx);
         var hasContact = SalesMessageParser.HasRequiredContact(ctx);
+        var recentHistory = GetHistory(ctx).TakeLast(3).ToList();
         var intentResult = await GeminiService.DetectIntentAsync(
             message,
             ctx.CurrentState,
             hasProduct,
             hasContact,
+            recentHistory,
             CancellationToken.None);
 
         Logger.LogInformation(
@@ -119,11 +121,65 @@ public abstract class SalesStateHandlerBase : IStateHandler
             intentResult.DetectionMethod
         );
 
+        // Track consultation rejections: if customer says ReadyToBuy after bot asked consultation question
+        var lastBotMessage = recentHistory.LastOrDefault(m => m.Role == "assistant")?.Content ?? string.Empty;
+        var isConsultationQuestion = new[] { "cần tư vấn", "tư vấn thêm", "hỏi thêm", "thắc mắc" }
+            .Any(k => lastBotMessage.ToLower().Contains(k)) && lastBotMessage.Contains("?");
+
+        if (isConsultationQuestion &&
+            intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy &&
+            intentResult.Confidence >= SalesBotOptions.IntentConfidenceThreshold)
+        {
+            var currentCount = ctx.GetData<int>("consultationRejectionCount");
+            ctx.SetData("consultationRejectionCount", currentCount + 1);
+
+            Logger.LogInformation(
+                "Consultation rejection detected (count: {Count}) for PSID: {PSID}",
+                currentCount + 1,
+                ctx.FacebookPSID
+            );
+        }
+
         // Route based on AI-detected intent (only if confidence meets threshold)
         var useAiIntent = intentResult.Confidence >= SalesBotOptions.IntentConfidenceThreshold;
         var nextState = useAiIntent
             ? DetermineNextState(intentResult.Intent, hasProduct, hasContact)
             : (hasProduct ? ConversationState.CollectingInfo : ConversationState.Consulting);
+
+        // Auto-close after repeated consultation rejections
+        var rejectionCount = ctx.GetData<int>("consultationRejectionCount");
+        if (rejectionCount >= SalesBotOptions.MaxConsultationAttempts &&
+            useAiIntent &&
+            intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy &&
+            hasProduct)
+        {
+            Logger.LogInformation(
+                "Auto-closing after {Count} consultation rejections - PSID: {PSID}",
+                rejectionCount, ctx.FacebookPSID);
+
+            ctx.SetData("consultationDeclined", true);
+
+            // If has contact info, create order immediately
+            if (hasContact)
+            {
+                var draft = await DraftOrderService.CreateFromContextAsync(ctx);
+                ctx.SetData("draftOrderId", draft.Id);
+                ctx.SetData("draftOrderCode", draft.DraftCode);
+                ctx.CurrentState = ConversationState.Complete;
+
+                var confirmation = BuildDraftConfirmation(draft);
+                AddToHistory(ctx, "assistant", confirmation);
+                return confirmation;
+            }
+
+            // Otherwise, move to collecting info
+            ctx.CurrentState = ConversationState.CollectingInfo;
+            var missingInfo = GetMissingContactInfo(ctx);
+            var missing = string.Join(" và ", missingInfo);
+            var autoCloseReply = $"Vậy là mình chốt đơn này luôn nha chị. Chị cho em xin {missing} để em lên đơn ạ.";
+            AddToHistory(ctx, "assistant", autoCloseReply);
+            return autoCloseReply;
+        }
 
         // Create order only if customer is truly ready (ReadyToBuy intent + has all info + high confidence)
         if (useAiIntent && intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy && hasProduct && hasContact)
@@ -138,7 +194,15 @@ public abstract class SalesStateHandlerBase : IStateHandler
             return confirmation;
         }
 
-        // Show product offer if available
+        // Build product offer ONLY if intent is ReadyToBuy or Browsing
+        string? offerResponse = null;
+        if (useAiIntent && (intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy ||
+                            intentResult.Intent == Services.AI.Models.CustomerIntent.Browsing))
+        {
+            offerResponse = await TryBuildOfferResponseAsync(ctx, message);
+        }
+
+        // Show product offer if available and intent allows it
         if (!string.IsNullOrWhiteSpace(offerResponse))
         {
             ctx.CurrentState = nextState;
@@ -148,7 +212,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
         // Continue conversation based on detected intent
         ctx.CurrentState = nextState;
-        var reply = await BuildNaturalReplyAsync(ctx, message);
+        var reply = await BuildNaturalReplyAsync(ctx, message, useAiIntent ? intentResult.Intent : null);
         AddToHistory(ctx, "assistant", reply);
         return reply;
     }
@@ -158,10 +222,19 @@ public abstract class SalesStateHandlerBase : IStateHandler
         return SalesBotOptions.UnsupportedFallbackMessage;
     }
 
-    protected static void AddToHistory(StateContext ctx, string role, string content)
+    protected void AddToHistory(StateContext ctx, string role, string content)
     {
         var history = ctx.GetData<List<AiConversationMessage>>("conversationHistory") ?? new List<AiConversationMessage>();
         history.Add(new AiConversationMessage { Role = role, Content = content, Timestamp = DateTime.UtcNow });
+
+        // Enforce conversation history limit to prevent memory leak
+        var limit = SalesBotOptions.ConversationHistoryLimit;
+        if (history.Count > limit)
+        {
+            // Keep most recent messages
+            history = history.Skip(history.Count - limit).ToList();
+        }
+
         ctx.SetData("conversationHistory", history);
     }
 
@@ -208,7 +281,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
         return string.Join(Environment.NewLine, lines);
     }
 
-    private async Task<string> BuildNaturalReplyAsync(StateContext ctx, string message)
+    private async Task<string> BuildNaturalReplyAsync(StateContext ctx, string message, Services.AI.Models.CustomerIntent? intent = null)
     {
         var history = GetHistory(ctx);
         var productCodes = ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>();
@@ -218,8 +291,8 @@ public abstract class SalesStateHandlerBase : IStateHandler
         var vipProfile = await GetVipProfileAsync(ctx);
         var vipInstruction = BuildVipInstruction(vipProfile);
 
-        // Build CTA context
-        var ctaContext = BuildCtaContext(ctx);
+        // Build CTA context with intent awareness
+        var ctaContext = BuildCtaContext(ctx, intent);
 
         var prompt = $"""
 Khach vua nhan: "{message}"
@@ -281,23 +354,58 @@ Khach hang VIP:
 """;
     }
 
-    private static string BuildCtaContext(StateContext ctx)
+    private static string BuildCtaContext(StateContext ctx, Services.AI.Models.CustomerIntent? intent = null)
     {
         var hasProduct = (ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>()).Count > 0;
+        var rejectionCount = ctx.GetData<int>("consultationRejectionCount");
+        var consultationDeclined = ctx.GetData<bool?>("consultationDeclined") == true;
         var needsConfirmation = ctx.GetData<bool?>("contactNeedsConfirmation") == true;
         var missingInfo = GetMissingContactInfo(ctx);
 
-        // Case 1: Existing customer with data loaded from DB - need confirmation (ONLY if not yet confirmed)
+        // Case 0: Customer declined consultation - stop asking
+        if (consultationDeclined && hasProduct)
+        {
+            if (missingInfo.Count == 0)
+            {
+                return "CTA Instruction: Customer declined consultation. Create order immediately. Use: \"Vậy là mình chốt đơn này luôn nha chị. Em lên đơn ngay.\"";
+            }
+
+            var missing = string.Join(" va ", missingInfo);
+            return $"CTA Instruction: Customer declined consultation. Ask for missing info ({missing}) to complete order. DO NOT ask about consultation again.";
+        }
+
+        // Case 0.5: Already rejected consultation 2+ times - don't repeat
+        if (rejectionCount >= 2 && hasProduct)
+        {
+            return "CTA Instruction: Customer rejected consultation twice. DO NOT ask again. Move to order closing or ask for missing contact info.";
+        }
+
+        // Case 1: Existing customer with data loaded from DB - need confirmation
+        // ONLY ask for confirmation if customer shows buying intent (ReadyToBuy or Browsing)
         if (needsConfirmation && missingInfo.Count == 0)
         {
             var phone = ctx.GetData<string>("customerPhone");
             var address = ctx.GetData<string>("shippingAddress");
-            return $"""
+
+            // Only push for confirmation if customer is ready to buy or browsing products
+            if (intent == Services.AI.Models.CustomerIntent.ReadyToBuy ||
+                intent == Services.AI.Models.CustomerIntent.Browsing)
+            {
+                return $"""
 CTA Instruction: Customer is returning - their info was loaded from previous orders. Naturally confirm their existing info before creating order. Use friendly tone like:
 "Em thay chi da dat hang truoc day roi a. Chi van dung SDT {phone} va dia chi {address} dung khong a?"
 or "Chi oi, em thay thong tin cu cua chi la SDT {phone} va dia chi {address}. Chi xac nhan lai giup em nhe."
 
 IMPORTANT: If customer already confirmed (said "dung roi", "ok", "van dung", etc.), DO NOT ask again. Move to creating order.
+""";
+            }
+
+            // For Consulting/Questioning intent - just acknowledge we have their info, don't push for confirmation yet
+            return $"""
+CTA Instruction: Customer is returning. We have their previous info (SDT {phone}, dia chi {address}) but they're still in consultation phase.
+- If they ask about products, provide consultation naturally
+- If they ask about their info, mention we have it on file
+- DO NOT push for order confirmation yet - let them lead the conversation
 """;
         }
 

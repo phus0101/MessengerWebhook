@@ -1,3 +1,4 @@
+using MessengerWebhook.Models;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Services.AI;
@@ -21,8 +22,10 @@ public class ConsultingStateHandlerTests
     [Fact]
     public async Task HandleAsync_WithContactInfoAndSelectedProduct_ShouldCreateDraftOrder()
     {
+        var geminiService = new Mock<IGeminiService>();
         var draftOrderService = new Mock<IDraftOrderService>();
         var customerService = new Mock<ICustomerIntelligenceService>();
+
         customerService
             .Setup(x => x.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), default))
             .ReturnsAsync(new CustomerIdentity());
@@ -33,8 +36,24 @@ public class ConsultingStateHandlerTests
             .Setup(x => x.CreateFromContextAsync(It.IsAny<StateContext>(), default))
             .ReturnsAsync(new DraftOrder { Id = Guid.NewGuid(), DraftCode = "DR-TEST-001" });
 
+        // Mock AI intent detection
+        geminiService
+            .Setup(x => x.DetectIntentAsync(
+                It.IsAny<string>(),
+                It.IsAny<ConversationState>(),
+                It.IsAny<bool>(),
+                It.IsAny<bool>(),
+                It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
+                default))
+            .ReturnsAsync(new MessengerWebhook.Services.AI.Models.IntentDetectionResult
+            {
+                Intent = MessengerWebhook.Services.AI.Models.CustomerIntent.ReadyToBuy,
+                Confidence = 0.9,
+                Reason = "Customer ready to buy"
+            });
+
         var handler = new ConsultingStateHandler(
-            Mock.Of<IGeminiService>(),
+            geminiService.Object,
             new PolicyGuardService(Options.Create(new SalesBotOptions())),
             Mock.Of<IProductMappingService>(),
             Mock.Of<IGiftSelectionService>(),

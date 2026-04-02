@@ -69,7 +69,7 @@ public class GeminiApiIntegrationTests : IDisposable
     }
 
     [Fact(Skip = "Integration test - requires valid API key")]
-    public async Task GeminiEmbeddingService_GenerateAsync_WithEmbedding2Model_ShouldSucceed()
+    public async Task GeminiEmbeddingService_EmbedAsync_WithEmbedding2Model_ShouldSucceed()
     {
         // Arrange
         var service = new GeminiEmbeddingService(
@@ -80,7 +80,7 @@ public class GeminiApiIntegrationTests : IDisposable
         var testText = "Kem dưỡng ẩm cho da dầu";
 
         // Act
-        var embedding = await service.GenerateAsync(testText);
+        var embedding = await service.EmbedAsync(testText);
 
         // Assert
         embedding.Should().NotBeNull();
@@ -89,7 +89,7 @@ public class GeminiApiIntegrationTests : IDisposable
     }
 
     [Fact(Skip = "Integration test - requires valid API key")]
-    public async Task GeminiEmbeddingService_GenerateBatchAsync_WithEmbedding2Model_ShouldSucceed()
+    public async Task GeminiEmbeddingService_EmbedBatchAsync_WithEmbedding2Model_ShouldSucceed()
     {
         // Arrange
         var service = new GeminiEmbeddingService(
@@ -105,7 +105,7 @@ public class GeminiApiIntegrationTests : IDisposable
         };
 
         // Act
-        var embeddings = await service.GenerateBatchAsync(testTexts);
+        var embeddings = await service.EmbedBatchAsync(testTexts);
 
         // Assert
         embeddings.Should().HaveCount(3);

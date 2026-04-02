@@ -5,6 +5,7 @@ using MessengerWebhook.Models;
 using MessengerWebhook.Services.AI.Models;
 using MessengerWebhook.Services.AI.Strategies;
 using Microsoft.Extensions.Options;
+using AiConversationMessage = MessengerWebhook.Services.AI.Models.ConversationMessage;
 
 namespace MessengerWebhook.Services.AI;
 
@@ -272,6 +273,7 @@ Respond ONLY with valid JSON:
         ConversationState currentState,
         bool hasProduct,
         bool hasContact,
+        List<AiConversationMessage>? recentHistory = null,
         CancellationToken cancellationToken = default)
     {
         if (!_options.EnableAiIntentDetection)
@@ -279,32 +281,64 @@ Respond ONLY with valid JSON:
             return IntentFallbackResult("AI intent detection is disabled");
         }
 
+        // Build history context from last 3 messages
+        var historyContext = string.Empty;
+        if (recentHistory != null && recentHistory.Count > 0)
+        {
+            var last3 = recentHistory.TakeLast(3);
+            var lines = new List<string> { "Recent conversation:" };
+            foreach (var msg in last3)
+            {
+                var speaker = msg.Role == "assistant" ? "Bot" : "Customer";
+                lines.Add($"{speaker}: \"{msg.Content}\"");
+            }
+            historyContext = string.Join("\n", lines);
+        }
+
         var prompt = $@"You are a Vietnamese customer service intent classifier.
 
 Customer message: ""{message}""
 Context: State={currentState}, HasProduct={hasProduct}, HasContact={hasContact}
 
+{historyContext}
+
 Task: Classify customer intent into ONE of these categories:
 
 1. Browsing - exploring products, not ready to buy
-   Examples: ""tính xem"", ""xem thử"", ""có sản phẩm gì""
-
-2. Consulting - needs advice before buying
-   Examples: ""cần tư vấn"", ""cho em hỏi"", ""tư vấn thêm""
-
+2. Consulting - needs advice/information before buying
 3. ReadyToBuy - ready to place order NOW
-   Examples: ""đặt hàng"", ""chốt đơn"", ""lên đơn luôn"", ""mua luôn""
-
 4. Confirming - confirming previous info
-   Examples: ""đúng rồi"", ""ok em"", ""vâng ạ""
-
 5. Questioning - asking questions
-   Examples: ""ship bao lâu?"", ""giá bao nhiêu?"", ""có freeship không?""
 
-CRITICAL RULES:
-- If message contains ""cần tư vấn"" or ""tư vấn"" → ALWAYS return Consulting
-- If message contains ""đặt hàng"", ""chốt đơn"", ""mua luôn"" → ReadyToBuy
-- If message is a question (contains ?) → Questioning or Consulting
+INTENT DETECTION FRAMEWORK:
+
+Analyze the VERB and CONTEXT to determine intent:
+
+**Consulting Intent** - Verbs of information seeking:
+- ""muốn + [tìm hiểu/biết/hỏi/xem]"" → Consulting
+- ""cho em + [biết/giải thích/tư vấn]"" → Consulting
+- ""em cần + [tư vấn/hỏi/biết thêm]"" → Consulting
+Examples: ""muốn tìm hiểu về combo"", ""cho em biết thêm"", ""tư vấn giúp em""
+
+**ReadyToBuy Intent** - Verbs of action/commitment:
+- ""muốn + [mua/đặt/lấy/chốt]"" → ReadyToBuy
+- ""em + [lên đơn/đặt hàng/mua luôn]"" → ReadyToBuy
+- Declining consultation (""không"" after bot asks ""cần tư vấn thêm không?"") → ReadyToBuy
+Examples: ""muốn mua combo"", ""lên đơn luôn"", ""không cần tư vấn""
+
+**Context is CRITICAL:**
+- Same word, different intent based on verb:
+  * ""muốn tìm hiểu"" = Consulting (information seeking)
+  * ""muốn mua"" = ReadyToBuy (action)
+- Conversation history matters:
+  * ""không"" after consultation question = ReadyToBuy (declining advice)
+  * ""không"" in other contexts = analyze the full sentence
+
+**Few-shot examples:**
+- ""chị có nghe bên em có gói combo, chị muốn tìm hiểu về gói đó"" → Consulting (verb: tìm hiểu = seeking info)
+- ""em muốn mua gói combo"" → ReadyToBuy (verb: mua = action)
+- Bot: ""Chị cần tư vấn thêm không?"" → Customer: ""không, em lên đơn"" → ReadyToBuy (declining consultation)
+- ""cho em biết thêm về sản phẩm"" → Consulting (verb: biết = seeking info)
 
 Respond ONLY with valid JSON:
 {{

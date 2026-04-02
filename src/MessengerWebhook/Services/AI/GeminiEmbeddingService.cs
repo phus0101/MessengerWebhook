@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using MessengerWebhook.Configuration;
+using MessengerWebhook.Services.AI.Embeddings;
 using MessengerWebhook.Services.AI.Models;
 using Microsoft.Extensions.Options;
 
@@ -21,7 +22,7 @@ public class GeminiEmbeddingService : IEmbeddingService
         _logger = logger;
     }
 
-    public async Task<float[]> GenerateAsync(string text, CancellationToken ct = default)
+    public async Task<float[]> EmbedAsync(string text, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text, nameof(text));
 
@@ -51,7 +52,7 @@ public class GeminiEmbeddingService : IEmbeddingService
         return result.Embedding.Values;
     }
 
-    public async Task<List<float[]>> GenerateBatchAsync(List<string> texts, CancellationToken ct = default)
+    public async Task<List<float[]>> EmbedBatchAsync(List<string> texts, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(texts, nameof(texts));
         if (texts.Count == 0) return new List<float[]>();

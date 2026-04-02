@@ -89,12 +89,12 @@ public class ConversationStateMachine : IStateMachine
         return context;
     }
 
-    public async Task<bool> TransitionToAsync(StateContext ctx, ConversationState newState)
+    public Task<bool> TransitionToAsync(StateContext ctx, ConversationState newState)
     {
         if (ctx.CurrentState == newState)
         {
             _logger.LogDebug("Already in state {State} for PSID: {PSID}", newState, ctx.FacebookPSID);
-            return true;
+            return Task.FromResult(true);
         }
 
         if (!StateTransitionRules.IsValidTransition(ctx.CurrentState, newState, ctx))
@@ -104,7 +104,7 @@ public class ConversationStateMachine : IStateMachine
                 ctx.CurrentState,
                 newState,
                 ctx.FacebookPSID);
-            return false;
+            return Task.FromResult(false);
         }
 
         var oldState = ctx.CurrentState;
@@ -117,7 +117,7 @@ public class ConversationStateMachine : IStateMachine
             newState,
             ctx.FacebookPSID);
 
-        return true;
+        return Task.FromResult(true);
     }
 
     public async Task SaveAsync(StateContext ctx)
