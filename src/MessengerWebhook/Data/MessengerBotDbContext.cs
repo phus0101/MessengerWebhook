@@ -378,16 +378,7 @@ public class MessengerBotDbContext : DbContext
                 .HasPrincipalKey<Product>(p => p.Id);
 
             entity.Property(e => e.Embedding)
-                .HasColumnType("vector(768)")
-                .HasConversion(
-                    v => v.ToArray(),
-                    v => new Vector(v),
-                    new ValueComparer<Vector>(
-                        (v1, v2) => v1 != null && v2 != null && v1.ToArray().SequenceEqual(v2.ToArray()),
-                        v => v.GetHashCode(),
-                        v => new Vector(v.ToArray())
-                    )
-                );
+                .HasColumnType("vector(768)");
         });
     }
 

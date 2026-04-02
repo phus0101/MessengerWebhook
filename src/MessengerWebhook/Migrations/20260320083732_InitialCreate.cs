@@ -11,6 +11,9 @@ namespace MessengerWebhook.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Enable pgvector extension for vector similarity search
+            migrationBuilder.Sql("CREATE EXTENSION IF NOT EXISTS vector;");
+
             migrationBuilder.CreateTable(
                 name: "Colors",
                 columns: table => new
