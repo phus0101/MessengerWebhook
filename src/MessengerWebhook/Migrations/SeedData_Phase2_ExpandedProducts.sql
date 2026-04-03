@@ -32,7 +32,7 @@ VALUES
     (gen_random_uuid(), 'GIFT_SERUM_SAMPLE', 'Serum dưỡng da sample 5ml', 'Dưỡng trắng, chống lão hóa', true, NOW(), NOW()),
     (gen_random_uuid(), 'GIFT_LIPBALM', 'Son dưỡng môi SPF15', 'Dưỡng ẩm, chống nắng cho môi', true, NOW(), NOW()),
     (gen_random_uuid(), 'GIFT_COTTON_PAD', 'Bông tẩy trang 80 miếng', 'Bông tẩy trang mềm mại, không gây kích ứng', true, NOW(), NOW())
-ON CONFLICT ("Code") DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- Update product-gift mappings
 INSERT INTO "ProductGiftMappings" ("Id", "ProductCode", "GiftCode", "Priority", "CreatedAt")
@@ -53,4 +53,4 @@ VALUES
     (gen_random_uuid(), 'MN', 'GIFT_SERUM_SAMPLE', 1, NOW()),
     (gen_random_uuid(), 'KDM', 'GIFT_MASK', 1, NOW()),
     (gen_random_uuid(), 'COMBO_3', 'GIFT_LIPBALM', 1, NOW())
-ON CONFLICT ("ProductCode", "GiftCode") DO NOTHING;
+ON CONFLICT DO NOTHING;
