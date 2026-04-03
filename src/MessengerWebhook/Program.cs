@@ -561,6 +561,7 @@ app.MapGet("/", () => Results.Ok(new {
 app.MapInternalOperationsEndpoints();
 app.MapAdminAuthEndpoints();
 app.MapAdminOperationsEndpoints();
+app.MapTestRagEndpoints();
 app.MapFallbackToFile("/admin/{*path:nonfile}", "admin/index.html");
 
 using var adminBootstrapScope = app.Services.CreateScope();
