@@ -252,33 +252,62 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
     private async Task<string?> TryBuildOfferResponseAsync(StateContext ctx, string message)
     {
+        Logger.LogInformation(
+            "TryBuildOfferResponseAsync called for PSID: {PSID}, Message: '{Message}'",
+            ctx.FacebookPSID, message);
+
         var product = await ProductMappingService.GetProductByMessageAsync(message);
 
         // If product not found directly, try to extract from conversation history
         if (product == null)
         {
+            Logger.LogInformation(
+                "Product not found directly from message for PSID: {PSID}, searching conversation history",
+                ctx.FacebookPSID);
+
             var history = GetHistory(ctx);
             var recentMessages = history.TakeLast(5).ToList();
+
+            Logger.LogInformation(
+                "Searching {Count} recent assistant messages for product mentions for PSID: {PSID}",
+                recentMessages.Count(m => m.Role == "assistant"), ctx.FacebookPSID);
 
             // Look for product mentions in recent conversation
             foreach (var msg in recentMessages.Where(m => m.Role == "assistant"))
             {
+                Logger.LogDebug(
+                    "Checking assistant message for product: '{Content}' for PSID: {PSID}",
+                    msg.Content, ctx.FacebookPSID);
+
                 var productFromHistory = await ProductMappingService.GetProductByMessageAsync(msg.Content);
                 if (productFromHistory != null)
                 {
                     product = productFromHistory;
                     Logger.LogInformation(
-                        "Found product {ProductName} from conversation history for PSID: {PSID}",
-                        product.Name, ctx.FacebookPSID);
+                        "Found product {ProductName} (Code: {ProductCode}) from conversation history for PSID: {PSID}",
+                        product.Name, product.Code, ctx.FacebookPSID);
                     break;
                 }
             }
         }
+        else
+        {
+            Logger.LogInformation(
+                "Product {ProductName} (Code: {ProductCode}) found directly from message for PSID: {PSID}",
+                product.Name, product.Code, ctx.FacebookPSID);
+        }
 
         if (product == null)
         {
+            Logger.LogWarning(
+                "No product found for PSID: {PSID}, returning null",
+                ctx.FacebookPSID);
             return null;
         }
+
+        Logger.LogInformation(
+            "Setting selectedProductCodes to [{ProductCode}] for PSID: {PSID}",
+            product.Code, ctx.FacebookPSID);
 
         ctx.SetData("selectedProductCodes", new List<string> { product.Code });
         var gift = await GiftSelectionService.SelectGiftForProductAsync(product.Code);
