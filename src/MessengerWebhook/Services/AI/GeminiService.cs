@@ -325,7 +325,12 @@ Examples: ""muốn tìm hiểu về combo"", ""cho em biết thêm"", ""tư vấ
 - ""muốn + [mua/đặt/lấy/chốt]"" → ReadyToBuy
 - ""em + [lên đơn/đặt hàng/mua luôn]"" → ReadyToBuy
 - Declining consultation (""không"" after bot asks ""cần tư vấn thêm không?"") → ReadyToBuy
+- **Affirmative responses in buying context**: When bot asks about ordering/buying and customer responds with short affirmations → ReadyToBuy
+  * Context: Bot just asked ""Chị có muốn em lên đơn không?"" or mentioned product + price
+  * Customer replies: ""ok"", ""được"", ""đồng ý"", ""oke"", ""yes"", ""uh"", ""uhm"", ""vâng"", or similar short confirmations
+  * Key: The PREVIOUS bot message must be about ordering/buying, not just general questions
 Examples: ""muốn mua combo"", ""lên đơn luôn"", ""không cần tư vấn""
+Bot: ""Chị có muốn em lên đơn luôn không ạ?"" → Customer: ""ok e"" → ReadyToBuy
 
 **Context is CRITICAL:**
 - Same word, different intent based on verb:

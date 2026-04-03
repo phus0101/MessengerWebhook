@@ -396,6 +396,8 @@ Khach hang VIP:
         var consultationDeclined = ctx.GetData<bool?>("consultationDeclined") == true;
         var needsConfirmation = ctx.GetData<bool?>("contactNeedsConfirmation") == true;
         var missingInfo = GetMissingContactInfo(ctx);
+        var history = ctx.GetData<List<AiConversationMessage>>("conversationHistory") ?? new List<AiConversationMessage>();
+        var messageCount = history.Count(m => m.Role == "user");
 
         // Case 0: Customer declined consultation - stop asking
         if (consultationDeclined && hasProduct)
@@ -452,8 +454,40 @@ CTA Instruction: All information is confirmed. Naturally tell customer you're cr
 """;
         }
 
-        // Case 3: Has product but missing some contact info - ask for missing pieces
-        if (hasProduct)
+        // NEW: Giai đoạn tư vấn (1-2 câu đầu) - KHÔNG CẦN CTA
+        if (messageCount <= 2 && intent == Services.AI.Models.CustomerIntent.Questioning)
+        {
+            return """
+CTA Instruction: Customer is in consultation phase (asking questions). Answer naturally WITHOUT pushing for order.
+- Just answer the question directly
+- DO NOT add CTA like "Chị chọn sản phẩm và gửi thông tin"
+- Let customer continue asking questions naturally
+""";
+        }
+
+        // NEW: Giai đoạn chuyển tiếp (3-4 câu) - Gợi ý nhẹ nhàng
+        if (messageCount >= 3 && messageCount <= 4 && !hasProduct)
+        {
+            return """
+CTA Instruction: Customer has asked 3-4 questions. Gently suggest next step.
+- Use soft prompts like "Chị quan tâm mẫu này ạ?" or "Chị muốn em tư vấn thêm gì không ạ?"
+- DO NOT push hard for order yet
+""";
+        }
+
+        // Case 3: Customer shows buying intent (ReadyToBuy) - Push CTA mạnh
+        if (intent == Services.AI.Models.CustomerIntent.ReadyToBuy && hasProduct)
+        {
+            var missing = string.Join(" va ", missingInfo);
+            return $"""
+CTA Instruction: Customer is ready to buy. Push for order completion.
+- Use strong CTA like "Dạ vậy chị gửi em SĐT và địa chỉ để em lên đơn ngay nha."
+- Missing info: {missing}
+""";
+        }
+
+        // Case 4: Has product but missing some contact info - ask for missing pieces
+        if (hasProduct && missingInfo.Count > 0)
         {
             var missing = string.Join(" va ", missingInfo);
             return $"""
@@ -461,9 +495,17 @@ CTA Instruction: Naturally ask customer to provide missing info ({missing}) to c
 """;
         }
 
-        // Case 4: No product selected yet - ask to choose product and provide info
+        // Case 5: No product selected yet - ask to choose product (only after 3+ messages)
+        if (messageCount >= 3)
+        {
+            return """
+CTA Instruction: Naturally ask customer to choose a product. Use friendly tone like "Chị quan tâm sản phẩm nào ạ?" or "Chị muốn em tư vấn thêm không ạ?".
+""";
+        }
+
+        // Default: No CTA needed (early consultation phase)
         return """
-CTA Instruction: Naturally ask customer to choose a product (Kem Chong Nang, Kem Lua, or combo) and provide contact info. Use friendly tone like "Chi chon san pham va gui thong tin cho em nha".
+CTA Instruction: Customer is in early consultation phase. Answer questions naturally WITHOUT CTA.
 """;
     }
 
