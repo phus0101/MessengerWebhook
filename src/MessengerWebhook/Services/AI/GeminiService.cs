@@ -444,13 +444,18 @@ Respond ONLY with valid JSON:
         // Replace {RAG_CONTEXT} placeholder with actual RAG context
         if (!string.IsNullOrEmpty(ragContext))
         {
+            _logger.LogInformation("Injecting RAG context into system prompt. RAG context length: {Length}", ragContext.Length);
             systemPrompt = systemPrompt.Replace("{RAG_CONTEXT}", ragContext);
         }
         else
         {
+            _logger.LogWarning("No RAG context provided, using fallback message");
             // If no RAG context, remove the placeholder
             systemPrompt = systemPrompt.Replace("{RAG_CONTEXT}", "Chưa có thông tin sản phẩm cụ thể.");
         }
+
+        // Log first 500 chars of system prompt to verify RAG injection
+        _logger.LogDebug("System prompt preview: {Preview}", systemPrompt.Substring(0, Math.Min(500, systemPrompt.Length)));
 
         // Always add system prompt as first user message to ensure language detection works
         contents.Add(new
