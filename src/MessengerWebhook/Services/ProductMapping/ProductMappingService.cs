@@ -43,16 +43,62 @@ public class ProductMappingService : IProductMappingService
         }
 
         var normalized = Normalize(message);
-        if (ContainsAny(normalized, "kem chong nang", "chong nang", "kcn"))
+
+        // Kem Trị Nám Tàn Nhang
+        if (ContainsAny(normalized, "tri nam", "tan nhang", "nam", "ktn", "tri tham", "lam mo tham"))
+        {
+            return await GetProductByCodeAsync("KTN");
+        }
+
+        // Kem Chống Nắng
+        if (ContainsAny(normalized, "kem chong nang", "chong nang", "kcn", "spf"))
         {
             return await GetProductByCodeAsync("KCN");
         }
 
-        if (ContainsAny(normalized, "kem lua", "lua"))
+        // Kem Lụa Dưỡng Ẩm
+        if (ContainsAny(normalized, "kem lua", "lua", "duong am", "cap am"))
         {
             return await GetProductByCodeAsync("KL");
         }
 
+        // Sữa Rửa Mặt
+        if (ContainsAny(normalized, "sua rua mat", "rua mat", "srm", "lam sach"))
+        {
+            return await GetProductByCodeAsync("SRM");
+        }
+
+        // Toner
+        if (ContainsAny(normalized, "toner", "nuoc hoa hong", "can bang da"))
+        {
+            return await GetProductByCodeAsync("TN");
+        }
+
+        // Serum Vitamin C
+        if (ContainsAny(normalized, "serum", "vitamin c", "lam sang", "chong lao hoa"))
+        {
+            return await GetProductByCodeAsync("SR");
+        }
+
+        // Mặt Nạ Ngủ
+        if (ContainsAny(normalized, "mat na", "mat na ngu", "mask"))
+        {
+            return await GetProductByCodeAsync("MN");
+        }
+
+        // Kem Dưỡng Mắt
+        if (ContainsAny(normalized, "kem mat", "duong mat", "quang tham", "bong mat"))
+        {
+            return await GetProductByCodeAsync("KDM");
+        }
+
+        // Combo 3 - Trị Nám Toàn Diện
+        if (ContainsAny(normalized, "combo 3", "combo tri nam", "combo toan dien"))
+        {
+            return await GetProductByCodeAsync("COMBO_3");
+        }
+
+        // Combo 2 - Freeship
         if (ContainsAny(normalized, "freeship", "2 san pham", "combo 2", "combo"))
         {
             return await GetProductByCodeAsync("COMBO_2");
