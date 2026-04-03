@@ -440,9 +440,16 @@ Respond ONLY with valid JSON:
 
         // Build system prompt with optional RAG context
         var systemPrompt = GetSystemPrompt();
+
+        // Replace {RAG_CONTEXT} placeholder with actual RAG context
         if (!string.IsNullOrEmpty(ragContext))
         {
-            systemPrompt = $"{systemPrompt}\n\n{ragContext}";
+            systemPrompt = systemPrompt.Replace("{RAG_CONTEXT}", ragContext);
+        }
+        else
+        {
+            // If no RAG context, remove the placeholder
+            systemPrompt = systemPrompt.Replace("{RAG_CONTEXT}", "Chưa có thông tin sản phẩm cụ thể.");
         }
 
         // Always add system prompt as first user message to ensure language detection works
