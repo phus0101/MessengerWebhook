@@ -253,6 +253,28 @@ public abstract class SalesStateHandlerBase : IStateHandler
     private async Task<string?> TryBuildOfferResponseAsync(StateContext ctx, string message)
     {
         var product = await ProductMappingService.GetProductByMessageAsync(message);
+
+        // If product not found directly, try to extract from conversation history
+        if (product == null)
+        {
+            var history = GetHistory(ctx);
+            var recentMessages = history.TakeLast(5).ToList();
+
+            // Look for product mentions in recent conversation
+            foreach (var msg in recentMessages.Where(m => m.Role == "assistant"))
+            {
+                var productFromHistory = await ProductMappingService.GetProductByMessageAsync(msg.Content);
+                if (productFromHistory != null)
+                {
+                    product = productFromHistory;
+                    Logger.LogInformation(
+                        "Found product {ProductName} from conversation history for PSID: {PSID}",
+                        product.Name, ctx.FacebookPSID);
+                    break;
+                }
+            }
+        }
+
         if (product == null)
         {
             return null;

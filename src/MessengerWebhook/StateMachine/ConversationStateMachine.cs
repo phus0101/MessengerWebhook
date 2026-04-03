@@ -16,7 +16,7 @@ public class ConversationStateMachine : IStateMachine
     private readonly ILogger<ConversationStateMachine> _logger;
     private readonly Dictionary<ConversationState, IStateHandler> _handlers;
     private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(15);
-    private static readonly TimeSpan AbsoluteTimeout = TimeSpan.FromMinutes(60);
+    private static readonly TimeSpan AbsoluteTimeout = TimeSpan.FromHours(2);
 
     public ConversationStateMachine(
         ISessionRepository sessionRepository,
