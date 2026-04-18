@@ -76,7 +76,6 @@ public class WebhookVerificationTests : IClassFixture<CustomWebApplicationFactor
             $"/webhook?hub.verify_token={verifyToken}&hub.challenge={challenge}");
 
         // Assert
-        var content = await response.Content.ReadAsStringAsync();
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 

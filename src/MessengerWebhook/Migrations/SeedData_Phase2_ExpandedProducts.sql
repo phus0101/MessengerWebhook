@@ -14,7 +14,7 @@ VALUES
     (gen_random_uuid(), 'SRM', 'Sữa Rửa Mặt Tạo Bọt', 'Sữa rửa mặt tạo bọt mịn, làm sạch sâu lỗ chân lông, không gây khô da', 'Múi Xù', 0, 180000, true, NOW(), NOW()),
     (gen_random_uuid(), 'TN', 'Toner Cân Bằng Da', 'Toner cân bằng pH, se khít lỗ chân lông, cấp ẩm tức thì cho da', 'Múi Xù', 0, 220000, true, NOW(), NOW()),
     (gen_random_uuid(), 'SR', 'Serum Vitamin C', 'Serum Vitamin C 20% nguyên chất, làm sáng da, mờ thâm nám, chống lão hóa', 'Múi Xù', 0, 480000, true, NOW(), NOW()),
-    (gen_random_uuid(), 'MN', 'Mặt Nạ Ngủ Dưỡng Ẩm', 'Mặt nạ ngủ cấp ẩm chuyên sâu, phục hồi da qua đêm, da sáng mịn khi thức dậy', 'Múi Xù', 0, 320000, true, NOW(), NOW()),
+    (gen_random_uuid(), 'MN', 'Mặt Nạ Ngủ Dưỡng Ẩm', 'Mặt nạ ngủ cấp ẩm chuyên sâu, phục hồi da qua đêm, da sáng mịn khi thức dậy', 'Múi Xù', 0, 380000, true, NOW(), NOW()),
     (gen_random_uuid(), 'KDM', 'Kem Dưỡng Mắt', 'Kem dưỡng vùng mắt, giảm quầng thâm, bọng mắt, nếp nhăn vùng mắt', 'Múi Xù', 0, 380000, true, NOW(), NOW()),
     (gen_random_uuid(), 'COMBO_3', 'Combo Trị Nám Toàn Diện', 'Combo 3 sản phẩm: Kem Trị Nám + Serum Vitamin C + Kem Chống Nắng. Giảm 15% + Freeship', 'Múi Xù', 0, 1050000, true, NOW(), NOW())
 ON CONFLICT ("Code") DO UPDATE SET

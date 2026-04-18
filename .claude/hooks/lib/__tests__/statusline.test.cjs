@@ -24,7 +24,9 @@ const {
   magenta,
   dim,
   RESET,
-  getContextColor
+  getContextColor,
+  resolveColor,
+  setColorEnabled
 } = require('../colors.cjs');
 
 const {
@@ -211,6 +213,26 @@ test('getContextColor(70%) returns YELLOW (exactly 70%)', () => {
 test('getContextColor(85%) returns RED (exactly 85%)', () => {
   const color = getContextColor(85);
   assertEquals(color, '\x1b[31m', 'Should return RED for exactly 85%');
+});
+
+test('getContextColor honors custom palette overrides', () => {
+  const color = getContextColor(10, { low: 'brightGreen' });
+  assertEquals(color, '\x1b[92m', 'Should return bright green when theme overrides the low threshold color');
+});
+
+test('resolveColor adds an explicit style clear around ANSI spans', () => {
+  const previousNoColor = process.env.NO_COLOR;
+  delete process.env.NO_COLOR;
+  setColorEnabled(true);
+  try {
+    const result = resolveColor('brightGreen')('stable');
+    assertContains(result, '\x1b[22m\x1b[39m\x1b[92m', 'Should clear dim/foreground before applying custom color');
+    assertTrue(result.endsWith('\x1b[0m\x1b[22m\x1b[39m'), 'Should finish with an explicit reset sequence');
+  } finally {
+    if (previousNoColor === undefined) delete process.env.NO_COLOR;
+    else process.env.NO_COLOR = previousNoColor;
+    setColorEnabled(null);
+  }
 });
 
 // ============================================================================

@@ -8,8 +8,10 @@
  * Run: node --test .claude/hooks/tests/scout-block/scout-checker.test.cjs
  */
 
-const { describe, it } = require('node:test');
+const { after, describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const {
@@ -33,6 +35,28 @@ const DEFAULT_OPTS = {
   ckignorePath: path.join(FIXTURES_DIR, 'ckignore-default.txt'),
   checkBroadPatterns: true
 };
+const TEMP_DIRS = [];
+
+function createProjectRoot({ rootPatterns, nestedPatterns } = {}) {
+  const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'scout-block-'));
+  TEMP_DIRS.push(repoRoot);
+  fs.writeFileSync(path.join(repoRoot, '.git'), 'gitdir: ./.git/worktrees/test\n');
+  if (rootPatterns) {
+    fs.mkdirSync(path.join(repoRoot, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, '.claude', '.ckignore'), `${rootPatterns.join('\n')}\n`);
+  }
+  if (nestedPatterns) {
+    fs.mkdirSync(path.join(repoRoot, 'pkg', '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, 'pkg', '.claude', '.ckignore'), `${nestedPatterns.join('\n')}\n`);
+  }
+  return repoRoot;
+}
+
+after(() => {
+  for (const dir of TEMP_DIRS) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -496,6 +520,51 @@ describe('checkScoutBlock - negation .ckignore', () => {
     // dist/public is still blocked — gitignore limitation
     const r2 = checkScoutBlock({ toolName: 'Read', toolInput: { file_path: 'dist/public/index.html' }, options: negOpts });
     assert.ok(r2.blocked);
+  });
+});
+
+describe('checkScoutBlock - project-local .claude/.ckignore discovery', () => {
+  it('allows build paths via the git-root .claude/.ckignore override', () => {
+    const projectRoot = createProjectRoot({ rootPatterns: ['!build'] });
+    const r = checkScoutBlock({
+      toolName: 'Read',
+      toolInput: { file_path: 'src/commands/build/run.rb' },
+      options: { ...DEFAULT_OPTS, cwd: projectRoot, projectConfigDirName: '.claude' }
+    });
+    assert.ok(!r.blocked);
+  });
+
+  it('still blocks node_modules and points to the git-root .claude/.ckignore file', () => {
+    const projectRoot = createProjectRoot({ rootPatterns: ['!build'] });
+    const r = checkScoutBlock({
+      toolName: 'Read',
+      toolInput: { file_path: 'node_modules/package.json' },
+      options: { ...DEFAULT_OPTS, cwd: projectRoot, projectConfigDirName: '.claude' }
+    });
+    assert.ok(r.blocked);
+    assert.strictEqual(r.configPath, path.join(projectRoot, '.claude', '.ckignore'));
+  });
+
+  it('falls back to shipped behavior when no git-root override exists', () => {
+    const projectRoot = createProjectRoot();
+    const r = checkScoutBlock({
+      toolName: 'Read',
+      toolInput: { file_path: 'src/commands/build/run.rb' },
+      options: { ...DEFAULT_OPTS, cwd: projectRoot, projectConfigDirName: '.claude' }
+    });
+    assert.ok(r.blocked);
+  });
+
+  it('ignores nested .claude/.ckignore files below the git root', () => {
+    const projectRoot = createProjectRoot({ nestedPatterns: ['!build'] });
+    const nestedCwd = path.join(projectRoot, 'pkg', 'src', 'commands');
+    fs.mkdirSync(nestedCwd, { recursive: true });
+    const r = checkScoutBlock({
+      toolName: 'Read',
+      toolInput: { file_path: 'src/commands/build/run.rb' },
+      options: { ...DEFAULT_OPTS, cwd: nestedCwd, projectConfigDirName: '.claude' }
+    });
+    assert.ok(r.blocked);
   });
 });
 

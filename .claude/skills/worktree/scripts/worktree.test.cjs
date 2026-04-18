@@ -494,6 +494,71 @@ test('create handles mixed case camelCase', () => {
 });
 
 // ============================================
+// --no-prefix: MULTI-SEGMENT BRANCH NAMES
+// ============================================
+console.log('\n🔀 --no-prefix Multi-Segment Branch Names');
+
+test('--no-prefix preserves forward slashes in branch name', () => {
+  const result = run('create "dev/feat/999-test-slash-preserve" --no-prefix --dry-run --json');
+  assert(result.success, 'Should succeed');
+  const json = assertJSON(result.output);
+  assert(json.wouldCreate.branch === 'dev/feat/999-test-slash-preserve', `Should preserve slashes, got: ${json.wouldCreate.branch}`);
+});
+
+test('--no-prefix preserves case with slashes', () => {
+  const result = run('create "User/Fix/MyBug" --no-prefix --dry-run --json');
+  assert(result.success, 'Should succeed');
+  const json = assertJSON(result.output);
+  assert(json.wouldCreate.branch === 'User/Fix/MyBug', `Should preserve case and slashes, got: ${json.wouldCreate.branch}`);
+});
+
+test('--no-prefix flattens slashes in worktree directory name', () => {
+  const result = run('create "kai/feat/my-feature" --no-prefix --dry-run --json');
+  assert(result.success, 'Should succeed');
+  const json = assertJSON(result.output);
+  // Worktree path should NOT contain nested directories from branch slashes
+  const worktreeName = json.wouldCreate.worktreePath.split('/').pop();
+  assert(!worktreeName.includes('/'), 'Worktree dir name should not contain slashes');
+  assert(worktreeName.includes('kai-feat-my-feature'), `Should flatten slashes to dashes, got: ${worktreeName}`);
+});
+
+test('--no-prefix collapses consecutive slashes', () => {
+  const result = run('create "kai///feat//my-feature" --no-prefix --dry-run --json');
+  assert(result.success, 'Should succeed');
+  const json = assertJSON(result.output);
+  assert(!json.wouldCreate.branch.includes('//'), `Should not have consecutive slashes, got: ${json.wouldCreate.branch}`);
+});
+
+test('--no-prefix trims leading/trailing slashes', () => {
+  const result = run('create "/kai/feat/my-feature/" --no-prefix --dry-run --json');
+  assert(result.success, 'Should succeed');
+  const json = assertJSON(result.output);
+  assert(!json.wouldCreate.branch.startsWith('/'), 'Should not start with slash');
+  assert(!json.wouldCreate.branch.endsWith('/'), 'Should not end with slash');
+});
+
+test('--no-prefix rejects path traversal (..)', () => {
+  const result = run('create "kai/../../../etc/passwd" --no-prefix --dry-run --json');
+  assert(!result.success, 'Should fail with path traversal');
+  const json = assertJSON(result.output);
+  assert(json.error.code === 'INVALID_FEATURE_NAME', 'Should report invalid feature name');
+});
+
+test('--no-prefix still works for simple names (no slashes)', () => {
+  const result = run('create "ND-1377-cleanup-docs" --no-prefix --dry-run --json');
+  assert(result.success, 'Should succeed');
+  const json = assertJSON(result.output);
+  assert(json.wouldCreate.branch === 'ND-1377-cleanup-docs', `Should work without slashes, got: ${json.wouldCreate.branch}`);
+});
+
+test('--no-prefix preserves dots in branch names', () => {
+  const result = run('create "release/v1.2.3" --no-prefix --dry-run --json');
+  assert(result.success, 'Should succeed');
+  const json = assertJSON(result.output);
+  assert(json.wouldCreate.branch === 'release/v1.2.3', `Should preserve dots, got: ${json.wouldCreate.branch}`);
+});
+
+// ============================================
 // EDGE CASE: PATH HANDLING
 // ============================================
 console.log('\n📁 Path Handling Edge Cases');

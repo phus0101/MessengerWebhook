@@ -52,6 +52,10 @@ describe("DraftOrderDetailPage", () => {
       merchandiseTotal: 320000,
       shippingFee: 0,
       grandTotal: 320000,
+      priceConfirmed: true,
+      promotionConfirmed: false,
+      shippingConfirmed: true,
+      inventoryConfirmed: false,
       assignedManagerEmail: "manager@test.local",
       nobitaOrderId: null,
       lastSubmissionError: null,
@@ -192,5 +196,71 @@ describe("DraftOrderDetailPage", () => {
         ]
       }, "csrf-token");
     });
+  });
+
+  it("shows provisional total label when shipping is not confirmed", async () => {
+    mockedApi.getDraftOrder.mockResolvedValueOnce({
+      id: "draft-1",
+      draftCode: "DR-001",
+      facebookPageId: "PAGE_TEST_1",
+      customerIdentityId: "customer-1",
+      customerName: "Khach test",
+      customerPhone: "0900000001",
+      shippingAddress: "1 Nguyen Hue",
+      status: "PendingReview",
+      riskLevel: "Low",
+      riskSummary: null,
+      requiresManualReview: false,
+      merchandiseTotal: 320000,
+      shippingFee: 30000,
+      grandTotal: 350000,
+      priceConfirmed: true,
+      promotionConfirmed: false,
+      shippingConfirmed: false,
+      inventoryConfirmed: false,
+      assignedManagerEmail: "manager@test.local",
+      nobitaOrderId: null,
+      lastSubmissionError: null,
+      createdAt: "2026-03-30T00:00:00Z",
+      reviewedAt: null,
+      reviewedByEmail: null,
+      submittedAt: null,
+      submittedByEmail: null,
+      isEditable: true,
+      linkedCustomer: {
+        customerIdentityId: "customer-1",
+        fullName: "Khach test",
+        phoneNumber: "0900000001",
+        shippingAddress: "1 Nguyen Hue",
+        totalOrders: 3,
+        successfulDeliveries: 3,
+        failedDeliveries: 0,
+        lastInteractionAt: "2026-03-30T00:00:00Z"
+      },
+      items: [
+        {
+          id: "item-1",
+          productCode: "KCN",
+          productName: "Kem Chong Nang",
+          quantity: 1,
+          unitPrice: 320000,
+          giftCode: "GIFT_KCN",
+          giftName: "Mat na duong sang"
+        }
+      ],
+      availableProducts: [
+        {
+          code: "KCN",
+          name: "Kem Chong Nang",
+          unitPrice: 320000,
+          giftOptions: [{ code: "GIFT_KCN", name: "Mat na duong sang" }]
+        }
+      ],
+      auditLogs: []
+    });
+
+    renderWithRoute(<DraftOrderDetailPage />, "/draft-orders/draft-1", "/draft-orders/:id");
+
+    expect(await screen.findByText(/tạm tính/i)).toBeInTheDocument();
   });
 });

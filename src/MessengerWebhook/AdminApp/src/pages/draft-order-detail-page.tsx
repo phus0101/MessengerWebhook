@@ -311,7 +311,7 @@ export function DraftOrderDetailPage() {
           <div className="card stack">
             <div className="detail-row"><span>Trang thai</span><StatusPill kind="draft-status" value={draft.status} /></div>
             <div className="detail-row"><span>Risk</span><StatusPill kind="risk-level" value={draft.riskLevel} /></div>
-            <div className="detail-row"><span>Tong du kien</span><strong>{formatMoney(previewTotal)}</strong></div>
+            <div className="detail-row"><span>Tong du kien</span><strong>{formatMoney(previewTotal)}{draft.shippingConfirmed ? "" : " (tạm tính)"}</strong></div>
             {!draft.isEditable ? <div className="error-box">Don da gui sang Nobita nen form chi con che do xem.</div> : null}
 
             <div className="stack">

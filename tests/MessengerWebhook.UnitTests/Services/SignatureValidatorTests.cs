@@ -238,7 +238,7 @@ public class SignatureValidatorTests
     public void Constructor_NullAppSecret_ThrowsArgumentNullException()
     {
         // Arrange
-        var optionsWithNullSecret = Options.Create(new FacebookOptions { AppSecret = null });
+        var optionsWithNullSecret = Options.Create(new FacebookOptions { AppSecret = null! });
 
         // Act & Assert
         var act = () => new SignatureValidator(optionsWithNullSecret, _loggerMock.Object);

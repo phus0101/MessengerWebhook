@@ -1,6 +1,7 @@
 using MessengerWebhook.Models;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Data.Entities;
+using MessengerWebhook.Services;
 using MessengerWebhook.Services.Customers;
 using MessengerWebhook.Services.DraftOrders;
 using MessengerWebhook.Services.Freeship;
@@ -21,10 +22,22 @@ internal static class SalesHandlerFallbacks
     public static IGiftSelectionService GiftSelectionService { get; } = new EmptyGiftSelectionService();
     public static IFreeshipCalculator FreeshipCalculator { get; } = new FreeshipCalculator();
     public static ICaseEscalationService CaseEscalationService { get; } = new EmptyCaseEscalationService();
-    public static IDraftOrderService DraftOrderService { get; } = new EmptyDraftOrderService();
+    public static DraftOrderCoordinator? DraftOrderCoordinator { get; private set; }
     public static ICustomerIntelligenceService CustomerIntelligenceService { get; } = new EmptyCustomerIntelligenceService();
     public static IOptions<SalesBotOptions> Options { get; } = Microsoft.Extensions.Options.Options.Create(new SalesBotOptions());
     public static IOptions<RAGOptions> RagOptions { get; } = Microsoft.Extensions.Options.Options.Create(new RAGOptions { Enabled = false });
+
+    /// <summary>
+    /// Initializes the DraftOrderCoordinator for fallback scenarios.
+    /// Called during DI setup so the simplified constructor can use it.
+    /// </summary>
+    public static void Initialize(IDraftOrderService draftOrderService, Microsoft.Extensions.Caching.Memory.IMemoryCache cache)
+    {
+        DraftOrderCoordinator = new DraftOrderCoordinator(
+            draftOrderService,
+            cache,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<DraftOrderCoordinator>.Instance);
+    }
 
     private sealed class EmptyProductMappingService : IProductMappingService
     {

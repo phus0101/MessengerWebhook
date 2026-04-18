@@ -67,6 +67,23 @@ describe('loadPatterns', () => {
     assert.ok(patterns.includes('!src/vendor'));
     assert.ok(patterns.includes('!dist/public'));
   });
+
+  it('merges project override patterns after shipped patterns', () => {
+    const patterns = loadPatterns(
+      path.join(FIXTURES_DIR, 'ckignore-default.txt'),
+      path.join(FIXTURES_DIR, 'ckignore-project-override.txt')
+    );
+    assert.ok(patterns.indexOf('!build') > patterns.indexOf('build'));
+  });
+
+  it('ignores missing project override files', () => {
+    const patterns = loadPatterns(
+      path.join(FIXTURES_DIR, 'ckignore-default.txt'),
+      '/non/existent/project/.ckignore'
+    );
+    const shipped = loadPatterns(path.join(FIXTURES_DIR, 'ckignore-default.txt'));
+    assert.deepStrictEqual(patterns, shipped);
+  });
 });
 
 
@@ -214,6 +231,23 @@ describe('matchPath - negation patterns', () => {
   it('cannot negate dist/public (parent dir excluded — gitignore spec)', () => {
     assert.ok(matchPath(matcher, 'dist/public').blocked);
     assert.ok(matchPath(matcher, 'dist/public/index.html').blocked);
+  });
+});
+
+describe('matchPath - project override patterns', () => {
+  const patterns = loadPatterns(
+    path.join(FIXTURES_DIR, 'ckignore-default.txt'),
+    path.join(FIXTURES_DIR, 'ckignore-project-override.txt')
+  );
+  const matcher = createMatcher(patterns);
+
+  it('allows build paths when project override negates build', () => {
+    assert.ok(!matchPath(matcher, 'src/commands/build').blocked);
+    assert.ok(!matchPath(matcher, 'src/commands/build/run.rb').blocked);
+  });
+
+  it('still blocks other shipped heavy directories', () => {
+    assert.ok(matchPath(matcher, 'node_modules/pkg/index.js').blocked);
   });
 });
 

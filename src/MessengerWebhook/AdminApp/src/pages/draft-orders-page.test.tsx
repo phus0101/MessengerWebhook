@@ -28,6 +28,10 @@ describe("DraftOrdersPage", () => {
         assignedManagerEmail: "manager@test.local",
         itemCount: 1,
         grandTotal: 320000,
+        priceConfirmed: true,
+        promotionConfirmed: false,
+        shippingConfirmed: true,
+        inventoryConfirmed: false,
         createdAt: "2026-03-30T00:00:00Z"
       }
     ]);
@@ -39,5 +43,33 @@ describe("DraftOrdersPage", () => {
     expect(await screen.findByText("DR-001")).toBeInTheDocument();
     expect(screen.getByText("Pending review")).toBeInTheDocument();
     expect(screen.getByText("Low")).toBeInTheDocument();
+  });
+
+  it("shows provisional label when shipping is not confirmed", async () => {
+    mockedApi.getDraftOrders.mockResolvedValueOnce([
+      {
+        id: "draft-1",
+        draftCode: "DR-001",
+        facebookPageId: "PAGE_1",
+        customerName: "Khach test",
+        customerPhone: "0900000001",
+        shippingAddress: "1 Nguyen Hue",
+        status: "PendingReview",
+        riskLevel: "Low",
+        requiresManualReview: true,
+        assignedManagerEmail: "manager@test.local",
+        itemCount: 1,
+        grandTotal: 320000,
+        priceConfirmed: true,
+        promotionConfirmed: false,
+        shippingConfirmed: false,
+        inventoryConfirmed: false,
+        createdAt: "2026-03-30T00:00:00Z"
+      }
+    ]);
+
+    renderWithProviders(<DraftOrdersPage />);
+
+    expect(await screen.findByText(/tạm tính/i)).toBeInTheDocument();
   });
 });

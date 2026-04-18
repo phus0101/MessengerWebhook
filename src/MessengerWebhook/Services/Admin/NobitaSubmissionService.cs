@@ -137,25 +137,45 @@ public class NobitaSubmissionService : INobitaSubmissionService
             return new AdminCommandResult(false, "Đơn này đã được gửi sang Nobita.");
         }
 
+        if (draft.SubmissionClaimedAt != null)
+        {
+            return new AdminCommandResult(false, "Đơn đang được gửi sang Nobita bởi một yêu cầu khác.");
+        }
+
         var validationError = await ValidateDraftAsync(user, draft, cancellationToken);
         if (validationError != null)
         {
             return validationError;
         }
 
-        draft.ReviewedAt ??= DateTime.UtcNow;
+        var claimedAt = DateTime.UtcNow;
+        draft.ReviewedAt ??= claimedAt;
         draft.ReviewedByEmail ??= user.Email;
-        draft.Status = forceApprove ? DraftOrderStatus.Approved : draft.Status;
+        draft.Status = DraftOrderStatus.SubmittingToNobita;
         draft.SubmissionAttemptCount += 1;
-        draft.LastSubmissionAttemptAt = DateTime.UtcNow;
+        draft.LastSubmissionAttemptAt = claimedAt;
+        draft.SubmissionClaimedAt = claimedAt;
+        draft.SubmissionVersionToken = Guid.NewGuid();
+        draft.LastSubmissionError = null;
+        draft.UpdatedAt = claimedAt;
 
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return new AdminCommandResult(false, "Đơn đang được gửi sang Nobita bởi một yêu cầu khác.");
+        }
+
+        string? orderId;
         try
         {
             var products = await _dbContext.Products
                 .Where(x => draft.Items.Select(i => i.ProductCode).Contains(x.Code) && (x.TenantId == user.TenantId || x.TenantId == null))
                 .ToDictionaryAsync(x => x.Code, cancellationToken);
 
-            var orderId = await _nobitaClient.CreateOrderAsync(
+            orderId = await _nobitaClient.CreateOrderAsync(
                 new NobitaOrderRequest(
                     draft.CustomerName ?? "Khách hàng Messenger",
                     draft.CustomerPhone,
@@ -168,21 +188,11 @@ public class NobitaSubmissionService : INobitaSubmissionService
                     draft.GrandTotal,
                     draft.CustomerNotes),
                 cancellationToken);
-
-            draft.Status = DraftOrderStatus.SubmittedToNobita;
-            draft.SubmittedAt = DateTime.UtcNow;
-            draft.SubmittedByEmail = user.Email;
-            draft.NobitaOrderId = orderId;
-            draft.LastSubmissionError = null;
-            draft.UpdatedAt = DateTime.UtcNow;
-
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            await _adminAuditService.LogAsync(user, "approve-submit", "draft-order", draft.Id.ToString(), orderId, cancellationToken);
-            return new AdminCommandResult(true, "Đã gửi đơn sang Nobita.", orderId);
         }
         catch (Exception ex)
         {
             draft.Status = DraftOrderStatus.SubmitFailed;
+            draft.SubmissionClaimedAt = null;
             draft.LastSubmissionError = ex.Message;
             draft.UpdatedAt = DateTime.UtcNow;
 
@@ -190,6 +200,18 @@ public class NobitaSubmissionService : INobitaSubmissionService
             await _adminAuditService.LogAsync(user, "submit-failed", "draft-order", draft.Id.ToString(), ex.Message, cancellationToken);
             return new AdminCommandResult(false, "Gửi Nobita thất bại.", ex.Message);
         }
+
+        draft.Status = DraftOrderStatus.SubmittedToNobita;
+        draft.SubmittedAt = DateTime.UtcNow;
+        draft.SubmittedByEmail = user.Email;
+        draft.NobitaOrderId = orderId;
+        draft.SubmissionClaimedAt = null;
+        draft.LastSubmissionError = null;
+        draft.UpdatedAt = DateTime.UtcNow;
+        await TryApplyCustomerMetricsAsync(draft, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _adminAuditService.LogAsync(user, "approve-submit", "draft-order", draft.Id.ToString(), orderId, cancellationToken);
+        return new AdminCommandResult(true, "Đã gửi đơn sang Nobita.", orderId);
     }
 
     private async Task<AdminCommandResult?> ValidateDraftAsync(AdminUserContext user, DraftOrder draft, CancellationToken cancellationToken)
@@ -202,6 +224,11 @@ public class NobitaSubmissionService : INobitaSubmissionService
         if (draft.Items.Count == 0)
         {
             return new AdminCommandResult(false, "Đơn nháp chưa có sản phẩm.");
+        }
+
+        if (!draft.PriceConfirmed || !draft.ShippingConfirmed)
+        {
+            return new AdminCommandResult(false, "Đơn nháp chưa chốt đủ giá và phí ship để gửi xuống hệ thống.");
         }
 
         var products = await _dbContext.Products
@@ -227,6 +254,26 @@ public class NobitaSubmissionService : INobitaSubmissionService
         }
 
         return null;
+    }
+
+    private async Task TryApplyCustomerMetricsAsync(DraftOrder draft, CancellationToken cancellationToken)
+    {
+        if (draft.CustomerIdentityId is not Guid customerIdentityId || draft.CustomerMetricsAppliedAt != null)
+        {
+            return;
+        }
+
+        var customer = await _dbContext.CustomerIdentities.FirstOrDefaultAsync(x => x.Id == customerIdentityId, cancellationToken);
+        if (customer == null)
+        {
+            draft.CustomerMetricsAppliedAt = DateTime.UtcNow;
+            return;
+        }
+
+        customer.TotalOrders += 1;
+        customer.LifetimeValue += draft.GrandTotal;
+        customer.UpdatedAt = DateTime.UtcNow;
+        draft.CustomerMetricsAppliedAt = DateTime.UtcNow;
     }
 
     private Task<DraftOrder?> LoadDraftAsync(AdminUserContext user, Guid draftOrderId, CancellationToken cancellationToken)

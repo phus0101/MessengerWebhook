@@ -375,6 +375,7 @@ public class ConversationStateMachineTests
         Assert.Equal("12 Tran Hung Dao", context.GetData<string>("shippingAddress"));
         Assert.True(context.GetData<bool?>("contactNeedsConfirmation"));
         Assert.Equal("customer-identity", context.GetData<string>("contactMemorySource"));
+        Assert.Equal("confirm_old_contact", context.GetData<string>("pendingContactQuestion"));
     }
 
     [Fact]

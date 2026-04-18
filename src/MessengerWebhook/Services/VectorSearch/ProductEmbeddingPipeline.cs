@@ -43,29 +43,38 @@ public class ProductEmbeddingPipeline
         var text = BuildProductText(product);
         var embedding = await _embeddingService.EmbedAsync(text, cancellationToken);
 
-        var productEmbedding = await _dbContext.ProductEmbeddings
-            .FirstOrDefaultAsync(e => e.ProductId == productId, cancellationToken);
-
-        if (productEmbedding == null)
+        if (SupportsProductEmbeddings())
         {
-            productEmbedding = new ProductEmbedding
+            var productEmbedding = await _dbContext.ProductEmbeddings
+                .FirstOrDefaultAsync(e => e.ProductId == productId, cancellationToken);
+
+            if (productEmbedding == null)
             {
-                Id = Guid.NewGuid(),
-                TenantId = product.TenantId,
-                ProductId = productId,
-                Embedding = new Vector(embedding),
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-            _dbContext.ProductEmbeddings.Add(productEmbedding);
+                productEmbedding = new ProductEmbedding
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = product.TenantId,
+                    ProductId = productId,
+                    Embedding = new Vector(embedding),
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _dbContext.ProductEmbeddings.Add(productEmbedding);
+            }
+            else
+            {
+                productEmbedding.Embedding = new Vector(embedding);
+                productEmbedding.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
         else
         {
-            productEmbedding.Embedding = new Vector(embedding);
-            productEmbedding.UpdatedAt = DateTime.UtcNow;
+            _logger.LogInformation(
+                "Skipping pgvector persistence for product {ProductId} because ProductEmbedding is not in the current EF model",
+                productId);
         }
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
 
         // Upsert to Pinecone with graceful degradation
         try
@@ -117,36 +126,58 @@ public class ProductEmbeddingPipeline
                     texts,
                     cancellationToken);
 
-                // Load existing embeddings to check for upsert
-                var productIds = batch.Select(p => p.Id).ToList();
-                var existingEmbeddings = await _dbContext.ProductEmbeddings
-                    .Where(e => productIds.Contains(e.ProductId))
-                    .ToDictionaryAsync(e => e.ProductId, cancellationToken);
-
-                // Upsert to pgvector
-                foreach (var (product, idx) in batch.Select((p, i) => (p, i)))
+                if (SupportsProductEmbeddings())
                 {
-                    if (existingEmbeddings.TryGetValue(product.Id, out var existing))
+                    // Load existing embeddings to check for upsert
+                    var productIds = batch.Select(p => p.Id).ToList();
+                    var existingEmbeddings = await _dbContext.ProductEmbeddings
+                        .Where(e => productIds.Contains(e.ProductId))
+                        .ToDictionaryAsync(e => e.ProductId, cancellationToken);
+
+                    // Upsert to pgvector
+                    foreach (var (product, idx) in batch.Select((p, i) => (p, i)))
                     {
-                        existing.Embedding = new Vector(embeddings[idx]);
-                        existing.UpdatedAt = DateTime.UtcNow;
-                    }
-                    else
-                    {
-                        var productEmbedding = new ProductEmbedding
+                        if (existingEmbeddings.TryGetValue(product.Id, out var existing))
                         {
-                            Id = Guid.NewGuid(),
-                            TenantId = product.TenantId,
-                            ProductId = product.Id,
-                            Embedding = new Vector(embeddings[idx]),
-                            CreatedAt = DateTime.UtcNow,
-                            UpdatedAt = DateTime.UtcNow
-                        };
-                        _dbContext.ProductEmbeddings.Add(productEmbedding);
+                            existing.Embedding = new Vector(embeddings[idx]);
+                            existing.UpdatedAt = DateTime.UtcNow;
+                        }
+                        else
+                        {
+                            var productEmbedding = new ProductEmbedding
+                            {
+                                Id = Guid.NewGuid(),
+                                TenantId = product.TenantId,
+                                ProductId = product.Id,
+                                Embedding = new Vector(embeddings[idx]),
+                                CreatedAt = DateTime.UtcNow,
+                                UpdatedAt = DateTime.UtcNow
+                            };
+                            _dbContext.ProductEmbeddings.Add(productEmbedding);
+                        }
                     }
+
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Skipping pgvector persistence for batch starting at index {Index} because ProductEmbedding is not in the current EF model",
+                        i);
                 }
 
-                await _dbContext.SaveChangesAsync(cancellationToken);
+                indexedCount += batch.Count;
+
+                // Report progress based on local batch processing, even if Pinecone degrades.
+                if (jobId.HasValue && _progressTracker != null)
+                {
+                    var currentProduct = batch.Last();
+                    _progressTracker.UpdateProgress(
+                        jobId.Value,
+                        indexedCount,
+                        currentProduct.Id,
+                        currentProduct.Name);
+                }
 
                 // Upsert batch to Pinecone with graceful degradation
                 try
@@ -161,19 +192,6 @@ public class ProductEmbeddingPipeline
                         pineconeBatch,
                         cancellationToken);
 
-                    indexedCount += batch.Count;
-
-                    // Report progress
-                    if (jobId.HasValue && _progressTracker != null)
-                    {
-                        var currentProduct = batch.Last();
-                        _progressTracker.UpdateProgress(
-                            jobId.Value,
-                            indexedCount,
-                            currentProduct.Id,
-                            currentProduct.Name);
-                    }
-
                     _logger.LogInformation(
                         "Indexed batch {Current}/{Total} to both pgvector and Pinecone",
                         Math.Min(i + batchSize, products.Count),
@@ -182,9 +200,8 @@ public class ProductEmbeddingPipeline
                 catch (Exception ex)
                 {
                     _logger.LogError(ex,
-                        "Pinecone batch upsert failed for batch starting at {Index}. pgvector succeeded.",
+                        "Pinecone batch upsert failed for batch starting at {Index}. Local indexing still succeeded.",
                         i);
-                    // Don't throw - dual storage strategy
                 }
             }
 
@@ -205,6 +222,11 @@ public class ProductEmbeddingPipeline
             }
             throw;
         }
+    }
+
+    private bool SupportsProductEmbeddings()
+    {
+        return _dbContext.Model.FindEntityType(typeof(ProductEmbedding)) != null;
     }
 
     private string BuildProductText(Product product)

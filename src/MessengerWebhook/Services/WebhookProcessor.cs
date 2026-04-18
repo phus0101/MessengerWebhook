@@ -27,6 +27,7 @@ public class WebhookProcessor
     private readonly IBotLockService _botLockService;
     private readonly IHostEnvironment? _environment;
     private readonly AdminOptions _adminOptions;
+    private readonly FacebookPageConfigLookupService? _lookupService;
     private readonly ILogger<WebhookProcessor> _logger;
 
     public WebhookProcessor(
@@ -45,6 +46,7 @@ public class WebhookProcessor
             new NoOpBotLockService(),
             null,
             Options.Create(new AdminOptions()),
+            null,
             logger)
     {
     }
@@ -59,6 +61,7 @@ public class WebhookProcessor
         IBotLockService botLockService,
         IHostEnvironment? environment,
         IOptions<AdminOptions> adminOptions,
+        FacebookPageConfigLookupService? lookupService,
         ILogger<WebhookProcessor> logger)
     {
         _cache = cache;
@@ -70,6 +73,7 @@ public class WebhookProcessor
         _botLockService = botLockService;
         _environment = environment;
         _adminOptions = adminOptions.Value;
+        _lookupService = lookupService;
         _logger = logger;
     }
 
@@ -144,10 +148,10 @@ public class WebhookProcessor
         if (!string.IsNullOrWhiteSpace(text))
         {
             _logger.LogInformation(
-                "Processing message from {SenderId} on page {PageId}: {Text}",
+                "Processing message from {SenderId} on page {PageId}. MessageLength={MessageLength}",
                 senderId,
                 pageId,
-                text);
+                text.Length);
 
             try
             {
@@ -223,7 +227,14 @@ public class WebhookProcessor
 
         if (pageConfig == null)
         {
-            pageConfig = await TryAdoptUnknownDevelopmentPageAsync(pageId);
+            if (_lookupService != null)
+            {
+                pageConfig = await _lookupService.EnsurePageConfigAsync(pageId);
+            }
+            else
+            {
+                pageConfig = await TryAdoptUnknownDevelopmentPageAsync(pageId); // fallback for tests
+            }
         }
 
         _tenantContext.Initialize(pageConfig?.TenantId, pageId, pageConfig?.DefaultManagerEmail);

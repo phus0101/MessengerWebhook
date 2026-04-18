@@ -48,6 +48,11 @@ public class AdminDraftOrderService : IAdminDraftOrderService
             return new AdminCommandResult(false, "Don da gui sang Nobita, khong the chinh sua.");
         }
 
+        if (draft.SubmissionClaimedAt != null)
+        {
+            return new AdminCommandResult(false, "Don dang duoc gui sang Nobita, vui long thu lai sau.");
+        }
+
         var validation = await ValidateRequestAsync(user, request, cancellationToken);
         if (!validation.Succeeded)
         {
@@ -151,6 +156,10 @@ public class AdminDraftOrderService : IAdminDraftOrderService
         draft.MerchandiseTotal = rebuiltItems.Sum(x => x.UnitPrice * x.Quantity);
         draft.ShippingFee = _freeshipCalculator.CalculateShippingFee(expandedProductCodes);
         draft.GrandTotal = draft.MerchandiseTotal + draft.ShippingFee;
+        draft.PriceConfirmed = true;
+        draft.PromotionConfirmed = false;
+        draft.ShippingConfirmed = true;
+        draft.InventoryConfirmed = false;
         draft.Status = DraftOrderStatus.PendingReview;
         draft.ReviewedAt = null;
         draft.ReviewedByEmail = null;

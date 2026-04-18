@@ -43,21 +43,29 @@ public class WebhookEventDeserializationTests
 
         // Assert
         webhookEvent.Should().NotBeNull();
-        webhookEvent!.Object.Should().Be("page");
-        webhookEvent.Entry.Should().HaveCount(1);
+        var validWebhookEvent = webhookEvent!;
+        validWebhookEvent.Object.Should().Be("page");
+        validWebhookEvent.Entry.Should().HaveCount(1);
 
-        var entry = webhookEvent.Entry[0];
+        var entry = validWebhookEvent.Entry[0];
         entry.Id.Should().Be("123456789");
         entry.Time.Should().Be(1458692752478);
         entry.Messaging.Should().HaveCount(1);
 
-        var messagingEvent = entry.Messaging[0];
-        messagingEvent.Sender.Id.Should().Be("USER_ID");
-        messagingEvent.Recipient.Id.Should().Be("PAGE_ID");
+        var messagingEvent = entry.Messaging![0];
+        messagingEvent.Sender.Should().NotBeNull();
+        var sender = messagingEvent.Sender!;
+        sender.Id.Should().Be("USER_ID");
+
+        messagingEvent.Recipient.Should().NotBeNull();
+        var recipient = messagingEvent.Recipient!;
+        recipient.Id.Should().Be("PAGE_ID");
+
         messagingEvent.Timestamp.Should().Be(1458692752478);
         messagingEvent.Message.Should().NotBeNull();
-        messagingEvent.Message!.Mid.Should().Be("mid.1457764197618:41d102a3e1ae206a38");
-        messagingEvent.Message.Text.Should().Be("hello, world!");
+        var message = messagingEvent.Message!;
+        message.Mid.Should().Be("mid.1457764197618:41d102a3e1ae206a38");
+        message.Text.Should().Be("hello, world!");
         messagingEvent.Postback.Should().BeNull();
     }
 
@@ -89,12 +97,18 @@ public class WebhookEventDeserializationTests
 
         // Assert
         webhookEvent.Should().NotBeNull();
-        webhookEvent!.Object.Should().Be("page");
+        var validWebhookEvent = webhookEvent!;
+        validWebhookEvent.Object.Should().Be("page");
+        validWebhookEvent.Entry.Should().HaveCount(1);
 
-        var messagingEvent = webhookEvent.Entry[0].Messaging[0];
+        var entry = validWebhookEvent.Entry[0];
+        entry.Messaging.Should().HaveCount(1);
+
+        var messagingEvent = entry.Messaging![0];
         messagingEvent.Postback.Should().NotBeNull();
-        messagingEvent.Postback!.Title.Should().Be("Get Started");
-        messagingEvent.Postback.Payload.Should().Be("GET_STARTED_PAYLOAD");
+        var postback = messagingEvent.Postback!;
+        postback.Title.Should().Be("Get Started");
+        postback.Payload.Should().Be("GET_STARTED_PAYLOAD");
         messagingEvent.Message.Should().BeNull();
     }
 
@@ -131,12 +145,22 @@ public class WebhookEventDeserializationTests
 
         // Assert
         webhookEvent.Should().NotBeNull();
-        var message = webhookEvent!.Entry[0].Messaging[0].Message;
-        message.Should().NotBeNull();
-        message!.Attachments.Should().HaveCount(1);
-        message.Attachments![0].Type.Should().Be("image");
-        message.Attachments[0].Payload.Should().NotBeNull();
-        message.Attachments[0].Payload!.Url.Should().Be("https://example.com/image.jpg");
+        var validWebhookEvent = webhookEvent!;
+        validWebhookEvent.Entry.Should().HaveCount(1);
+
+        var entry = validWebhookEvent.Entry[0];
+        entry.Messaging.Should().HaveCount(1);
+
+        var messagingEvent = entry.Messaging![0];
+        messagingEvent.Message.Should().NotBeNull();
+        var message = messagingEvent.Message!;
+        message.Attachments.Should().HaveCount(1);
+
+        var attachment = message.Attachments![0];
+        attachment.Type.Should().Be("image");
+        attachment.Payload.Should().NotBeNull();
+        var payload = attachment.Payload!;
+        payload.Url.Should().Be("https://example.com/image.jpg");
     }
 
     [Fact]
@@ -182,9 +206,20 @@ public class WebhookEventDeserializationTests
 
         // Assert
         webhookEvent.Should().NotBeNull();
-        webhookEvent!.Entry.Should().HaveCount(2);
-        webhookEvent.Entry[0].Messaging[0].Message!.Text.Should().Be("Message 1");
-        webhookEvent.Entry[1].Messaging[0].Message!.Text.Should().Be("Message 2");
+        var validWebhookEvent = webhookEvent!;
+        validWebhookEvent.Entry.Should().HaveCount(2);
+
+        var firstEntry = validWebhookEvent.Entry[0];
+        firstEntry.Messaging.Should().HaveCount(1);
+        var firstMessage = firstEntry.Messaging![0].Message;
+        firstMessage.Should().NotBeNull();
+        firstMessage!.Text.Should().Be("Message 1");
+
+        var secondEntry = validWebhookEvent.Entry[1];
+        secondEntry.Messaging.Should().HaveCount(1);
+        var secondMessage = secondEntry.Messaging![0].Message;
+        secondMessage.Should().NotBeNull();
+        secondMessage!.Text.Should().Be("Message 2");
     }
 
     [Fact]
@@ -226,9 +261,19 @@ public class WebhookEventDeserializationTests
 
         // Assert
         webhookEvent.Should().NotBeNull();
-        webhookEvent!.Entry[0].Messaging.Should().HaveCount(2);
-        webhookEvent.Entry[0].Messaging[0].Sender.Id.Should().Be("USER_1");
-        webhookEvent.Entry[0].Messaging[1].Sender.Id.Should().Be("USER_2");
+        var validWebhookEvent = webhookEvent!;
+        validWebhookEvent.Entry.Should().HaveCount(1);
+
+        var entry = validWebhookEvent.Entry[0];
+        entry.Messaging.Should().HaveCount(2);
+
+        var firstSender = entry.Messaging![0].Sender;
+        firstSender.Should().NotBeNull();
+        firstSender!.Id.Should().Be("USER_1");
+
+        var secondSender = entry.Messaging[1].Sender;
+        secondSender.Should().NotBeNull();
+        secondSender!.Id.Should().Be("USER_2");
     }
 
     [Fact]
@@ -251,7 +296,9 @@ public class WebhookEventDeserializationTests
 
         // Assert
         webhookEvent.Should().NotBeNull();
-        webhookEvent!.Entry[0].Messaging.Should().BeEmpty();
+        var validWebhookEvent = webhookEvent!;
+        validWebhookEvent.Entry.Should().HaveCount(1);
+        validWebhookEvent.Entry[0].Messaging.Should().BeEmpty();
     }
 
     [Fact]

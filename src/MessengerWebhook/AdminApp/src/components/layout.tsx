@@ -6,7 +6,8 @@ const navItems = [
   { to: "/draft-orders", label: "Đơn nháp" },
   { to: "/support-cases", label: "Support cases" },
   { to: "/product-mappings", label: "Product mapping" },
-  { to: "/vector-search", label: "Vector Search" }
+  { to: "/vector-search", label: "Vector Search" },
+  { to: "/metrics", label: "A/B Testing Metrics" }
 ];
 
 export function AdminLayout() {

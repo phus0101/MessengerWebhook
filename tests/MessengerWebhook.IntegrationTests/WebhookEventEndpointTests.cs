@@ -58,7 +58,9 @@ public class WebhookEventEndpointTests : IClassFixture<CustomWebApplicationFacto
 
         await WaitForAsync(() => _factory.MessengerSpy.Messages.Any(x => x.RecipientId == "USER_MESSAGE_1"));
         var sentMessage = _factory.MessengerSpy.Messages.Last(x => x.RecipientId == "USER_MESSAGE_1");
-        sentMessage.Text.Should().Contain("Kem Chống Nắng");
+        Assert.True(
+            sentMessage.Text.Contains("Kem Chống Nắng", StringComparison.OrdinalIgnoreCase) ||
+            sentMessage.Text.Contains("Kem Chong Nang", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

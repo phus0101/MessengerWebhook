@@ -4,6 +4,7 @@ using MessengerWebhook.Configuration;
 using MessengerWebhook.Models;
 using MessengerWebhook.Services.AI.Models;
 using MessengerWebhook.Services.AI.Strategies;
+using MessengerWebhook.Utilities;
 using Microsoft.Extensions.Options;
 using AiConversationMessage = MessengerWebhook.Services.AI.Models.ConversationMessage;
 
@@ -16,6 +17,7 @@ public class GeminiService : IGeminiService
     private readonly IModelSelectionStrategy _modelStrategy;
     private readonly ILogger<GeminiService> _logger;
     private readonly string _systemPrompt;
+    private readonly string _personalityTraits;
 
     public GeminiService(
         HttpClient httpClient,
@@ -39,6 +41,19 @@ public class GeminiService : IGeminiService
         {
             _logger.LogWarning("System prompt file not found at {Path}, using default", promptPath);
             _systemPrompt = GetDefaultSystemPrompt();
+        }
+
+        // Load personality traits from file (once at initialization)
+        var personalityPath = Path.Combine(AppContext.BaseDirectory, "Prompts/personality-traits.txt");
+        if (File.Exists(personalityPath))
+        {
+            _personalityTraits = File.ReadAllText(personalityPath);
+            _logger.LogInformation("Loaded personality traits from {Path}", personalityPath);
+        }
+        else
+        {
+            _logger.LogWarning("Personality traits file not found at {Path}", personalityPath);
+            _personalityTraits = string.Empty;
         }
     }
 
@@ -142,7 +157,9 @@ public class GeminiService : IGeminiService
 
     private string GetSystemPrompt()
     {
-        return _systemPrompt;
+        var systemPrompt = _systemPrompt;
+        systemPrompt = systemPrompt.Replace("{PERSONALITY_TRAITS}", _personalityTraits);
+        return systemPrompt;
     }
 
     private string GetDefaultSystemPrompt()
@@ -169,23 +186,36 @@ Quy tắc: Trả lời ngắn gọn (2-3 câu), đặt câu hỏi làm rõ nhu c
             };
         }
 
+        var maskedPhone = PiiRedaction.MaskPhone(contextPhone);
+        var maskedAddress = PiiRedaction.MaskAddress(contextAddress);
+        var hasRememberedPhone = !string.IsNullOrWhiteSpace(contextPhone);
+        var hasRememberedAddress = !string.IsNullOrWhiteSpace(contextAddress);
+
         var prompt = $@"You are a Vietnamese customer service intent classifier.
 
 Customer message: ""{message}""
-Context: Customer previously provided phone={contextPhone}, address={contextAddress}. Bot asked if they want to reuse this info.
+Context: Customer has remembered contact info available. Bot asked if they want to reuse this info.
+Remembered contact summary: hasPhone={hasRememberedPhone}, hasAddress={hasRememberedAddress}, maskedPhone={maskedPhone}, maskedAddress={maskedAddress}.
 
 Task: Determine if the customer is CONFIRMING they want to reuse the remembered contact info.
 
+IMPORTANT: Questions about products, shipping, price, or policies are NOT confirmations.
+
 Confirmation examples:
 - ""dung roi"" (yes correct)
-- ""ok em"" (ok)
 - ""van dung"" (still use it)
-- ""len don luon"" (create order now)
+- ""dung thong tin cu"" (use old info)
+- ""nhu cu"" (same as before)
+- ""cu nhu vay"" (keep it as is)
+- ""thong tin cu"" (use old contact info)
 
 NOT confirmation examples:
 - ""ship bao lau?"" (question about shipping time)
 - ""ship nhanh khong?"" (question about fast shipping)
 - ""gia bao nhieu?"" (question about price)
+- ""co freeship khong?"" (question about free shipping)
+- ""co khuyen mai gi khong?"" (question about promotions)
+- Any message with ""?"" asking about product/policy
 
 Respond ONLY with valid JSON:
 {{
@@ -241,19 +271,19 @@ Respond ONLY with valid JSON:
 
             jsonResult.DetectionMethod = "ai-reasoning";
             _logger.LogInformation(
-                "AI confirmation detection: IsConfirming={IsConfirming}, Confidence={Confidence}, Message='{Message}'",
-                jsonResult.IsConfirming, jsonResult.Confidence, message);
+                "AI confirmation detection: IsConfirming={IsConfirming}, Confidence={Confidence}, MessageLength={MessageLength}",
+                jsonResult.IsConfirming, jsonResult.Confidence, message.Length);
 
             return jsonResult;
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarning("AI confirmation detection timeout for message: '{Message}'", message);
+            _logger.LogWarning("AI confirmation detection timeout. MessageLength={MessageLength}", message.Length);
             return FallbackResult("Timeout");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "AI confirmation detection error for message: '{Message}'", message);
+            _logger.LogError(ex, "AI confirmation detection error. MessageLength={MessageLength}", message.Length);
             return FallbackResult($"Exception: {ex.Message}");
         }
     }
@@ -406,19 +436,19 @@ Respond ONLY with valid JSON:
 
             jsonResult.DetectionMethod = "ai-reasoning";
             _logger.LogInformation(
-                "AI intent detection: Intent={Intent}, Confidence={Confidence}, Message='{Message}'",
-                jsonResult.Intent, jsonResult.Confidence, message);
+                "AI intent detection: Intent={Intent}, Confidence={Confidence}, MessageLength={MessageLength}",
+                jsonResult.Intent, jsonResult.Confidence, message.Length);
 
             return jsonResult;
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarning("AI intent detection timeout for message: '{Message}'", message);
+            _logger.LogWarning("AI intent detection timeout. MessageLength={MessageLength}", message.Length);
             return IntentFallbackResult("Timeout");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "AI intent detection error for message: '{Message}'", message);
+            _logger.LogError(ex, "AI intent detection error. MessageLength={MessageLength}", message.Length);
             return IntentFallbackResult($"Exception: {ex.Message}");
         }
     }

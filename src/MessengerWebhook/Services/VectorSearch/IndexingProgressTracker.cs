@@ -28,37 +28,28 @@ public class IndexingProgressTracker : IIndexingProgressTracker, IDisposable
 
     public Guid CreateJob(int totalProducts)
     {
-        // Atomic check-and-create to prevent race condition
         _jobCreationLock.Wait();
         try
         {
-            // Check for active jobs
-            var activeJobs = _jobs.Values.Where(j => j.Status == IndexingStatus.Running).ToList();
-            if (activeJobs.Count > 0)
+            return CreateJobUnsafe(totalProducts);
+        }
+        finally
+        {
+            _jobCreationLock.Release();
+        }
+    }
+
+    public Guid? TryCreateJob(int totalProducts)
+    {
+        _jobCreationLock.Wait();
+        try
+        {
+            if (_jobs.Values.Any(j => j.Status == IndexingStatus.Running))
             {
-                throw new InvalidOperationException($"An indexing job is already running: {activeJobs[0].JobId}");
+                return null;
             }
 
-            var jobId = Guid.NewGuid();
-            var job = new IndexingJob
-            {
-                JobId = jobId,
-                StartedAt = DateTime.UtcNow,
-                Status = IndexingStatus.Running,
-                TotalProducts = totalProducts,
-                IndexedProducts = 0
-            };
-
-            // Enforce max capacity
-            if (_jobs.Count >= MaxJobs)
-            {
-                RemoveOldestCompletedJob();
-            }
-
-            _jobs[jobId] = job;
-            _logger.LogInformation("Created indexing job {JobId} for {TotalProducts} products", jobId, totalProducts);
-
-            return jobId;
+            return CreateJobUnsafe(totalProducts);
         }
         finally
         {
@@ -115,6 +106,33 @@ public class IndexingProgressTracker : IIndexingProgressTracker, IDisposable
         return _jobs.Values
             .Where(j => j.Status == IndexingStatus.Running)
             .ToList();
+    }
+
+    public void Reset()
+    {
+        _jobs.Clear();
+    }
+
+    private Guid CreateJobUnsafe(int totalProducts)
+    {
+        var jobId = Guid.NewGuid();
+        var job = new IndexingJob
+        {
+            JobId = jobId,
+            StartedAt = DateTime.UtcNow,
+            Status = IndexingStatus.Running,
+            TotalProducts = totalProducts,
+            IndexedProducts = 0
+        };
+
+        if (_jobs.Count >= MaxJobs)
+        {
+            RemoveOldestCompletedJob();
+        }
+
+        _jobs[jobId] = job;
+        _logger.LogInformation("Created indexing job {JobId} for {TotalProducts} products", jobId, totalProducts);
+        return jobId;
     }
 
     private void CleanupExpiredJobs(object? state)

@@ -1,4 +1,9 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "includeCoAuthoredBy": false,
   "hooks": {
     "SessionStart": [
@@ -11,8 +16,17 @@
           },
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-state.cjs\"",
-            "_origin": "engineer"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-state.cjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/usage-quota-cache-refresh.cjs\"",
+            "timeout": 8
           }
         ]
       }
@@ -46,8 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-state.cjs\"",
-            "_origin": "engineer"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-state.cjs\""
           }
         ]
       }
@@ -62,6 +75,19 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/usage-context-awareness.cjs\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/dev-rules-reminder.cjs\""
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/usage-quota-cache-refresh.cjs\"",
             "timeout": 30
           }
         ]
@@ -101,8 +127,7 @@
           },
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/plan-format-kanban.cjs\"",
-            "_origin": "engineer"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/plan-format-kanban.cjs\""
           }
         ]
       },
@@ -112,6 +137,11 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/usage-context-awareness.cjs\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/usage-quota-cache-refresh.cjs\"",
             "timeout": 10
           }
         ]
@@ -142,8 +172,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-state.cjs\"",
-            "_origin": "engineer"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-state.cjs\""
           }
         ]
       }
@@ -163,11 +192,7 @@
     "postgres-best-practices@supabase-agent-skills": true,
     "typescript-lsp@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
-    "atlassian@claude-plugins-official": true
-  },
-  "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "attribution": {
-    "commit": "",
-    "pr": ""
+    "atlassian@claude-plugins-official": true,
+    "andrej-karpathy-skills@karpathy-skills": true
   }
 }

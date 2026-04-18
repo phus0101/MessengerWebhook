@@ -7,9 +7,9 @@ public class FreeshipCalculatorTests
     private readonly FreeshipCalculator _calculator = new();
 
     [Fact]
-    public void IsEligibleForFreeship_TwoProducts_ReturnsTrue()
+    public void IsEligibleForFreeship_TwoProductsWithoutCombo_ReturnsFalse()
     {
-        Assert.True(_calculator.IsEligibleForFreeship(new List<string> { "KCN", "KL" }));
+        Assert.False(_calculator.IsEligibleForFreeship(new List<string> { "KCN", "KL" }));
     }
 
     [Fact]
@@ -19,9 +19,9 @@ public class FreeshipCalculatorTests
     }
 
     [Fact]
-    public void IsEligibleForFreeship_ComboProduct_ReturnsTrue()
+    public void IsEligibleForFreeship_ComboProductWithoutPolicy_ReturnsFalse()
     {
-        Assert.True(_calculator.IsEligibleForFreeship(new List<string> { "COMBO_2" }));
+        Assert.False(_calculator.IsEligibleForFreeship(new List<string> { "COMBO_2" }));
     }
 
     [Fact]
@@ -31,9 +31,10 @@ public class FreeshipCalculatorTests
     }
 
     [Fact]
-    public void GetFreeshipMessage_UsesCurrentSalesCopy()
+    public void GetFreeshipMessage_UsesPolicyDrivenCopy()
     {
-        Assert.Equal("Mien phi van chuyen", _calculator.GetFreeshipMessage(true));
+        Assert.Contains("chinh sach hien tai", _calculator.GetFreeshipMessage(true));
+        Assert.Contains("chua nam trong chinh sach freeship", _calculator.GetFreeshipMessage(false));
         Assert.Contains("30,000d", _calculator.GetFreeshipMessage(false));
     }
 }

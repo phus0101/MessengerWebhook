@@ -42,12 +42,13 @@ public class DraftOrderService : IDraftOrderService
             throw new InvalidOperationException("Cannot create draft order without phone number and shipping address.");
         }
 
+        var shouldPersistCurrentContact = context.GetData<bool?>("saveCurrentContactForFuture") == true;
         var customer = await _customerIntelligenceService.GetOrCreateAsync(
             context.FacebookPSID,
             context.GetData<string>("facebookPageId") ?? _tenantContext.FacebookPageId,
-            phoneNumber,
+            shouldPersistCurrentContact ? phoneNumber : null,
             context.GetData<string>("customerName"),
-            shippingAddress,
+            shouldPersistCurrentContact ? shippingAddress : null,
             cancellationToken);
 
         var draftOrder = new DraftOrder
@@ -62,8 +63,15 @@ public class DraftOrderService : IDraftOrderService
             CustomerPhone = phoneNumber,
             ShippingAddress = shippingAddress,
             ShippingFee = context.GetData<decimal?>("shippingFee") ?? 0,
+            PriceConfirmed = context.GetData<bool?>("price_confirmed") == true,
+            PromotionConfirmed = context.GetData<bool?>("promotion_confirmed") == true,
+            ShippingConfirmed = context.GetData<bool?>("shipping_policy_confirmed") == true,
+            InventoryConfirmed = context.GetData<bool?>("inventory_confirmed") == true,
             AssignedManagerEmail = _tenantContext.ManagerEmail
         };
+
+        var selectedProductQuantities = context.GetData<Dictionary<string, int>>("selectedProductQuantities")
+                                        ?? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var productCode in productCodes.Distinct(StringComparer.OrdinalIgnoreCase))
         {
@@ -73,11 +81,15 @@ public class DraftOrderService : IDraftOrderService
                 continue;
             }
 
+            var quantity = selectedProductQuantities.TryGetValue(productCode, out var persistedQuantity) && persistedQuantity > 0
+                ? persistedQuantity
+                : 1;
+
             draftOrder.Items.Add(new DraftOrderItem
             {
                 ProductCode = product.Code,
                 ProductName = product.Name,
-                Quantity = 1,
+                Quantity = quantity,
                 UnitPrice = product.BasePrice,
                 GiftCode = context.GetData<string>("selectedGiftCode"),
                 GiftName = context.GetData<string>("selectedGiftName")
@@ -100,8 +112,6 @@ public class DraftOrderService : IDraftOrderService
         draftOrder.RiskSummary = riskSignal.Reason;
         draftOrder.RequiresManualReview = true;
 
-        customer.TotalOrders += 1;
-        customer.LifetimeValue += draftOrder.GrandTotal;
         customer.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);

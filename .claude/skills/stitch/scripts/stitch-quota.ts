@@ -18,7 +18,9 @@ import os from "os";
 
 const QUOTA_DIR = path.join(os.homedir(), ".claudekit");
 const QUOTA_FILE = path.join(QUOTA_DIR, ".stitch-quota.json");
-const DEFAULT_LIMIT = parseInt(process.env.STITCH_QUOTA_LIMIT || "200", 10);
+// Stitch free tier: 400 daily credits (generate), 15 redesign credits (edit)
+// Source: stitch.withgoogle.com dashboard. No API to fetch real usage.
+const DEFAULT_LIMIT = parseInt(process.env.STITCH_QUOTA_LIMIT || "400", 10);
 const WARN_THRESHOLD = 0.2; // Warn when <20% remaining
 
 interface QuotaState {

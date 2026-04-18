@@ -92,6 +92,30 @@ builder.Services.Configure<VertexAIOptions>(
     builder.Configuration.GetSection("VertexAI"));
 builder.Services.Configure<PineconeOptions>(
     builder.Configuration.GetSection("Pinecone"));
+builder.Services.Configure<MessengerWebhook.Services.Emotion.Configuration.EmotionDetectionOptions>(
+    builder.Configuration.GetSection("EmotionDetection"));
+builder.Services.Configure<MessengerWebhook.Services.Tone.Configuration.ToneMatchingOptions>(
+    builder.Configuration.GetSection("ToneMatching"));
+builder.Services.Configure<MessengerWebhook.Services.Conversation.Configuration.ConversationAnalysisOptions>(
+    builder.Configuration.GetSection("ConversationAnalysis"));
+builder.Services.Configure<MessengerWebhook.Services.SmallTalk.Configuration.SmallTalkOptions>(
+    builder.Configuration.GetSection("SmallTalk"));
+builder.Services.Configure<MessengerWebhook.Services.ABTesting.Configuration.ABTestingOptions>(
+    builder.Configuration.GetSection("ABTesting"));
+
+// Register config validators and enable eager validation
+builder.Services.AddSingleton<IValidateOptions<MessengerWebhook.Services.SmallTalk.Configuration.SmallTalkOptions>, MessengerWebhook.Services.SmallTalk.Configuration.ValidateSmallTalkOptions>();
+builder.Services.AddSingleton<IValidateOptions<FacebookOptions>, ValidateFacebookOptions>();
+builder.Services.AddSingleton<IValidateOptions<WebhookOptions>, ValidateWebhookOptions>();
+builder.Services.AddSingleton<IValidateOptions<MessengerWebhook.Services.Emotion.Configuration.EmotionDetectionOptions>, MessengerWebhook.Services.Emotion.Configuration.ValidateEmotionDetectionOptions>();
+builder.Services.AddSingleton<IValidateOptions<MessengerWebhook.Services.Tone.Configuration.ToneMatchingOptions>, MessengerWebhook.Services.Tone.Configuration.ValidateToneMatchingOptions>();
+builder.Services.AddSingleton<IValidateOptions<MessengerWebhook.Services.ABTesting.Configuration.ABTestingOptions>, MessengerWebhook.Services.ABTesting.Configuration.ValidateABTestingOptions>();
+builder.Services.AddOptions<FacebookOptions>().ValidateOnStart();
+builder.Services.AddOptions<WebhookOptions>().ValidateOnStart();
+builder.Services.AddOptions<MessengerWebhook.Services.SmallTalk.Configuration.SmallTalkOptions>().ValidateOnStart();
+builder.Services.AddOptions<MessengerWebhook.Services.Emotion.Configuration.EmotionDetectionOptions>().ValidateOnStart();
+builder.Services.AddOptions<MessengerWebhook.Services.Tone.Configuration.ToneMatchingOptions>().ValidateOnStart();
+builder.Services.AddOptions<MessengerWebhook.Services.ABTesting.Configuration.ABTestingOptions>().ValidateOnStart();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
@@ -102,7 +126,9 @@ builder.Services
         var adminOptions = builder.Configuration.GetSection(AdminOptions.SectionName).Get<AdminOptions>() ?? new AdminOptions();
         options.Cookie.Name = adminOptions.CookieName;
         options.Cookie.HttpOnly = true;
+        // Use Lax for development (works with HTTP), Strict for production
         options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.LoginPath = adminOptions.LoginPath;
         options.SlidingExpiration = true;
         options.Events.OnRedirectToLogin = context =>
@@ -166,6 +192,7 @@ builder.Services.AddScoped<IKnowledgeImportService, KnowledgeImportService>();
 builder.Services.AddScoped<ILiveCommentAutomationService, LiveCommentAutomationService>();
 builder.Services.AddScoped<ICustomerIntelligenceService, CustomerIntelligenceService>();
 builder.Services.AddScoped<IDraftOrderService, DraftOrderService>();
+builder.Services.AddScoped<DraftOrderCoordinator>();
 builder.Services.AddScoped<IAdminAuthService, AdminAuthService>();
 builder.Services.AddScoped<IAdminAuditService, AdminAuditService>();
 builder.Services.AddScoped<IAdminDashboardQueryService, AdminDashboardQueryService>();
@@ -177,8 +204,13 @@ builder.Services.AddScoped<IEmailTemplateService, EmailTemplateService>();
 builder.Services.AddScoped<ISupportCaseTokenService, SupportCaseTokenService>();
 builder.Services.AddScoped<IPasswordHasher<ManagerProfile>, PasswordHasher<ManagerProfile>>();
 
+// Register consolidated page config service (replaces duplicate middleware/processor logic)
+builder.Services.AddScoped<FacebookPageConfigLookupService>();
+
 // Register repositories
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
+
+
 builder.Services.AddScoped<ISessionRepository, SessionRepository>();
 builder.Services.AddScoped<ISkinProfileRepository, SkinProfileRepository>();
 builder.Services.AddScoped<IConversationMessageRepository, ConversationMessageRepository>();
@@ -195,6 +227,58 @@ builder.Services.AddScoped<IProductMappingService, ProductMappingService>();
 builder.Services.AddScoped<IGiftSelectionService, GiftSelectionService>();
 builder.Services.AddScoped<IFreeshipCalculator, FreeshipCalculator>();
 builder.Services.AddScoped<IQuickReplyHandler, QuickReplyHandler>();
+
+// Emotion detection service (Scoped because it depends on ITenantContext)
+builder.Services.AddScoped<MessengerWebhook.Services.Emotion.IEmotionDetectionService, MessengerWebhook.Services.Emotion.EmotionDetectionService>();
+
+// Tone matching service (Scoped because it depends on ITenantContext)
+builder.Services.AddScoped<MessengerWebhook.Services.Tone.IToneMatchingService, MessengerWebhook.Services.Tone.ToneMatchingService>();
+
+// Conversation context analyzer (Scoped because it depends on ITenantContext)
+builder.Services.Configure<MessengerWebhook.Services.Conversation.Configuration.ConversationAnalysisOptions>(
+    builder.Configuration.GetSection("ConversationAnalysis"));
+builder.Services.AddSingleton<IValidateOptions<MessengerWebhook.Services.Conversation.Configuration.ConversationAnalysisOptions>, MessengerWebhook.Services.Conversation.Configuration.ValidateConversationAnalysisOptions>();
+builder.Services.AddOptions<MessengerWebhook.Services.Conversation.Configuration.ConversationAnalysisOptions>().ValidateOnStart();
+builder.Services.AddScoped<MessengerWebhook.Services.Conversation.PatternDetector>();
+builder.Services.AddScoped<MessengerWebhook.Services.Conversation.TopicAnalyzer>();
+builder.Services.AddScoped<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer, MessengerWebhook.Services.Conversation.ConversationContextAnalyzer>();
+
+// Register small talk service
+builder.Services.AddSingleton<MessengerWebhook.Services.SmallTalk.SmallTalkDetector>();
+builder.Services.AddSingleton<MessengerWebhook.Services.SmallTalk.ISmallTalkService, MessengerWebhook.Services.SmallTalk.SmallTalkService>();
+
+// Register response validation service
+builder.Services.Configure<MessengerWebhook.Services.ResponseValidation.Configuration.ResponseValidationOptions>(
+    builder.Configuration.GetSection("ResponseValidation"));
+builder.Services.AddSingleton<IValidateOptions<MessengerWebhook.Services.ResponseValidation.Configuration.ResponseValidationOptions>, MessengerWebhook.Services.ResponseValidation.Configuration.ValidateResponseValidationOptions>();
+builder.Services.AddOptions<MessengerWebhook.Services.ResponseValidation.Configuration.ResponseValidationOptions>().ValidateOnStart();
+builder.Services.AddSingleton<MessengerWebhook.Services.ResponseValidation.IResponseValidationService, MessengerWebhook.Services.ResponseValidation.ResponseValidationService>();
+
+// Register A/B testing configuration and service
+builder.Services.Configure<MessengerWebhook.Services.ABTesting.Configuration.ABTestingOptions>(
+    builder.Configuration.GetSection(MessengerWebhook.Services.ABTesting.Configuration.ABTestingOptions.SectionName));
+builder.Services.AddSingleton<IValidateOptions<MessengerWebhook.Services.ABTesting.Configuration.ABTestingOptions>,
+    MessengerWebhook.Services.ABTesting.Configuration.ValidateABTestingOptions>();
+builder.Services.AddOptions<MessengerWebhook.Services.ABTesting.Configuration.ABTestingOptions>().ValidateOnStart();
+builder.Services.AddScoped<MessengerWebhook.Services.ABTesting.IABTestService, MessengerWebhook.Services.ABTesting.ABTestService>();
+
+// Register Metrics Collection
+builder.Services.Configure<MessengerWebhook.Services.Metrics.Configuration.MetricsOptions>(
+    builder.Configuration.GetSection(MessengerWebhook.Services.Metrics.Configuration.MetricsOptions.SectionName));
+builder.Services.AddSingleton<MessengerWebhook.Services.Metrics.IConversationMetricsService, MessengerWebhook.Services.Metrics.ConversationMetricsService>();
+builder.Services.AddHostedService<MessengerWebhook.Services.Metrics.MetricsBackgroundService>();
+
+// Register CSAT Survey Service
+builder.Services.Configure<MessengerWebhook.Services.Survey.CSATSurveyOptions>(
+    builder.Configuration.GetSection("CSATSurvey"));
+builder.Services.AddScoped<MessengerWebhook.Services.Survey.ICSATSurveyService, MessengerWebhook.Services.Survey.CSATSurveyService>();
+builder.Services.AddHostedService<CSATSurveySchedulerService>();
+
+// Register Metrics Aggregation Service
+builder.Services.AddScoped<MessengerWebhook.Services.Metrics.IMetricsAggregationService, MessengerWebhook.Services.Metrics.MetricsAggregationService>();
+
+// Response caching for metrics endpoints (Phase 7.3)
+builder.Services.AddResponseCaching();
 
 // Register state machine
 builder.Services.AddScoped<IStateMachine, ConversationStateMachine>();
@@ -358,6 +442,9 @@ builder.Services.AddHostedService<SessionCleanupService>();
 builder.Services.AddHostedService<MessageCleanupService>();
 builder.Services.AddHostedService<BotLockCleanupService>();
 
+// Channel monitoring background service
+builder.Services.AddHostedService<ChannelMonitoringService>();
+
 // Configure Channel for async event processing
 var channel = Channel.CreateBounded<MessagingEvent>(
     new BoundedChannelOptions(1000)
@@ -366,6 +453,9 @@ var channel = Channel.CreateBounded<MessagingEvent>(
     });
 builder.Services.AddSingleton(channel);
 
+// Semaphore to limit concurrent live comment handlers (prevents ThreadPool exhaustion)
+var liveCommentSemaphore = new SemaphoreSlim(50);
+
 var app = builder.Build();
 
 // Auto-apply migrations on startup (Development only)
@@ -373,34 +463,26 @@ if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
-    try
+    if (dbContext.Database.IsRelational())
     {
-        await dbContext.Database.MigrateAsync();
-        Log.Information("Database migrations applied successfully");
+        try
+        {
+            await dbContext.Database.MigrateAsync();
+            Log.Information("Database migrations applied successfully");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to apply database migrations");
+            throw;
+        }
     }
-    catch (Exception ex)
+    else
     {
-        Log.Error(ex, "Failed to apply database migrations");
-        throw;
+        Log.Information("Skipping database migrations because provider is not relational");
     }
 }
 
 // Validate critical configuration on startup
-var facebookOpts = app.Services.GetRequiredService<IOptions<FacebookOptions>>().Value;
-var webhookOpts = app.Services.GetRequiredService<IOptions<WebhookOptions>>().Value;
-using var validationScope = app.Services.CreateScope();
-var validationDbContext = validationScope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
-var hasPageAccessTokenOverride = await validationDbContext.FacebookPageConfigs
-    .IgnoreQueryFilters()
-    .AnyAsync(x => x.IsActive && !string.IsNullOrWhiteSpace(x.PageAccessToken));
-
-// if (string.IsNullOrWhiteSpace(facebookOpts.AppSecret))
-//     throw new InvalidOperationException("Facebook:AppSecret is required. Configure via User Secrets or environment variables.");
-// if (string.IsNullOrWhiteSpace(facebookOpts.PageAccessToken) && !hasPageAccessTokenOverride)
-//     throw new InvalidOperationException("Facebook:PageAccessToken is required. Configure via User Secrets or environment variables.");
-// if (string.IsNullOrWhiteSpace(webhookOpts.VerifyToken))
-//     throw new InvalidOperationException("Webhook:VerifyToken is required. Configure via User Secrets or environment variables.");
-
 var geminiOpts = app.Services.GetRequiredService<IOptions<GeminiOptions>>().Value;
 if (string.IsNullOrWhiteSpace(geminiOpts.ApiKey))
     throw new InvalidOperationException("Gemini:ApiKey is required. Configure via User Secrets or environment variables.");
@@ -409,6 +491,8 @@ if (string.IsNullOrWhiteSpace(geminiOpts.ApiKey))
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseMiddleware<SignatureValidationMiddleware>();
+app.UseMiddleware<MetricsRateLimitMiddleware>();
+app.UseResponseCaching();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
@@ -508,6 +592,7 @@ app.MapPost("/webhook", async (
                         var liveCommentService = scope.ServiceProvider.GetRequiredService<ILiveCommentAutomationService>();
                         var commentLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
+                        await liveCommentSemaphore.WaitAsync();
                         try
                         {
                             var shouldHandle = await liveCommentService.ShouldHandleCommentAsync(
@@ -525,6 +610,10 @@ app.MapPost("/webhook", async (
                         catch (Exception ex)
                         {
                             commentLogger.LogError(ex, "Error processing live comment {CommentId}", change.Value.CommentId);
+                        }
+                        finally
+                        {
+                            liveCommentSemaphore.Release();
                         }
                     });
 
@@ -561,7 +650,13 @@ app.MapGet("/", () => Results.Ok(new {
 app.MapInternalOperationsEndpoints();
 app.MapAdminAuthEndpoints();
 app.MapAdminOperationsEndpoints();
-app.MapTestRagEndpoints();
+app.MapMetricsEndpoints();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapTestRagEndpoints();
+}
+
 app.MapFallbackToFile("/admin/{*path:nonfile}", "admin/index.html");
 
 using var adminBootstrapScope = app.Services.CreateScope();

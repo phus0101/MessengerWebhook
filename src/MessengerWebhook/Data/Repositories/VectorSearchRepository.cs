@@ -1,6 +1,7 @@
 using MessengerWebhook.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace MessengerWebhook.Data.Repositories;
 
@@ -30,15 +31,14 @@ public class VectorSearchRepository : IVectorSearchRepository
             throw new ArgumentException("Embedding must have 768 dimensions", nameof(queryEmbedding));
         }
 
-        // Use raw SQL for pgvector cosine similarity search
+        // Use raw SQL for pgvector cosine similarity search against ProductEmbeddings
         var sql = @"
-            SELECT *,
-                   1 - (""Embedding"" <=> @embedding::vector) AS similarity
-            FROM ""Products""
-            WHERE ""Embedding"" IS NOT NULL
-              AND ""IsActive"" = true
-              AND 1 - (""Embedding"" <=> @embedding::vector) >= @threshold
-            ORDER BY ""Embedding"" <=> @embedding::vector
+            SELECT p.*
+            FROM ""Products"" p
+            INNER JOIN ""ProductEmbeddings"" pe ON p.""Id"" = pe.""ProductId""
+            WHERE p.""IsActive"" = true
+              AND 1 - (pe.""Embedding"" <=> @embedding::vector) >= @threshold
+            ORDER BY pe.""Embedding"" <=> @embedding::vector
             LIMIT @limit";
 
         var embeddingParam = new NpgsqlParameter("@embedding", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Real)
@@ -82,23 +82,36 @@ public class VectorSearchRepository : IVectorSearchRepository
             throw new InvalidOperationException($"Product with ID {productId} not found");
         }
 
-        // Use raw SQL to update embedding (since Embedding is [NotMapped])
-        var sql = @"UPDATE ""Products""
-                    SET ""Embedding"" = @embedding::vector,
-                        ""UpdatedAt"" = @updatedAt
-                    WHERE ""Id"" = @productId";
+        var product = await _context.Products
+            .AsNoTracking()
+            .Where(p => p.Id == productId)
+            .Select(p => new { p.Id, p.TenantId })
+            .SingleAsync(cancellationToken);
 
-        var embeddingParam = new NpgsqlParameter("@embedding", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Real)
+        var now = DateTime.UtcNow;
+        var sql = @"
+            INSERT INTO ""ProductEmbeddings"" (""Id"", ""TenantId"", ""ProductId"", ""Embedding"", ""CreatedAt"", ""UpdatedAt"")
+            VALUES (@id, @tenantId, @productId, @embedding::vector, @createdAt, @updatedAt)
+            ON CONFLICT (""ProductId"") DO UPDATE SET
+                ""TenantId"" = EXCLUDED.""TenantId"",
+                ""Embedding"" = EXCLUDED.""Embedding"",
+                ""UpdatedAt"" = EXCLUDED.""UpdatedAt"";";
+
+        var embeddingParam = new NpgsqlParameter("@embedding", NpgsqlDbType.Array | NpgsqlDbType.Real)
         {
             Value = embedding
         };
 
         await _context.Database.ExecuteSqlRawAsync(
             sql,
-            new[] {
+            new object[]
+            {
+                new NpgsqlParameter("@id", Guid.NewGuid()),
+                new NpgsqlParameter("@tenantId", product.TenantId ?? (object)DBNull.Value),
+                new NpgsqlParameter("@productId", product.Id),
                 embeddingParam,
-                new NpgsqlParameter("@updatedAt", DateTime.UtcNow),
-                new NpgsqlParameter("@productId", productId)
+                new NpgsqlParameter("@createdAt", now),
+                new NpgsqlParameter("@updatedAt", now)
             },
             cancellationToken);
 

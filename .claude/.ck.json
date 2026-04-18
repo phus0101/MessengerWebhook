@@ -62,7 +62,8 @@
       "installedSettings": {
         "hooks": [
           "node $HOME/.claude/hooks/session-state.cjs",
-          "node $HOME/.claude/hooks/plan-format-kanban.cjs"
+          "node $HOME/.claude/hooks/plan-format-kanban.cjs",
+          "node $HOME/.claude/hooks/usage-quota-cache-refresh.cjs"
         ],
         "mcpServers": []
       }

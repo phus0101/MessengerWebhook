@@ -58,6 +58,8 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
         payload[0].GetProperty("status").GetString().Should().Be("PendingReview");
         payload[0].GetProperty("riskLevel").ValueKind.Should().Be(JsonValueKind.String);
         payload[0].GetProperty("riskLevel").GetString().Should().Be("Low");
+        payload[0].GetProperty("priceConfirmed").GetBoolean().Should().BeTrue();
+        payload[0].GetProperty("shippingConfirmed").GetBoolean().Should().BeTrue();
     }
 
     [Fact]
@@ -73,6 +75,8 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
         draftPayload.GetProperty("status").GetString().Should().Be("PendingReview");
         draftPayload.GetProperty("riskLevel").ValueKind.Should().Be(JsonValueKind.String);
         draftPayload.GetProperty("riskLevel").GetString().Should().Be("Low");
+        draftPayload.GetProperty("priceConfirmed").GetBoolean().Should().BeTrue();
+        draftPayload.GetProperty("shippingConfirmed").GetBoolean().Should().BeTrue();
 
         var supportCaseId = await FindSupportCaseIdAsync("psid-case-primary");
         var supportResponse = await _client.GetAsync($"/admin/api/support-cases/{supportCaseId}");
@@ -171,8 +175,10 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
         draft.ShippingAddress.Should().Be("9 Le Loi, Quan 1");
         draft.Status.Should().Be(DraftOrderStatus.PendingReview);
         draft.MerchandiseTotal.Should().Be(1140000m);
-        draft.ShippingFee.Should().Be(0m);
-        draft.GrandTotal.Should().Be(1140000m);
+        draft.ShippingFee.Should().Be(30000m);
+        draft.GrandTotal.Should().Be(1170000m);
+        draft.PriceConfirmed.Should().BeTrue();
+        draft.ShippingConfirmed.Should().BeTrue();
         draft.Items.Should().HaveCount(2);
         draft.Items.Should().Contain(x => x.ProductCode == "KL" && x.Quantity == 2 && x.GiftCode == "GIFT_KL");
         dbContext.AdminAuditLogs.Should().ContainSingle(x => x.Action == "update-draft" && x.ResourceId == draftId.ToString());
@@ -232,6 +238,137 @@ public class AdminApiTests : IClassFixture<CustomWebApplicationFactory>
         draft.NobitaOrderId.Should().NotBeNullOrWhiteSpace();
         _factory.NobitaStub.SubmittedOrders.Should().ContainSingle();
         dbContext.AdminAuditLogs.Should().ContainSingle(x => x.Action == "approve-submit" && x.ResourceId == draftId.ToString());
+        draft.CustomerMetricsAppliedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ApproveSubmit_UpdatesCustomerMetricsOnlyOnce()
+    {
+        var session = await LoginAsync();
+        var draftId = await FindDraftIdAsync("DR-PRIMARY-001");
+        var customerId = await FindCustomerIdAsync("psid-primary");
+
+        using (var beforeScope = _factory.Services.CreateScope())
+        {
+            var dbContext = beforeScope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+            var customer = dbContext.CustomerIdentities.Single(x => x.Id == customerId);
+            customer.TotalOrders.Should().Be(0);
+            customer.LifetimeValue.Should().Be(0);
+        }
+
+        var response = await PostJsonAsync(
+            $"/admin/api/draft-orders/{draftId}/approve-submit",
+            session.CsrfToken,
+            new { });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var afterScope = _factory.Services.CreateScope();
+        var afterDbContext = afterScope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+        var updatedCustomer = afterDbContext.CustomerIdentities.Single(x => x.Id == customerId);
+        var updatedDraft = afterDbContext.DraftOrders.Single(x => x.Id == draftId);
+        updatedCustomer.TotalOrders.Should().Be(1);
+        updatedCustomer.LifetimeValue.Should().Be(320000m);
+        updatedDraft.CustomerMetricsAppliedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ApproveSubmit_DoesNotCreateDuplicateOrderOrMetrics_OnSecondAttempt()
+    {
+        var session = await LoginAsync();
+        var draftId = await FindDraftIdAsync("DR-PRIMARY-001");
+        var customerId = await FindCustomerIdAsync("psid-primary");
+
+        var firstResponse = await PostJsonAsync(
+            $"/admin/api/draft-orders/{draftId}/approve-submit",
+            session.CsrfToken,
+            new { });
+        firstResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var secondResponse = await PostJsonAsync(
+            $"/admin/api/draft-orders/{draftId}/approve-submit",
+            session.CsrfToken,
+            new { });
+        secondResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var secondPayload = JsonDocument.Parse(await secondResponse.Content.ReadAsStringAsync()).RootElement;
+        secondPayload.GetProperty("succeeded").GetBoolean().Should().BeFalse();
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+        var customer = dbContext.CustomerIdentities.Single(x => x.Id == customerId);
+        customer.TotalOrders.Should().Be(1);
+        customer.LifetimeValue.Should().Be(320000m);
+        _factory.NobitaStub.SubmittedOrders.Should().ContainSingle();
+        dbContext.AdminAuditLogs.Count(x => x.Action == "approve-submit" && x.ResourceId == draftId.ToString()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RetrySubmit_AfterFailure_Succeeds_AndAppliesMetricsOnce()
+    {
+        var session = await LoginAsync();
+        var draftId = await FindDraftIdAsync("DR-PRIMARY-001");
+        var customerId = await FindCustomerIdAsync("psid-primary");
+        _factory.NobitaStub.FailNextOrderSubmission = true;
+
+        var failedResponse = await PostJsonAsync(
+            $"/admin/api/draft-orders/{draftId}/approve-submit",
+            session.CsrfToken,
+            new { });
+        failedResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var failedPayload = JsonDocument.Parse(await failedResponse.Content.ReadAsStringAsync()).RootElement;
+        failedPayload.GetProperty("succeeded").GetBoolean().Should().BeFalse();
+
+        var retryResponse = await PostJsonAsync(
+            $"/admin/api/draft-orders/{draftId}/retry-submit",
+            session.CsrfToken,
+            new { });
+        retryResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var retryPayload = JsonDocument.Parse(await retryResponse.Content.ReadAsStringAsync()).RootElement;
+        retryPayload.GetProperty("succeeded").GetBoolean().Should().BeTrue();
+
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+        var draft = dbContext.DraftOrders.Single(x => x.Id == draftId);
+        var customer = dbContext.CustomerIdentities.Single(x => x.Id == customerId);
+        draft.Status.Should().Be(DraftOrderStatus.SubmittedToNobita);
+        draft.SubmissionClaimedAt.Should().BeNull();
+        draft.CustomerMetricsAppliedAt.Should().NotBeNull();
+        customer.TotalOrders.Should().Be(1);
+        customer.LifetimeValue.Should().Be(320000m);
+        _factory.NobitaStub.SubmittedOrders.Should().ContainSingle();
+        dbContext.AdminAuditLogs.Count(x => x.Action == "approve-submit" && x.ResourceId == draftId.ToString()).Should().Be(1);
+        dbContext.AdminAuditLogs.Count(x => x.Action == "submit-failed" && x.ResourceId == draftId.ToString()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ApproveSubmit_BlocksWhenShippingOrPriceNotConfirmed()
+    {
+        var session = await LoginAsync();
+        var draftId = await FindDraftIdAsync("DR-PRIMARY-001");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+            var draft = dbContext.DraftOrders.Single(x => x.Id == draftId);
+            draft.ShippingConfirmed = false;
+            dbContext.SaveChanges();
+        }
+
+        var response = await PostJsonAsync(
+            $"/admin/api/draft-orders/{draftId}/approve-submit",
+            session.CsrfToken,
+            new { });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        payload.GetProperty("succeeded").GetBoolean().Should().BeFalse();
+        payload.GetProperty("message").GetString().Should().Contain("chốt đủ giá và phí ship");
+        _factory.NobitaStub.SubmittedOrders.Should().BeEmpty();
+
+        using var verificationScope = _factory.Services.CreateScope();
+        var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+        verificationDbContext.DraftOrders.Single(x => x.Id == draftId).SubmissionClaimedAt.Should().BeNull();
     }
 
     [Fact]

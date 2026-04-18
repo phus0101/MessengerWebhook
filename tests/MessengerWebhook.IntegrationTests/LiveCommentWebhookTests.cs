@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using MessengerWebhook.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -45,7 +47,7 @@ public class LiveCommentWebhookTests : IClassFixture<CustomWebApplicationFactory
                     })
             });
 
-        var response = await _client.PostAsJsonAsync("/webhook", webhookEvent);
+        var response = await PostWithSignatureAsync(webhookEvent);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -80,7 +82,7 @@ public class LiveCommentWebhookTests : IClassFixture<CustomWebApplicationFactory
                     })
             });
 
-        var response = await _client.PostAsJsonAsync("/webhook", webhookEvent);
+        var response = await PostWithSignatureAsync(webhookEvent);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -125,7 +127,7 @@ public class LiveCommentWebhookTests : IClassFixture<CustomWebApplicationFactory
                     })
             });
 
-        var response = await _client.PostAsJsonAsync("/webhook", webhookEvent);
+        var response = await PostWithSignatureAsync(webhookEvent);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -166,8 +168,23 @@ public class LiveCommentWebhookTests : IClassFixture<CustomWebApplicationFactory
                     })
             });
 
-        var response = await _client.PostAsJsonAsync("/webhook", webhookEvent);
+        var response = await PostWithSignatureAsync(webhookEvent);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private Task<HttpResponseMessage> PostWithSignatureAsync(WebhookEvent webhookEvent)
+    {
+        var rawJson = JsonSerializer.Serialize(webhookEvent);
+        var content = new StringContent(rawJson, Encoding.UTF8, "application/json");
+        content.Headers.Add("X-Hub-Signature-256", ComputeSignature(rawJson));
+        return _client.PostAsync("/webhook", content);
+    }
+
+    private string ComputeSignature(string rawBody)
+    {
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_factory.AppSecret));
+        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(rawBody));
+        return "sha256=" + Convert.ToHexString(hash).ToLowerInvariant();
     }
 }

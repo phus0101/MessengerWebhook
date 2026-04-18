@@ -25,10 +25,10 @@ public class ProductMappingServiceTests
     [InlineData("KCN", false)]
     [InlineData("", false)]
     [InlineData(null, false)]
-    public void IsValidPayload_ShouldValidateCorrectly(string payload, bool expected)
+    public void IsValidPayload_ShouldValidateCorrectly(string? payload, bool expected)
     {
         // Act
-        var result = _service.IsValidPayload(payload);
+        var result = _service.IsValidPayload(payload!);
 
         // Assert
         Assert.Equal(expected, result);
@@ -104,5 +104,53 @@ public class ProductMappingServiceTests
 
         // Assert
         Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetProductByMessageAsync_ExplicitCombo2_ReturnsComboProduct()
+    {
+        var product = new Product { Id = "combo-2", Code = "COMBO_2", Name = "Combo 2", IsActive = true };
+        _mockProductRepository.Setup(r => r.GetByCodeAsync("COMBO_2"))
+            .ReturnsAsync(product);
+
+        var result = await _service.GetProductByMessageAsync("combo 2");
+
+        Assert.NotNull(result);
+        Assert.Equal("COMBO_2", result.Code);
+    }
+
+    [Theory]
+    [InlineData("freeship")]
+    [InlineData("2 sản phẩm")]
+    [InlineData("combo")]
+    public async Task GetProductByMessageAsync_AmbiguousPromoPhrases_DoNotAutoMapToCombo2(string message)
+    {
+        var result = await _service.GetProductByMessageAsync(message);
+
+        Assert.Null(result);
+        _mockProductRepository.Verify(r => r.GetByCodeAsync("COMBO_2"), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetProductByMessageAsync_MatNaNguDuongAm_ShouldPreferMaskOverKemLua()
+    {
+        var product = new Product { Id = "mn-1", Code = "MN", Name = "Mặt Nạ Ngủ Dưỡng Ẩm", IsActive = true };
+        _mockProductRepository.Setup(r => r.GetByCodeAsync("MN"))
+            .ReturnsAsync(product);
+
+        var result = await _service.GetProductByMessageAsync("Mặt Nạ Ngủ Dưỡng Ẩm");
+
+        Assert.NotNull(result);
+        Assert.Equal("MN", result!.Code);
+        _mockProductRepository.Verify(r => r.GetByCodeAsync("KL"), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetProductByMessageAsync_DuongAmOnly_ShouldNotAutoMapToKemLua()
+    {
+        var result = await _service.GetProductByMessageAsync("tìm sản phẩm dưỡng ẩm");
+
+        Assert.Null(result);
+        _mockProductRepository.Verify(r => r.GetByCodeAsync("KL"), Times.Never);
     }
 }

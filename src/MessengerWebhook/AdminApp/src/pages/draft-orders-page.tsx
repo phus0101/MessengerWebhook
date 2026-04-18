@@ -47,7 +47,7 @@ export function DraftOrdersPage() {
                   </td>
                   <td><StatusPill kind="draft-status" value={draft.status} /></td>
                   <td><StatusPill kind="risk-level" value={draft.riskLevel} /></td>
-                  <td>{formatMoney(draft.grandTotal)}</td>
+                  <td>{formatMoney(draft.grandTotal)}{draft.shippingConfirmed ? "" : " (tạm tính)"}</td>
                   <td>{formatDate(draft.createdAt)}</td>
                 </tr>
               ))}

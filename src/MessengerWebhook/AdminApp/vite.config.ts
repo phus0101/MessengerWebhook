@@ -19,7 +19,8 @@ export default defineConfig(({ mode }) => {
         "/admin/api": {
           target: backendUrl,
           changeOrigin: true,
-          secure: false
+          secure: false,
+          cookieDomainRewrite: "localhost"
         }
       }
     },

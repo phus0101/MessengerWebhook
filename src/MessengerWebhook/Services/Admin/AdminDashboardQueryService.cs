@@ -45,6 +45,10 @@ public class AdminDashboardQueryService : IAdminDashboardQueryService
                 x.AssignedManagerEmail,
                 x.Items.Count,
                 x.GrandTotal,
+                x.PriceConfirmed,
+                x.PromotionConfirmed,
+                x.ShippingConfirmed,
+                x.InventoryConfirmed,
                 x.CreatedAt))
             .ToListAsync(cancellationToken);
     }
@@ -79,6 +83,10 @@ public class AdminDashboardQueryService : IAdminDashboardQueryService
             draft.MerchandiseTotal,
             draft.ShippingFee,
             draft.GrandTotal,
+            draft.PriceConfirmed,
+            draft.PromotionConfirmed,
+            draft.ShippingConfirmed,
+            draft.InventoryConfirmed,
             draft.AssignedManagerEmail,
             draft.NobitaOrderId,
             draft.LastSubmissionError,
@@ -87,7 +95,7 @@ public class AdminDashboardQueryService : IAdminDashboardQueryService
             draft.ReviewedByEmail,
             draft.SubmittedAt,
             draft.SubmittedByEmail,
-            draft.Status != DraftOrderStatus.SubmittedToNobita,
+            draft.Status != DraftOrderStatus.SubmittedToNobita && draft.SubmissionClaimedAt == null,
             MapCustomerOption(draft.CustomerIdentity),
             draft.Items.Select(x => new AdminDraftOrderItemDto(x.Id, x.ProductCode, x.ProductName, x.Quantity, x.UnitPrice, x.GiftCode, x.GiftName)).ToList(),
             availableProducts,

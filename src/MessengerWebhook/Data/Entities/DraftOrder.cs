@@ -7,7 +7,8 @@ public enum DraftOrderStatus
     Approved = 2,
     Rejected = 3,
     SubmittedToNobita = 4,
-    SubmitFailed = 5
+    SubmitFailed = 5,
+    SubmittingToNobita = 6
 }
 
 public enum RiskLevel
@@ -32,6 +33,10 @@ public class DraftOrder : ITenantOwnedEntity
     public decimal MerchandiseTotal { get; set; }
     public decimal ShippingFee { get; set; }
     public decimal GrandTotal { get; set; }
+    public bool PriceConfirmed { get; set; }
+    public bool PromotionConfirmed { get; set; }
+    public bool ShippingConfirmed { get; set; }
+    public bool InventoryConfirmed { get; set; }
     public DraftOrderStatus Status { get; set; } = DraftOrderStatus.PendingReview;
     public RiskLevel RiskLevel { get; set; } = RiskLevel.Low;
     public bool RequiresManualReview { get; set; } = true;
@@ -45,6 +50,9 @@ public class DraftOrder : ITenantOwnedEntity
     public string? SubmittedByEmail { get; set; }
     public int SubmissionAttemptCount { get; set; }
     public DateTime? LastSubmissionAttemptAt { get; set; }
+    public DateTime? SubmissionClaimedAt { get; set; }
+    public DateTime? CustomerMetricsAppliedAt { get; set; }
+    public Guid SubmissionVersionToken { get; set; } = Guid.Empty;
     public string? LastSubmissionError { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

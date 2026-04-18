@@ -54,8 +54,9 @@ public class ContextAssembler : IContextAssembler
         for (int i = 0; i < sortedProducts.Count; i++)
         {
             var product = sortedProducts[i];
-            context.AppendLine($"{i + 1}. {product!.Name} - {product.BasePrice:N0}đ");
+            context.AppendLine($"{i + 1}. {product!.Name}");
             context.AppendLine($"   Mã: {product.Code}");
+            context.AppendLine("   Giá và chính sách bán hàng cần xác nhận theo dữ liệu runtime hiện tại.");
 
             if (!string.IsNullOrEmpty(product.Description))
             {

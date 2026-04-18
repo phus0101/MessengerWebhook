@@ -259,6 +259,55 @@ public class GeminiServiceTests
     }
 
     [Fact]
+    public async Task DetectConfirmationAsync_RequestShouldUseMaskedBooleanContext()
+    {
+        // Arrange
+        HttpRequestMessage? capturedRequest = null;
+        var responseJson = JsonSerializer.Serialize(new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new { parts = new[] { new { text = "{\"IsConfirming\":true,\"Confidence\":0.9,\"Reason\":\"ok\"}" } } },
+                    finishReason = "STOP"
+                }
+            }
+        });
+
+        var mockHandler = new DelegatingCaptureHandler(req =>
+        {
+            capturedRequest = req;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(responseJson)
+            };
+        });
+        var httpClient = new HttpClient(mockHandler);
+
+        var service = new GeminiService(
+            httpClient,
+            Options.Create(_options),
+            _strategyMock.Object,
+            _loggerMock.Object);
+
+        // Act
+        var result = await service.DetectConfirmationAsync(
+            "nhu cu",
+            "0912345678",
+            "123 Nguyen Trai Quan 1 TPHCM");
+
+        // Assert
+        result.IsConfirming.Should().BeTrue();
+        var body = await capturedRequest!.Content!.ReadAsStringAsync();
+        body.Should().Contain("hasPhone=True");
+        body.Should().Contain("hasAddress=True");
+        body.Should().Contain("091****678");
+        body.Should().NotContain("0912345678");
+        body.Should().NotContain("123 Nguyen Trai Quan 1 TPHCM");
+    }
+
+    [Fact]
     public void SelectModel_DelegatesToStrategy()
     {
         // Arrange
@@ -280,5 +329,20 @@ public class GeminiServiceTests
         // Assert
         result.Should().Be(GeminiModelType.Pro);
         _strategyMock.Verify(x => x.SelectModel("test message"), Times.Once);
+    }
+
+    private sealed class DelegatingCaptureHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _handler;
+
+        public DelegatingCaptureHandler(Func<HttpRequestMessage, HttpResponseMessage> handler)
+        {
+            _handler = handler;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_handler(request));
+        }
     }
 }

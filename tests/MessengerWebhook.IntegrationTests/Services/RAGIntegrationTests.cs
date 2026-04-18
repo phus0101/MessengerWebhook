@@ -10,15 +10,8 @@ using Xunit;
 namespace MessengerWebhook.IntegrationTests.Services;
 
 /// <summary>
-/// RAG Integration Tests
-/// NOTE: These tests are currently skipped due to EF Core InMemory limitation.
-/// InMemory provider does not support pgvector extension (Vector type).
-///
-/// To run these tests, either:
-/// 1. Use a real PostgreSQL database with pgvector extension
-/// 2. Mock the entire DbContext in CustomWebApplicationFactory
-///
-/// Unit tests in RAGServiceTests.cs provide adequate coverage for RAG logic.
+/// Integration tests for RAG pipeline components.
+/// These tests validate DI, configuration, and context formatting behavior in the integration host.
 /// </summary>
 public class RAGIntegrationTests : IClassFixture<CustomWebApplicationFactory>
 {
@@ -109,7 +102,7 @@ public class RAGIntegrationTests : IClassFixture<CustomWebApplicationFactory>
 
         // Assert
         Assert.NotNull(ragOptions.Value);
-        Assert.False(ragOptions.Value.Enabled); // Default is disabled
+        Assert.True(ragOptions.Value.Enabled);
         Assert.Equal(5, ragOptions.Value.TopK);
         Assert.Equal("full-context", ragOptions.Value.FallbackStrategy);
         Assert.Equal(5000, ragOptions.Value.TimeoutMs);
@@ -120,8 +113,8 @@ public class RAGIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     {
         // Arrange
         using var scope = _factory.Services.CreateScope();
-        var contextAssembler = scope.ServiceProvider.GetRequiredService<ContextAssembler>();
-        var productIds = new List<string> { "test-id-1", "test-id-2" };
+        var contextAssembler = scope.ServiceProvider.GetRequiredService<IContextAssembler>();
+        var productIds = new List<string> { "product-kcn", "product-kl" };
 
         // Act
         var context = await contextAssembler.AssembleContextAsync(productIds);

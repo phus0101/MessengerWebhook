@@ -38,7 +38,7 @@ public class CustomerIntelligenceService : ICustomerIntelligenceService
     {
         return await _dbContext.CustomerIdentities
             .Include(x => x.VipProfile)
-            .Where(x => x.FacebookPSID == facebookPsid)
+            .Where(x => x.FacebookPSID == facebookPsid && x.TenantId == _tenantContext.TenantId)
             .OrderByDescending(x => x.FacebookPageId == (pageId ?? _tenantContext.FacebookPageId))
             .ThenByDescending(x => x.LastInteractionAt)
             .FirstOrDefaultAsync(cancellationToken);
@@ -97,10 +97,10 @@ public class CustomerIntelligenceService : ICustomerIntelligenceService
         vipProfile.IsVip = insight?.IsVip == true || vipProfile.TotalOrders >= _options.VipOrderThreshold;
         vipProfile.Tier = vipProfile.IsVip ? VipTier.Vip : vipProfile.TotalOrders > 0 ? VipTier.Returning : VipTier.Standard;
         vipProfile.GreetingStyle = vipProfile.IsVip
-            ? "Da em chao chi khach quen cua Mui Xu a."
+            ? "VIP_WARM_GREETING"
             : vipProfile.TotalOrders > 0
-                ? "Da em chao chi, em ho tro chi tiep nha."
-                : string.Empty;
+                ? "RETURNING_FRIENDLY_GREETING"
+                : "STANDARD_GREETING";
         vipProfile.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);

@@ -15,6 +15,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
+
 namespace MessengerWebhook.IntegrationTests;
 
 public class CustomWebApplicationFactory : WebApplicationFactory<Program>
@@ -45,6 +47,9 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment(HostEnvironment);
 
+        // Load .env file for integration tests
+        DotNetEnv.Env.Load();
+
         builder.ConfigureAppConfiguration((_, config) =>
         {
             var settings = new Dictionary<string, string?>
@@ -53,6 +58,9 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Facebook:PageAccessToken"] = "test_page_access_token",
                 ["Webhook:VerifyToken"] = VerifyToken,
                 ["Gemini:ApiKey"] = "test_gemini_api_key",
+                ["Pinecone:ApiKey"] = "test_pinecone_api_key",
+                ["Pinecone:Environment"] = "test",
+                ["Pinecone:IndexName"] = "test-index",
                 ["Admin:BootstrapEmail"] = PrimaryManagerEmail,
                 ["Admin:BootstrapPassword"] = AdminPassword,
                 ["Admin:BootstrapFullName"] = "Primary Manager",
@@ -75,7 +83,8 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<MessengerBotDbContext>();
             services.RemoveAll<DbContextOptions<MessengerBotDbContext>>();
-            services.AddDbContext<MessengerBotDbContext>(options => options.UseInMemoryDatabase(_databaseName));
+            services.AddDbContext<MessengerBotDbContext>(options =>
+                options.UseInMemoryDatabase(_databaseName));
 
             services.RemoveAll<IMessengerService>();
             services.RemoveAll<IGeminiService>();
@@ -113,10 +122,18 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
         using var scope = Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
+        var progressTracker = scope.ServiceProvider.GetRequiredService<MessengerWebhook.Services.VectorSearch.IIndexingProgressTracker>();
+        progressTracker.Reset();
         dbContext.ChangeTracker.Clear();
         await dbContext.Database.EnsureDeletedAsync();
         await dbContext.Database.EnsureCreatedAsync();
         SeedDatabase(dbContext);
+    }
+
+    public async Task<IServiceScope> CreateIsolatedScopeAsync()
+    {
+        await ResetStateAsync();
+        return Services.CreateScope();
     }
 
     private void SeedDatabase(MessengerBotDbContext dbContext)
@@ -253,6 +270,18 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             },
             new Product
             {
+                Id = "product-mn",
+                TenantId = PrimaryTenantId,
+                Code = "MN",
+                Name = "Mat Na Ngu",
+                Description = "Mat na ngu duong am phuc hoi da qua dem",
+                Brand = "Mui Xu",
+                BasePrice = 380000m,
+                NobitaProductId = 104,
+                NobitaWeight = 0.18m
+            },
+            new Product
+            {
                 Id = "product-other-tenant",
                 TenantId = SecondaryTenantId,
                 Code = "OTHER_1",
@@ -267,12 +296,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
         dbContext.Gifts.AddRange(
             new Gift { Id = Guid.Parse("10000000-0000-0000-0000-000000000001"), TenantId = PrimaryTenantId, Code = "GIFT_KCN", Name = "Mat na duong sang" },
             new Gift { Id = Guid.Parse("10000000-0000-0000-0000-000000000002"), TenantId = PrimaryTenantId, Code = "GIFT_KL", Name = "Tinh chat mini" },
-            new Gift { Id = Guid.Parse("10000000-0000-0000-0000-000000000003"), TenantId = PrimaryTenantId, Code = "GIFT_COMBO", Name = "Set qua freeship" });
+            new Gift { Id = Guid.Parse("10000000-0000-0000-0000-000000000003"), TenantId = PrimaryTenantId, Code = "GIFT_COMBO", Name = "Set qua freeship" },
+            new Gift { Id = Guid.Parse("10000000-0000-0000-0000-000000000004"), TenantId = PrimaryTenantId, Code = "GIFT_MN", Name = "Mat na mini phuc hoi" });
 
         dbContext.ProductGiftMappings.AddRange(
             new ProductGiftMapping { TenantId = PrimaryTenantId, ProductCode = "KCN", GiftCode = "GIFT_KCN", Priority = 10 },
             new ProductGiftMapping { TenantId = PrimaryTenantId, ProductCode = "KL", GiftCode = "GIFT_KL", Priority = 10 },
-            new ProductGiftMapping { TenantId = PrimaryTenantId, ProductCode = "COMBO_2", GiftCode = "GIFT_COMBO", Priority = 10 });
+            new ProductGiftMapping { TenantId = PrimaryTenantId, ProductCode = "COMBO_2", GiftCode = "GIFT_COMBO", Priority = 10 },
+            new ProductGiftMapping { TenantId = PrimaryTenantId, ProductCode = "MN", GiftCode = "GIFT_MN", Priority = 10 });
     }
 
     private void SeedDraftsAndCases(MessengerBotDbContext dbContext)
@@ -348,6 +379,10 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 MerchandiseTotal = 320000m,
                 ShippingFee = 0m,
                 GrandTotal = 320000m,
+                PriceConfirmed = true,
+                PromotionConfirmed = false,
+                ShippingConfirmed = true,
+                InventoryConfirmed = false,
                 AssignedManagerEmail = PrimaryManagerEmail,
                 RequiresManualReview = false
             },
@@ -367,6 +402,10 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 MerchandiseTotal = 410000m,
                 ShippingFee = 0m,
                 GrandTotal = 410000m,
+                PriceConfirmed = true,
+                PromotionConfirmed = false,
+                ShippingConfirmed = true,
+                InventoryConfirmed = false,
                 AssignedManagerEmail = PrimaryManagerEmail,
                 RequiresManualReview = true
             },
@@ -386,6 +425,10 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 MerchandiseTotal = 999000m,
                 ShippingFee = 0m,
                 GrandTotal = 999000m,
+                PriceConfirmed = true,
+                PromotionConfirmed = false,
+                ShippingConfirmed = true,
+                InventoryConfirmed = false,
                 AssignedManagerEmail = SecondaryManagerEmail,
                 RequiresManualReview = false
             });
@@ -546,6 +589,13 @@ public sealed class TestGeminiService : IGeminiService
     public Task<string> SendMessageAsync(string userId, string message, List<MessengerWebhook.Services.AI.Models.ConversationMessage> history, MessengerWebhook.Services.AI.Models.GeminiModelType? modelOverride = null, string? ragContext = null, CancellationToken cancellationToken = default)
     {
         _requests.Enqueue((userId, message));
+
+        var normalized = message.ToLowerInvariant();
+        if (normalized.Contains("freeship") || normalized.Contains("phi ship") || normalized.Contains("van chuyen") || normalized.Contains("ship"))
+        {
+            return Task.FromResult("Da phi van chuyen tam tinh la 30.000d a. Chi muon em tu van them hay len don luon a?");
+        }
+
         return Task.FromResult("Da em ho tro chi ngay day a.");
     }
 
@@ -569,7 +619,7 @@ public sealed class TestGeminiService : IGeminiService
     {
         // Simple mock: return true for confirmation keywords
         var normalized = message.ToLowerInvariant();
-        var isConfirming = normalized.Contains("dung") || normalized.Contains("ok") || normalized.Contains("van dung");
+        var isConfirming = normalized.Contains("dung") || normalized.Contains("ok") || normalized.Contains("van dung") || normalized.Contains("đúng rồi");
 
         return Task.FromResult(new MessengerWebhook.Services.AI.Models.ConfirmationDetectionResult
         {
@@ -593,14 +643,14 @@ public sealed class TestGeminiService : IGeminiService
 
         var intent = normalized switch
         {
-            var m when m.Contains("dat hang") || m.Contains("chot don") || m.Contains("mua luon")
+            var m when m.Contains("dat hang") || m.Contains("chot don") || m.Contains("mua luon") || m.Contains("muon mua") || m.Contains("len don")
                 => MessengerWebhook.Services.AI.Models.CustomerIntent.ReadyToBuy,
+            var m when m.Contains("dung roi") || m.Contains("đúng rồi") || m.Contains("ok") || m.Contains("van dung")
+                => MessengerWebhook.Services.AI.Models.CustomerIntent.Confirming,
+            var m when m.Contains("freeship") || m.Contains("ship") || m.Contains("gia") || m.Contains("?")
+                => MessengerWebhook.Services.AI.Models.CustomerIntent.Questioning,
             var m when m.Contains("tu van") || m.Contains("hoi")
                 => MessengerWebhook.Services.AI.Models.CustomerIntent.Consulting,
-            var m when m.Contains("dung roi") || m.Contains("ok") || m.Contains("van dung")
-                => MessengerWebhook.Services.AI.Models.CustomerIntent.Confirming,
-            var m when m.Contains("?")
-                => MessengerWebhook.Services.AI.Models.CustomerIntent.Questioning,
             _ => MessengerWebhook.Services.AI.Models.CustomerIntent.Browsing
         };
 

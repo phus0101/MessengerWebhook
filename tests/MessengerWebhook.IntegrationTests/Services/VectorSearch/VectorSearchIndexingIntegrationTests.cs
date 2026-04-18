@@ -104,6 +104,22 @@ public class VectorSearchIndexingIntegrationTests : IClassFixture<CustomWebAppli
     }
 
     [Fact]
+    public async Task IndexAll_ShouldAllowOnlyOneSuccessfulStart_WhenRequestsRace()
+    {
+        var session = await LoginAsync();
+
+        var firstTask = PostJsonAsync("/admin/api/vector-search/index-all", session.CsrfToken, new { });
+        var secondTask = PostJsonAsync("/admin/api/vector-search/index-all", session.CsrfToken, new { });
+
+        var responses = await Task.WhenAll(firstTask, secondTask);
+        var okCount = responses.Count(r => r.StatusCode == HttpStatusCode.OK);
+        var conflictCount = responses.Count(r => r.StatusCode == HttpStatusCode.Conflict);
+
+        Assert.Equal(1, okCount);
+        Assert.Equal(1, conflictCount);
+    }
+
+    [Fact]
     public async Task IndexStatus_ShouldReturnJobProgress()
     {
         // Arrange
@@ -126,7 +142,7 @@ public class VectorSearchIndexingIntegrationTests : IClassFixture<CustomWebAppli
         Assert.True(status.TotalProducts >= 0);
         Assert.True(status.IndexedProducts >= 0);
         Assert.True(status.ProgressPercentage >= 0 && status.ProgressPercentage <= 100);
-        Assert.NotNull(status.StartedAt);
+        // StartedAt is DateTime (value type), always has a value
     }
 
     [Fact]

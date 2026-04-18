@@ -82,7 +82,11 @@ async function parseTranscript(transcriptPath) {
     tools: [],
     agents: [],
     todos: [],
-    sessionStart: null
+    sessionStart: null,
+    statuslineActivityCount: 0,
+    invalidLineCount: 0,
+    lastValidEntryAt: null,
+    lastActivityAt: null
   };
 
   if (!transcriptPath || !fs.existsSync(transcriptPath)) {
@@ -107,7 +111,7 @@ async function parseTranscript(transcriptPath) {
         const entry = JSON.parse(line);
         processEntry(entry, toolMap, agentMap, latestTodos, result);
       } catch {
-        // Skip malformed lines
+        result.invalidLineCount += 1;
       }
     }
   } catch {
@@ -132,7 +136,12 @@ async function parseTranscript(transcriptPath) {
  * @param {Object} result - Result object
  */
 function processEntry(entry, toolMap, agentMap, latestTodos, result) {
-  const timestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
+  const parsedTimestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
+  const timestamp = Number.isNaN(parsedTimestamp.getTime()) ? new Date() : parsedTimestamp;
+  const timestampIso = timestamp.toISOString();
+  let hadActivity = false;
+
+  result.lastValidEntryAt = timestampIso;
 
   // Track session start
   if (!result.sessionStart && entry.timestamp) {
@@ -146,6 +155,8 @@ function processEntry(entry, toolMap, agentMap, latestTodos, result) {
     // Handle tool_use blocks
     if (block.type === 'tool_use' && block.id && block.name) {
       if (block.name === 'Task') {
+        result.statuslineActivityCount += 1;
+        hadActivity = true;
         // Agent spawn
         agentMap.set(block.id, {
           id: block.id,
@@ -157,6 +168,8 @@ function processEntry(entry, toolMap, agentMap, latestTodos, result) {
           endTime: null
         });
       } else if (block.name === 'TodoWrite') {
+        result.statuslineActivityCount += 1;
+        hadActivity = true;
         // Legacy: Replace todo array (deprecated, kept for backwards compatibility)
         if (block.input?.todos && Array.isArray(block.input.todos)) {
           latestTodos.length = 0;
@@ -168,6 +181,8 @@ function processEntry(entry, toolMap, agentMap, latestTodos, result) {
           );
         }
       } else if (block.name === 'TaskCreate') {
+        result.statuslineActivityCount += 1;
+        hadActivity = true;
         // Native Task API: add new task.
         // Track by tool_use id first; hydrate real task id from matching tool_result when present.
         if (block.input?.subject) {
@@ -181,6 +196,8 @@ function processEntry(entry, toolMap, agentMap, latestTodos, result) {
           });
         }
       } else if (block.name === 'TaskUpdate') {
+        result.statuslineActivityCount += 1;
+        hadActivity = true;
         // Native Task API: Update existing task status
         // Match by taskId against native-task ids first.
         // Numeric fallback maps to native-task creation order only (not legacy TodoWrite items).
@@ -223,6 +240,8 @@ function processEntry(entry, toolMap, agentMap, latestTodos, result) {
 
       const agent = agentMap.get(block.tool_use_id);
       if (agent) {
+        result.statuslineActivityCount += 1;
+        hadActivity = true;
         agent.status = 'completed';
         agent.endTime = timestamp;
       }
@@ -237,6 +256,10 @@ function processEntry(entry, toolMap, agentMap, latestTodos, result) {
         }
       }
     }
+  }
+
+  if (hadActivity) {
+    result.lastActivityAt = timestampIso;
   }
 }
 

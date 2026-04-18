@@ -54,6 +54,10 @@ export type DraftOrderListItem = {
   assignedManagerEmail?: string | null;
   itemCount: number;
   grandTotal: number;
+  priceConfirmed: boolean;
+  promotionConfirmed: boolean;
+  shippingConfirmed: boolean;
+  inventoryConfirmed: boolean;
   createdAt: string;
 };
 
@@ -115,6 +119,10 @@ export type DraftOrderDetail = {
   merchandiseTotal: number;
   shippingFee: number;
   grandTotal: number;
+  priceConfirmed: boolean;
+  promotionConfirmed: boolean;
+  shippingConfirmed: boolean;
+  inventoryConfirmed: boolean;
   assignedManagerEmail?: string | null;
   nobitaOrderId?: string | null;
   lastSubmissionError?: string | null;

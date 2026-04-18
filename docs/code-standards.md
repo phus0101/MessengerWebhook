@@ -138,6 +138,16 @@ var history = GetHistory(ctx);
 
 ### State Transition Rules
 
+### Sales Transcript Invariants
+
+Production sales handlers must preserve these invariants because they are locked by integration transcripts and returning-customer regressions:
+
+- Do not auto-confirm remembered contact details from generic buy continuations such as `ok`, `ok e`, `lên đơn`, `chốt nhé`, or `đặt luôn`. While `contactNeedsConfirmation=true` and `pendingContactQuestion=confirm_old_contact`, the handler must restate the full remembered phone/address and wait for an explicit confirmation or replacement details.
+- Handle partial remembered contact gracefully: if only phone exists, ask for address; if only address exists, ask for phone; if both exist, ask for full confirmation. The reply builder branches on what data is available to prevent silent failures.
+- Keep `selectedProductCodes` stable once an active product is established. Shipping, policy, gift, and checkout replies may refresh policy context, but must not drift to another product unless the customer explicitly switches products.
+- If product context is temporarily missing during checkout, recover it from recent history before drafting, preferring the latest user-selected product and using AI only as a tie-breaker for ambiguous histories.
+- Never create a draft order while remembered-contact confirmation is still pending.
+
 **Adding New Transitions**:
 
 Edit `StateTransitionRules.cs`:
@@ -401,29 +411,23 @@ builder.Services.Decorate<IHybridSearchService, ResultCacheService>();
 
 ### Quick Reply Handler Pattern
 
-Quick Reply and Postback events follow a specialized handler pattern separate from the state machine:
+Quick Reply and Postback events follow a specialized handler pattern separate from the state machine.
+
+Current behavior is intentionally conservative for commercial facts:
+- Resolve the product from the payload.
+- Load the current gift mapping for that product.
+- Calculate shipping context for downstream state, but do not turn that into a hard freeship/ship assertion in the quick reply text.
+- Format the reply from a `CommercialFactSnapshot` so gift/shipping wording stays grounded.
 
 ```csharp
-public class QuickReplyHandler : IQuickReplyHandler
+public async Task<string> HandleQuickReplyAsync(string senderId, string payload)
 {
-    private readonly IProductMappingService _productMappingService;
-    private readonly IGiftSelectionService _giftSelectionService;
-    private readonly IFreeshipCalculator _freeshipCalculator;
+    var product = await _productMappingService.GetProductByPayloadAsync(payload);
+    var gift = await _giftSelectionService.SelectGiftForProductAsync(product.Code);
+    var shippingFee = _freeshipCalculator.CalculateShippingFee(new[] { product.Code });
+    var snapshot = CommercialFactSnapshot.Create(product, null, gift, shippingFee, false);
 
-    public async Task<string> HandleQuickReplyAsync(string senderId, string payload)
-    {
-        // 1. Extract product from payload
-        var product = await _productMappingService.GetProductByPayloadAsync(payload);
-
-        // 2. Get associated gift
-        var gift = await _giftSelectionService.SelectGiftForProductAsync(product.Code);
-
-        // 3. Calculate freeship eligibility
-        var isEligible = _freeshipCalculator.IsEligibleForFreeship(new[] { product.Code });
-
-        // 4. Format and return response
-        return FormatResponseMessage(product, gift, isEligible);
-    }
+    return FormatResponseMessage(snapshot, product, callToAction);
 }
 ```
 
@@ -885,6 +889,15 @@ public class VectorSearchRepositoryTests : IAsyncLifetime
     }
 }
 ```
+
+### Transcript Regression Strategy
+
+For sales-flow changes, prefer transcript-style integration coverage over isolated assertion-only tests.
+
+- Add end-to-end transcripts under `tests/MessengerWebhook.IntegrationTests/StateMachine/TranscriptGoldenFlowTests.cs` for production-locked journeys.
+- Keep short targeted regressions in `tests/MessengerWebhook.IntegrationTests/StateMachine/ReturningCustomerConfirmationTests.cs` for remembered-contact confirmation gates.
+- Assert both reply text and persisted state: `ConversationState`, `contactNeedsConfirmation`, `pendingContactQuestion`, `selectedProductCodes`, and draft-order rows.
+- When a transcript reaches checkout, assert the final draft still contains only the locked product code and does not include drift products introduced earlier in the conversation.
 
 ---
 

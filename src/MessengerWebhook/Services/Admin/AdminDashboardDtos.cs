@@ -24,6 +24,10 @@ public sealed record AdminDraftOrderListItemDto(
     string? AssignedManagerEmail,
     int ItemCount,
     decimal GrandTotal,
+    bool PriceConfirmed,
+    bool PromotionConfirmed,
+    bool ShippingConfirmed,
+    bool InventoryConfirmed,
     DateTime CreatedAt);
 
 public sealed record AdminDraftOrderItemDto(
@@ -71,6 +75,10 @@ public sealed record AdminDraftOrderDetailDto(
     decimal MerchandiseTotal,
     decimal ShippingFee,
     decimal GrandTotal,
+    bool PriceConfirmed,
+    bool PromotionConfirmed,
+    bool ShippingConfirmed,
+    bool InventoryConfirmed,
     string? AssignedManagerEmail,
     string? NobitaOrderId,
     string? LastSubmissionError,

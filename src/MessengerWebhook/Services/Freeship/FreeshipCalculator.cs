@@ -6,7 +6,6 @@ namespace MessengerWebhook.Services.Freeship;
 public class FreeshipCalculator : IFreeshipCalculator
 {
     private const decimal ShippingFee = 30000m;
-    private const string ComboProductCode = "COMBO_2";
 
     public bool IsEligibleForFreeship(List<string> productCodes)
     {
@@ -15,8 +14,7 @@ public class FreeshipCalculator : IFreeshipCalculator
             return false;
         }
 
-        return productCodes.Count >= 2 ||
-               productCodes.Any(code => code.Equals(ComboProductCode, StringComparison.OrdinalIgnoreCase));
+        return false;
     }
 
     public decimal CalculateShippingFee(List<string> productCodes)
@@ -27,7 +25,7 @@ public class FreeshipCalculator : IFreeshipCalculator
     public string GetFreeshipMessage(bool isEligible)
     {
         return isEligible
-            ? "Mien phi van chuyen"
-            : $"Phi van chuyen tam tinh: {ShippingFee:N0}d";
+            ? "Don nay dang duoc mien phi van chuyen theo chinh sach hien tai."
+            : $"Hien tai don nay chua nam trong chinh sach freeship, phi ship tam tinh la {ShippingFee:N0}d.";
     }
 }

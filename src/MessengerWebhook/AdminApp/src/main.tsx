@@ -12,6 +12,7 @@ import { ProductMappingsPage } from "./pages/product-mappings-page";
 import { SupportCaseDetailPage } from "./pages/support-case-detail-page";
 import { SupportCasesPage } from "./pages/support-cases-page";
 import { VectorSearchPage } from "./pages/vector-search-page";
+import { ABTestDashboard } from "./pages/metrics/ab-test-dashboard";
 import "./styles.css";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/support-cases/:id" element={<SupportCaseDetailPage />} />
               <Route path="/product-mappings" element={<ProductMappingsPage />} />
               <Route path="/vector-search" element={<VectorSearchPage />} />
+              <Route path="/metrics" element={<ABTestDashboard />} />
             </Route>
           </Routes>
         </BrowserRouter>

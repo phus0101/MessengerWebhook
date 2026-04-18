@@ -2,7 +2,9 @@ using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Models;
 using MessengerWebhook.Services.Freeship;
 using MessengerWebhook.Services.GiftSelection;
+using MessengerWebhook.Services.Policy;
 using MessengerWebhook.Services.ProductMapping;
+using MessengerWebhook.Services.Survey;
 using MessengerWebhook.StateMachine;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
@@ -18,13 +20,14 @@ public class QuickReplyHandler : IQuickReplyHandler
     private readonly IGiftSelectionService _giftSelectionService;
     private readonly IFreeshipCalculator _freeshipCalculator;
     private readonly IStateMachine? _stateMachine;
+    private readonly ICSATSurveyService? _csatSurveyService;
     private readonly ILogger<QuickReplyHandler>? _logger;
 
     public QuickReplyHandler(
         IProductMappingService productMappingService,
         IGiftSelectionService giftSelectionService,
         IFreeshipCalculator freeshipCalculator)
-        : this(productMappingService, giftSelectionService, freeshipCalculator, null, null)
+        : this(productMappingService, giftSelectionService, freeshipCalculator, null, null, null)
     {
     }
 
@@ -33,12 +36,14 @@ public class QuickReplyHandler : IQuickReplyHandler
         IGiftSelectionService giftSelectionService,
         IFreeshipCalculator freeshipCalculator,
         IStateMachine? stateMachine,
+        ICSATSurveyService? csatSurveyService,
         ILogger<QuickReplyHandler>? logger)
     {
         _productMappingService = productMappingService;
         _giftSelectionService = giftSelectionService;
         _freeshipCalculator = freeshipCalculator;
         _stateMachine = stateMachine;
+        _csatSurveyService = csatSurveyService;
         _logger = logger;
     }
 
@@ -64,6 +69,27 @@ public class QuickReplyHandler : IQuickReplyHandler
 
     private async Task<string> ProcessPayloadAsync(string senderId, string payload, string? pageId)
     {
+        // Handle CSAT survey ratings
+        if (payload.StartsWith("CSAT_RATING_"))
+        {
+            if (_csatSurveyService == null)
+            {
+                _logger?.LogWarning("CSAT survey service not available");
+                return string.Empty;
+            }
+
+            var ratingStr = payload.Replace("CSAT_RATING_", "");
+            if (int.TryParse(ratingStr, out var rating))
+            {
+                await _csatSurveyService.HandleRatingAsync(senderId, rating);
+                return string.Empty; // Service handles the response
+            }
+
+            _logger?.LogWarning("Invalid CSAT rating payload: {Payload}", payload);
+            return string.Empty;
+        }
+
+        // Handle product quick replies
         var product = await _productMappingService.GetProductByPayloadAsync(payload);
         if (product == null)
         {
@@ -73,14 +99,14 @@ public class QuickReplyHandler : IQuickReplyHandler
         var gift = await _giftSelectionService.SelectGiftForProductAsync(product.Code);
         var productCodes = new List<string> { product.Code };
         var shippingFee = _freeshipCalculator.CalculateShippingFee(productCodes);
-        var freeshipMessage = _freeshipCalculator.GetFreeshipMessage(shippingFee == 0);
+        var snapshot = CommercialFactSnapshot.Create(product, null, gift, shippingFee, false);
 
         var context = await PersistSalesContextAsync(senderId, pageId, product, gift, shippingFee);
         var callToAction = context == null
             ? "Chi iu cho em xin so dien thoai va dia chi em len don luon nha."
             : SalesMessageParser.BuildMissingInfoPrompt(context);
 
-        return FormatResponseMessage(product, gift, freeshipMessage, callToAction);
+        return FormatResponseMessage(snapshot, product, callToAction);
     }
 
     private async Task<StateContext?> PersistSalesContextAsync(
@@ -116,21 +142,25 @@ public class QuickReplyHandler : IQuickReplyHandler
         }
     }
 
-    private static string FormatResponseMessage(Product product, Gift? gift, string freeshipMessage, string callToAction)
+    private static string FormatResponseMessage(CommercialFactSnapshot snapshot, Product product, string callToAction)
     {
+        var productLine = snapshot.PriceConfirmed && snapshot.ConfirmedPrice.HasValue
+            ? $"San pham: {product.Name} ({snapshot.ConfirmedPrice.Value:N0}d)"
+            : $"San pham: {product.Name} (gia em can kiem tra lai theo phien ban cu the)";
+
         var lines = new List<string>
         {
             "Dạ em chốt nhanh cho chị thông tin đang chọn nè:",
             string.Empty,
-            $"San pham: {product.Name} ({product.BasePrice:N0}d)"
+            productLine
         };
 
-        if (gift != null)
+        if (snapshot.GiftConfirmed && !string.IsNullOrWhiteSpace(snapshot.GiftName))
         {
-            lines.Add($"Qua tang: {gift.Name}");
+            lines.Add($"Qua tang theo du lieu noi bo hien tai: {snapshot.GiftName}");
         }
 
-        lines.Add($"Chinh sach ship: {freeshipMessage}");
+        lines.Add("Chinh sach ship: em chua dam chot freeship hay phi ship ngay luc nay, de em kiem tra lai theo don cu the roi bao chi chinh xac nha.");
         lines.Add(string.Empty);
         lines.Add(callToAction);
 

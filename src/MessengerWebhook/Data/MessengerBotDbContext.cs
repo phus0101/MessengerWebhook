@@ -1,8 +1,10 @@
 using MessengerWebhook.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MessengerWebhook.Services.Tenants;
 using Pgvector;
+using System.Text.Json;
 
 namespace MessengerWebhook.Data;
 
@@ -49,6 +51,8 @@ public class MessengerBotDbContext : DbContext
     public DbSet<KnowledgeSnapshot> KnowledgeSnapshots { get; set; }
     public DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
     public DbSet<ProductEmbedding> ProductEmbeddings { get; set; }
+    public DbSet<ConversationMetric> ConversationMetrics { get; set; }
+    public DbSet<ConversationSurvey> ConversationSurveys { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -65,6 +69,9 @@ public class MessengerBotDbContext : DbContext
 
         modelBuilder.Entity<ConversationSession>()
             .HasIndex(s => s.FacebookPageId);
+
+        modelBuilder.Entity<ConversationSession>()
+            .HasIndex(s => s.ABTestVariant);
 
         // ProductVariant indexes and constraints
         modelBuilder.Entity<ProductVariant>()
@@ -200,6 +207,74 @@ public class MessengerBotDbContext : DbContext
         modelBuilder.Entity<ProductEmbedding>()
             .HasIndex(e => new { e.TenantId, e.ProductId })
             .IsUnique();
+
+        // ConversationMetric indexes
+        modelBuilder.Entity<ConversationMetric>()
+            .HasIndex(m => m.TenantId);
+
+        modelBuilder.Entity<ConversationMetric>()
+            .HasIndex(m => m.SessionId);
+
+        modelBuilder.Entity<ConversationMetric>()
+            .HasIndex(m => m.ABTestVariant);
+
+        modelBuilder.Entity<ConversationMetric>()
+            .HasIndex(m => m.MessageTimestamp);
+
+        modelBuilder.Entity<ConversationMetric>()
+            .HasIndex(m => m.ConversationOutcome)
+            .HasFilter("conversation_outcome IS NOT NULL");
+
+        // ConversationSurvey indexes
+        modelBuilder.Entity<ConversationSurvey>()
+            .HasIndex(s => s.SessionId);
+
+        modelBuilder.Entity<ConversationSurvey>()
+            .HasIndex(s => s.TenantId);
+
+        modelBuilder.Entity<ConversationSurvey>()
+            .HasIndex(s => s.ABTestVariant);
+
+        modelBuilder.Entity<ConversationSurvey>()
+            .HasIndex(s => s.Rating);
+
+        modelBuilder.Entity<ConversationSurvey>()
+            .HasIndex(s => s.CreatedAt);
+
+        // ConversationMetric JSONB columns
+        if (Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory")
+        {
+            modelBuilder.Entity<ConversationMetric>()
+                .Property(m => m.ValidationErrors)
+                .HasColumnType("jsonb");
+
+            modelBuilder.Entity<ConversationMetric>()
+                .Property(m => m.AdditionalMetrics)
+                .HasColumnType("jsonb");
+        }
+        else
+        {
+            var jsonDocumentConverter = new ValueConverter<JsonDocument?, string?>(
+                value => value == null ? null : value.RootElement.GetRawText(),
+                value => string.IsNullOrWhiteSpace(value) ? null : JsonDocument.Parse(value, default(JsonDocumentOptions)));
+
+            var jsonDocumentComparer = new ValueComparer<JsonDocument?>(
+                (left, right) =>
+                    (left == null && right == null) ||
+                    (left != null && right != null && left.RootElement.GetRawText() == right.RootElement.GetRawText()),
+                value => value == null ? 0 : value.RootElement.GetRawText().GetHashCode(),
+                value => value == null ? null : JsonDocument.Parse(value.RootElement.GetRawText(), default(JsonDocumentOptions)));
+
+            modelBuilder.Entity<ConversationMetric>()
+                .Property(m => m.ValidationErrors)
+                .HasConversion(jsonDocumentConverter)
+                .Metadata.SetValueComparer(jsonDocumentComparer);
+
+            modelBuilder.Entity<ConversationMetric>()
+                .Property(m => m.AdditionalMetrics)
+                .HasConversion(jsonDocumentConverter)
+                .Metadata.SetValueComparer(jsonDocumentComparer);
+        }
 
         // Relationships
         modelBuilder.Entity<Product>()
@@ -341,6 +416,24 @@ public class MessengerBotDbContext : DbContext
             .HasForeignKey(r => r.DraftOrderId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        modelBuilder.Entity<ConversationMetric>()
+            .HasOne(m => m.Session)
+            .WithMany()
+            .HasForeignKey(m => m.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConversationMetric>()
+            .HasOne(m => m.Tenant)
+            .WithMany()
+            .HasForeignKey(m => m.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConversationSurvey>()
+            .HasOne(s => s.Session)
+            .WithMany()
+            .HasForeignKey(s => s.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<DraftOrder>()
             .Property(d => d.MerchandiseTotal)
             .HasPrecision(18, 2);
@@ -352,6 +445,27 @@ public class MessengerBotDbContext : DbContext
         modelBuilder.Entity<DraftOrder>()
             .Property(d => d.GrandTotal)
             .HasPrecision(18, 2);
+
+        modelBuilder.Entity<DraftOrder>()
+            .Property(d => d.PriceConfirmed)
+            .HasDefaultValue(false);
+
+        modelBuilder.Entity<DraftOrder>()
+            .Property(d => d.PromotionConfirmed)
+            .HasDefaultValue(false);
+
+        modelBuilder.Entity<DraftOrder>()
+            .Property(d => d.ShippingConfirmed)
+            .HasDefaultValue(false);
+
+        modelBuilder.Entity<DraftOrder>()
+            .Property(d => d.InventoryConfirmed)
+            .HasDefaultValue(false);
+
+        modelBuilder.Entity<DraftOrder>()
+            .Property(d => d.SubmissionVersionToken)
+            .IsConcurrencyToken()
+            .HasDefaultValue(Guid.Empty);
 
         modelBuilder.Entity<DraftOrderItem>()
             .Property(i => i.UnitPrice)
@@ -370,16 +484,25 @@ public class MessengerBotDbContext : DbContext
             .HasPrecision(5, 2);
 
         // ProductEmbedding configuration
-        modelBuilder.Entity<ProductEmbedding>(entity =>
+        // Skip for InMemory provider (used in tests) as it doesn't support Vector type
+        if (Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory")
         {
-            entity.HasOne(e => e.Product)
-                .WithOne()
-                .HasForeignKey<ProductEmbedding>(e => e.ProductId)
-                .HasPrincipalKey<Product>(p => p.Id);
+            modelBuilder.Entity<ProductEmbedding>(entity =>
+            {
+                entity.HasOne(e => e.Product)
+                    .WithOne()
+                    .HasForeignKey<ProductEmbedding>(e => e.ProductId)
+                    .HasPrincipalKey<Product>(p => p.Id);
 
-            entity.Property(e => e.Embedding)
-                .HasColumnType("vector(768)");
-        });
+                entity.Property(e => e.Embedding)
+                    .HasColumnType("vector(768)");
+            });
+        }
+        else
+        {
+            // Ignore ProductEmbedding entity for InMemory tests
+            modelBuilder.Ignore<ProductEmbedding>();
+        }
     }
 
     private void ApplyTenantFilters(ModelBuilder modelBuilder)
@@ -454,6 +577,12 @@ public class MessengerBotDbContext : DbContext
             .HasQueryFilter(x => !IsTenantResolved || x.TenantId == null || x.TenantId == CurrentTenantId);
 
         modelBuilder.Entity<ProductEmbedding>()
+            .HasQueryFilter(x => !IsTenantResolved || x.TenantId == null || x.TenantId == CurrentTenantId);
+
+        modelBuilder.Entity<ConversationMetric>()
+            .HasQueryFilter(x => !IsTenantResolved || x.TenantId == null || x.TenantId == CurrentTenantId);
+
+        modelBuilder.Entity<ConversationSurvey>()
             .HasQueryFilter(x => !IsTenantResolved || x.TenantId == null || x.TenantId == CurrentTenantId);
     }
 }

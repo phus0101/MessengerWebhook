@@ -1,14 +1,19 @@
 using MessengerWebhook.Models;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Data.Entities;
+using MessengerWebhook.Services;
 using MessengerWebhook.Services.AI;
-using MessengerWebhook.Services.Customers;
 using MessengerWebhook.Services.DraftOrders;
+using MessengerWebhook.Services.Customers;
 using MessengerWebhook.Services.Freeship;
 using MessengerWebhook.Services.GiftSelection;
 using MessengerWebhook.Services.Policy;
 using MessengerWebhook.Services.ProductMapping;
 using MessengerWebhook.Services.Support;
+using MessengerWebhook.Services.Emotion;
+using MessengerWebhook.Services.Tone;
+using MessengerWebhook.Services.ABTesting;
+using MessengerWebhook.Services.Metrics;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
 using Microsoft.Extensions.Logging;
@@ -22,7 +27,6 @@ public class IdleStateHandlerTests
     private readonly Mock<IProductMappingService> _productMappingService = new();
     private readonly Mock<IGiftSelectionService> _giftSelectionService = new();
     private readonly Mock<ICaseEscalationService> _caseEscalationService = new();
-    private readonly Mock<IDraftOrderService> _draftOrderService = new();
     private readonly Mock<ICustomerIntelligenceService> _customerIntelligenceService = new();
     private readonly Mock<IGeminiService> _geminiService = new();
     private readonly IdleStateHandler _handler;
@@ -36,6 +40,14 @@ public class IdleStateHandlerTests
             .Setup(x => x.GetVipProfileAsync(It.IsAny<CustomerIdentity>(), default))
             .ReturnsAsync(new VipProfile { GreetingStyle = string.Empty });
 
+        // Stub coordinator — not needed for these tests
+        // Stub coordinator — not needed for these tests
+        var mockDraftOrderService = Mock.Of<IDraftOrderService>();
+        var draftOrderCoordinator = new DraftOrderCoordinator(
+            mockDraftOrderService,
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(Options.Create(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())),
+            Mock.Of<Microsoft.Extensions.Logging.ILogger<DraftOrderCoordinator>>());
+
         _handler = new IdleStateHandler(
             _geminiService.Object,
             new PolicyGuardService(Options.Create(new SalesBotOptions())),
@@ -43,9 +55,16 @@ public class IdleStateHandlerTests
             _giftSelectionService.Object,
             new FreeshipCalculator(),
             _caseEscalationService.Object,
-            _draftOrderService.Object,
+            draftOrderCoordinator,
             _customerIntelligenceService.Object,
             null,
+            Mock.Of<IEmotionDetectionService>(),
+            Mock.Of<IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
             Options.Create(new SalesBotOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<IdleStateHandler>>());

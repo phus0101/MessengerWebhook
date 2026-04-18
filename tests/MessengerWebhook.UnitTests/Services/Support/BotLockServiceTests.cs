@@ -18,12 +18,24 @@ public class BotLockServiceTests : IDisposable
     private readonly Mock<IAdminAuditService> _auditService;
     private readonly BotLockService _service;
 
+    // Test DbContext that ignores ProductEmbedding (requires pgvector, not supported by InMemory)
+    private class TestDbContext : MessengerBotDbContext
+    {
+        public TestDbContext(DbContextOptions<MessengerBotDbContext> options) : base(options) { }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+            modelBuilder.Ignore<ProductEmbedding>();
+        }
+    }
+
     public BotLockServiceTests()
     {
         var options = new DbContextOptionsBuilder<MessengerBotDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
-        _dbContext = new MessengerBotDbContext(options);
+        _dbContext = new TestDbContext(options);
 
         _tenantContext = new Mock<ITenantContext>();
         _tenantContext.Setup(x => x.TenantId).Returns(Guid.NewGuid());

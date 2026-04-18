@@ -1,8 +1,8 @@
 # Codebase Summary
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
-**Last Updated**: 2026-04-02
-**Phase**: Phase 3 Complete (Hybrid Search with RRF Fusion)
+**Last Updated**: 2026-04-14
+**Phase**: Transcript production-readiness updates reflected
 
 ---
 
@@ -41,12 +41,11 @@ Conversational commerce platform for cosmetics retail via Facebook Messenger. Bu
 
 ## Project Statistics
 
-- **Total Files**: 112 files
-- **Source Files**: 99 C# files
-- **Test Files**: 42 test files
-- **Total Tokens**: 254,071 tokens
-- **Total Characters**: 798,874 chars
-- **Lines of Code**: ~15,000+ LOC (estimated)
+- **Total Files**: 430 packed files in `repomix-output.xml`
+- **Output Tokens**: 837,952 tokens
+- **Output Characters**: 3,182,720 chars
+- **State handler source files**: 28 files under `src/MessengerWebhook/StateMachine/Handlers/`
+- **Security exclusions during packing**: 2 credential-like files excluded by Repomix
 
 ---
 
@@ -176,19 +175,13 @@ MessengerWebhook/
 - Conditional transitions (e.g., cart must have items)
 - Validation before state changes
 
-**State Handlers** (`Handlers/`, 11 handlers + base):
-1. `IdleStateHandler` - Initial state, awaits user message
-2. `GreetingStateHandler` - Welcome message, transition to MainMenu
-3. `MainMenuStateHandler` - Present main options (Browse, Skin Analysis, Help)
-4. `BrowsingProductsStateHandler` - Product catalog with semantic search
-5. `ProductDetailStateHandler` - Single product view with details
-6. `SkinAnalysisStateHandler` - AI-powered skin analysis
-7. `VariantSelectionStateHandler` - Choose product variant (color/size)
-8. `AddToCartStateHandler` - Add item to cart
-9. `CartReviewStateHandler` - Review cart contents
-10. `ShippingAddressStateHandler` - Collect shipping info
-11. `HelpStateHandler` - Context-aware help
-12. `BaseStateHandler` - Abstract base with error handling
+**State Handlers**:
+- Classic commerce handlers remain for catalog/cart flows (`IdleStateHandler`, `GreetingStateHandler`, `MainMenuStateHandler`, `BrowsingProductsStateHandler`, `ProductDetailStateHandler`, `VariantSelectionStateHandler`, `AddToCartStateHandler`, `CartReviewStateHandler`, `ShippingAddressStateHandler`, `PaymentMethodStateHandler`, `OrderConfirmationStateHandler`, `OrderPlacedStateHandler`, `OrderTrackingStateHandler`, `HelpStateHandler`, `ErrorStateHandler`).
+- Sales-conversation handlers now also drive the Messenger order-closing flow (`ConsultingStateHandler`, `CollectingInfoStateHandler`, `DraftOrderStateHandler`, `CompleteStateHandler`, `QuickReplySalesStateHandler`, `HumanHandoffStateHandler`) on top of `SalesStateHandlerBase`.
+- Transcript production-readiness logic verified in code:
+  - `DraftOrderStateHandler` first returns `TryCreateDraftConfirmationAsync(...)` output, then falls back to a generic local-draft acknowledgement.
+  - `CompleteStateHandler` preserves completed-order context for greeting-prefixed order follow-ups, resets stale completed sessions after 24 hours, and answers `thông tin nào` with the concrete fields being rechecked plus any selected gift.
+  - `SalesStateHandlerBase` still owns shared order-context recovery, conversation history, and customer-contact memory behavior used by the sales handlers.
 
 **State Context** (`Models/StateContext.cs`):
 - Session data carrier
@@ -367,9 +360,9 @@ Any state → Help (30) → (return to previous state)
 - Error handling and logging
 
 **System Prompt**:
-- Located in `Prompts/beauty-consultant-system-prompt.txt`
-- Defines AI persona as beauty consultant
-- Includes product knowledge and conversation guidelines
+- Sales flow uses `Prompts/sales-closer-system-prompt.txt`
+- Defines the sales closer persona and active-product guardrails for order, pricing, policy, and CTA replies
+- Includes product knowledge via RAG context plus conversation guidelines
 
 ### RAG (Retrieval-Augmented Generation)
 

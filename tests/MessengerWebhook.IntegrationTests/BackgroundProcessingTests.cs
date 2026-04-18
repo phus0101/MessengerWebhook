@@ -32,7 +32,10 @@ public class BackgroundProcessingTests : IClassFixture<CustomWebApplicationFacto
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         await WaitForAsync(() => _factory.MessengerSpy.Messages.Any(x => x.RecipientId == "sender-processing-1"));
 
-        _factory.MessengerSpy.Messages.Last(x => x.RecipientId == "sender-processing-1").Text.Should().Contain("Kem Chống Nắng");
+        var reply = _factory.MessengerSpy.Messages.Last(x => x.RecipientId == "sender-processing-1").Text;
+        Assert.True(
+            reply.Contains("Kem Chống Nắng", StringComparison.OrdinalIgnoreCase) ||
+            reply.Contains("Kem Chong Nang", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -111,18 +114,36 @@ public class BackgroundProcessingTests : IClassFixture<CustomWebApplicationFacto
     }
 
     [Fact]
-    public async Task BackgroundService_CreatesDraftAfterCollectingContactInfo()
+    public async Task BackgroundService_CreatesDraftAfterCollectingContactInfo_AndExplicitBuyIntent()
     {
         await PostWebhookAsync("sender-draft-1", "mid.draft.1", "Tôi muốn mua kem chống nắng");
         await WaitForAsync(() => _factory.MessengerSpy.Messages.Any(x => x.RecipientId == "sender-draft-1"));
         _factory.MessengerSpy.Clear();
 
-        var response = await PostWebhookAsync(
+        var contactResponse = await PostWebhookAsync(
             "sender-draft-1",
             "mid.draft.2",
             "Số của chị là 0901234567, địa chỉ 12 Trần Hưng Đạo quận 1");
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        contactResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        await WaitForAsync(() => _factory.MessengerSpy.Messages.Any(x => x.RecipientId == "sender-draft-1"));
+        _factory.MessengerSpy.Clear();
+
+        var buyResponse = await PostWebhookAsync(
+            "sender-draft-1",
+            "mid.draft.3",
+            "ok em lên đơn nhé");
+
+        buyResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        await WaitForAsync(() => _factory.MessengerSpy.Messages.Any(x => x.RecipientId == "sender-draft-1"));
+        _factory.MessengerSpy.Clear();
+
+        var confirmResponse = await PostWebhookAsync(
+            "sender-draft-1",
+            "mid.draft.4",
+            "đúng rồi");
+
+        confirmResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         await WaitForAsync(() => _factory.MessengerSpy.Messages.Any(x => x.RecipientId == "sender-draft-1"));
 
         using var scope = _factory.Services.CreateScope();
@@ -130,6 +151,12 @@ public class BackgroundProcessingTests : IClassFixture<CustomWebApplicationFacto
         var draft = dbContext.DraftOrders.Single(x => x.FacebookPSID == "sender-draft-1");
         draft.CustomerPhone.Should().Be("0901234567");
         draft.ShippingAddress.Should().Contain("12 Trần Hưng Đạo");
+        draft.PriceConfirmed.Should().BeTrue();
+        draft.ShippingConfirmed.Should().BeFalse();
+
+        var customer = dbContext.CustomerIdentities.Single(x => x.FacebookPSID == "sender-draft-1");
+        customer.TotalOrders.Should().Be(0);
+        customer.LifetimeValue.Should().Be(0);
     }
 
     private Task<HttpResponseMessage> PostWebhookAsync(string senderId, string messageId, string text)

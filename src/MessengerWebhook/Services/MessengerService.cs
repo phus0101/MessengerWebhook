@@ -41,9 +41,11 @@ public class MessengerService : IMessengerService
         );
 
         var pageAccessToken = await ResolvePageAccessTokenAsync();
-        var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/me/messages?access_token={pageAccessToken}";
+        var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/me/messages";
+        var httpMessage = CreateGraphRequest(HttpMethod.Post, url, pageAccessToken);
+        httpMessage.Content = JsonContent.Create(request);
 
-        var response = await _httpClient.PostAsJsonAsync(url, request, cancellationToken);
+        var response = await _httpClient.SendAsync(httpMessage, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -82,9 +84,10 @@ public class MessengerService : IMessengerService
         );
 
         var pageAccessToken = await ResolvePageAccessTokenAsync();
-        var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/me/messages?access_token={pageAccessToken}";
-
-        var response = await _httpClient.PostAsJsonAsync(url, request, cancellationToken);
+        var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/me/messages";
+        var httpMessage = CreateGraphRequest(HttpMethod.Post, url, pageAccessToken);
+        httpMessage.Content = JsonContent.Create(request);
+        var response = await _httpClient.SendAsync(httpMessage, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -111,8 +114,9 @@ public class MessengerService : IMessengerService
         try
         {
             var pageAccessToken = await ResolvePageAccessTokenAsync();
-            var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/{videoId}?fields=status,live_status&access_token={pageAccessToken}";
-            var response = await _httpClient.GetAsync(url, cancellationToken);
+            var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/{videoId}?fields=status,live_status";
+            var httpMessage = CreateGraphRequest(HttpMethod.Get, url, pageAccessToken);
+            var response = await _httpClient.SendAsync(httpMessage, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -137,8 +141,9 @@ public class MessengerService : IMessengerService
         try
         {
             var pageAccessToken = await ResolvePageAccessTokenAsync();
-            var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/{commentId}?is_hidden=true&access_token={pageAccessToken}";
-            var response = await _httpClient.PostAsync(url, null, cancellationToken);
+            var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/{commentId}?is_hidden=true";
+            var httpMessage = CreateGraphRequest(HttpMethod.Post, url, pageAccessToken);
+            var response = await _httpClient.SendAsync(httpMessage, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -161,10 +166,12 @@ public class MessengerService : IMessengerService
         try
         {
             var pageAccessToken = await ResolvePageAccessTokenAsync();
-            var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/{commentId}/replies?access_token={pageAccessToken}";
+            var url = $"{_options.GraphApiBaseUrl}/{_options.ApiVersion}/{commentId}/replies";
 
             var payload = new { message };
-            var response = await _httpClient.PostAsJsonAsync(url, payload, cancellationToken);
+            var httpMessage = CreateGraphRequest(HttpMethod.Post, url, pageAccessToken);
+            httpMessage.Content = JsonContent.Create(payload);
+            var response = await _httpClient.SendAsync(httpMessage, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -187,6 +194,17 @@ public class MessengerService : IMessengerService
             _logger.LogError(ex, "Error replying to comment {CommentId}", commentId);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Creates a Graph API request with Bearer token authorization instead of query string.
+    /// </summary>
+    private HttpRequestMessage CreateGraphRequest(HttpMethod method, string url, string? pageAccessToken = null)
+    {
+        var request = new HttpRequestMessage(method, url);
+        var token = pageAccessToken ?? _options.PageAccessToken;
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return request;
     }
 
     private async Task<string> ResolvePageAccessTokenAsync()

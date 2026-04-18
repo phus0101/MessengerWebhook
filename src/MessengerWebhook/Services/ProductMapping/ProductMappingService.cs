@@ -56,8 +56,14 @@ public class ProductMappingService : IProductMappingService
             return await GetProductByCodeAsync("KCN");
         }
 
+        // Mặt Nạ Ngủ
+        if (ContainsAny(normalized, "mat na ngu", "mat na", "mask"))
+        {
+            return await GetProductByCodeAsync("MN");
+        }
+
         // Kem Lụa Dưỡng Ẩm
-        if (ContainsAny(normalized, "kem lua", "lua", "duong am", "cap am"))
+        if (ContainsAny(normalized, "kem lua", "lua"))
         {
             return await GetProductByCodeAsync("KL");
         }
@@ -80,12 +86,6 @@ public class ProductMappingService : IProductMappingService
             return await GetProductByCodeAsync("SR");
         }
 
-        // Mặt Nạ Ngủ
-        if (ContainsAny(normalized, "mat na", "mat na ngu", "mask"))
-        {
-            return await GetProductByCodeAsync("MN");
-        }
-
         // Kem Dưỡng Mắt
         if (ContainsAny(normalized, "kem mat", "duong mat", "quang tham", "bong mat"))
         {
@@ -98,8 +98,8 @@ public class ProductMappingService : IProductMappingService
             return await GetProductByCodeAsync("COMBO_3");
         }
 
-        // Combo 2 - Freeship
-        if (ContainsAny(normalized, "freeship", "2 san pham", "combo 2", "combo"))
+        // Combo 2 - only when customer explicitly names the product
+        if (ContainsAny(normalized, "combo 2"))
         {
             return await GetProductByCodeAsync("COMBO_2");
         }

@@ -26,18 +26,19 @@ SDK auto-reads `STITCH_API_KEY` from environment. No explicit config needed.
 import { stitch } from "@google/stitch-sdk";
 
 const projects = await stitch.projects();         // List all projects
-const project = await stitch.project("my-id");    // Get/create project
+const project = stitch.project("my-id");          // Get project handle (sync)
 ```
 
 ### Project
 
 ```typescript
-const project = await stitch.project("project-123");
+const project = stitch.project("project-123");  // sync — returns handle
 
-// Generate screen from prompt
-const screen = await project.generate("Login page with email/password", {
-  deviceType: "mobile"  // optional: "mobile" | "desktop" | "tablet"
-});
+// Generate screen from prompt (positional params, uppercase device types)
+const screen = await project.generate(
+  "Login page with email/password",
+  "MOBILE"  // optional: "MOBILE" | "DESKTOP" | "TABLET" | "AGNOSTIC"
+);
 
 const screens = await project.screens();           // List all screens
 const screen = await project.getScreen(screenId);  // Get specific screen
@@ -50,10 +51,10 @@ const screen = await project.getScreen(screenId);  // Get specific screen
 const htmlUrl = await screen.getHtml();     // Returns download URL (HTML + Tailwind)
 const imageUrl = await screen.getImage();   // Returns download URL (PNG screenshot)
 
-// Edit/refine
+// Edit/refine (positional: prompt, deviceType?, modelId?)
 const edited = await screen.edit("Make colors darker, add search bar");
 
-// Generate variants
+// Generate variants (positional: prompt, variantOptions, deviceType?, modelId?)
 const variants = await screen.variants("Different color schemes", {
   variantCount: 3,            // 1-5 variants
   creativeRange: "medium",    // "low" | "medium" | "high"
@@ -87,14 +88,18 @@ const { text } = await generateText({
 ## Type Definitions
 
 ```typescript
+type DeviceType = "DEVICE_TYPE_UNSPECIFIED" | "MOBILE" | "DESKTOP" | "TABLET" | "AGNOSTIC";
+type ModelId = "MODEL_ID_UNSPECIFIED" | "GEMINI_3_PRO" | "GEMINI_3_FLASH";
+
 interface Stitch {
   projects(): Promise<Project[]>;
-  project(id: string): Promise<Project>;
+  createProject(title?: string): Promise<Project>;
+  project(id: string): Project;  // sync — returns handle, no API call
 }
 
 interface Project {
   id: string;
-  generate(prompt: string, options?: { deviceType?: "mobile" | "desktop" | "tablet" }): Promise<Screen>;
+  generate(prompt: string, deviceType?: DeviceType, modelId?: ModelId): Promise<Screen>;
   screens(): Promise<Screen[]>;
   getScreen(screenId: string): Promise<Screen>;
 }
@@ -103,12 +108,8 @@ interface Screen {
   id: string;
   getHtml(): Promise<string>;   // Download URL
   getImage(): Promise<string>;  // Download URL
-  edit(prompt: string): Promise<Screen>;
-  variants(prompt: string, options: {
-    variantCount?: number;
-    creativeRange?: "low" | "medium" | "high";
-    aspects?: string[];
-  }): Promise<Screen[]>;
+  edit(prompt: string, deviceType?: DeviceType, modelId?: ModelId): Promise<Screen>;
+  variants(prompt: string, variantOptions: any, deviceType?: DeviceType, modelId?: ModelId): Promise<Screen[]>;
 }
 
 class StitchError extends Error {

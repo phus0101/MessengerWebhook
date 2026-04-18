@@ -114,7 +114,15 @@ async function main() {
     fs.mkdirSync(outputDir, { recursive: true });
 
     console.error(`[i] Exporting screen ${screenId} from project ${projectId}`);
-    const project = await stitch.project(projectId);
+    // Resolve project handle — for default project, find by title first
+    let project;
+    if (projectId === "claudekit-default") {
+      const projects = await stitch.projects();
+      const found = projects.find(p => p.data?.title === "claudekit-default");
+      project = found || stitch.project(projectId);
+    } else {
+      project = stitch.project(projectId);
+    }
     const screen = await project.getScreen(screenId!);
 
     const exported: Record<string, string> = {};

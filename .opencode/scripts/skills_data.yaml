@@ -1,5 +1,5 @@
 - argument_hint: '[url or task]'
-  category: other
+  category: multimedia
   description: AI-optimized browser automation CLI with context-efficient snapshots.
     Use for long autonomous sessions, self-verifying workflows, video recording, and
     cloud browser testing (Browserbase).
@@ -79,6 +79,16 @@
   has_scripts: true
   name: chrome-devtools
   path: chrome-devtools/SKILL.md
+- argument_hint: '[Goal/Metric description] or inline config block'
+  category: utilities
+  description: Autonomous iterative optimization loop — run N iterations against a
+    mechanical metric, learn from git history, auto-keep/discard changes. Use for
+    improving measurable metrics (coverage, performance, bundle size, etc.) through
+    repeated experimentation.
+  has_references: true
+  has_scripts: false
+  name: ck-autoresearch
+  path: ck-autoresearch/SKILL.md
 - argument_hint: '[error or issue description]'
   category: utilities
   description: Debug systematically with root cause analysis before fixes. Use for
@@ -89,8 +99,18 @@
   has_scripts: true
   name: ck-debug
   path: ck-debug/SKILL.md
+- argument_hint: '[Goal/Metric description] or inline config block'
+  category: utilities
+  description: Autonomous iterative optimization loop — run N iterations against a
+    mechanical metric, learn from git history, auto-keep/discard changes. Use for
+    improving measurable metrics (coverage, performance, bundle size, etc.) through
+    repeated experimentation.
+  has_references: true
+  has_scripts: false
+  name: ck-loop
+  path: ck-loop/SKILL.md
 - argument_hint: '[task] OR [archive|red-team|validate]'
-  category: other
+  category: utilities
   description: Plan implementations, design architectures, create technical roadmaps
     with detailed phases. Use for feature planning, system design, solution architecture,
     implementation strategy, phase documentation.
@@ -98,6 +118,33 @@
   has_scripts: false
   name: ck-plan
   path: ck-plan/SKILL.md
+- argument_hint: <feature description or change proposal> [--files <glob>]
+  category: utilities
+  description: 5 expert personas debate proposed changes before implementation. Catches
+    architectural, security, performance, and UX issues early. Use before major features
+    or risky changes.
+  has_references: false
+  has_scripts: false
+  name: ck-predict
+  path: ck-predict/SKILL.md
+- argument_hint: <file path or feature description>
+  category: utilities
+  description: Generate comprehensive edge cases and test scenarios by decomposing
+    features across 12 dimensions. Use before implementation or testing to catch issues
+    early.
+  has_references: false
+  has_scripts: false
+  name: ck-scenario
+  path: ck-scenario/SKILL.md
+- argument_hint: <scope glob or 'full'> [--fix] [--iterations N]
+  category: utilities
+  description: STRIDE + OWASP-based security audit with optional auto-fix. Scans code
+    for vulnerabilities, categorizes by severity, and can iteratively fix findings
+    using ck:autoresearch pattern.
+  has_references: true
+  has_scripts: false
+  name: ck-security
+  path: ck-security/SKILL.md
 - argument_hint: '[#PR | COMMIT | --pending | codebase [parallel]]'
   category: utilities
   description: 'Review code quality with adversarial rigor. Supports input modes:
@@ -115,7 +162,7 @@
   name: coding-level
   path: coding-level/SKILL.md
 - argument_hint: '[topic or question]'
-  category: other
+  category: utilities
   description: Check context usage limits, monitor time remaining, optimize token
     consumption, debug context failures. Use when asking about context percentage,
     rate limits, usage warnings, context optimization, agent architectures, memory
@@ -133,7 +180,7 @@
   name: cook
   path: cook/SKILL.md
 - argument_hint: '[copy-type] [context]'
-  category: other
+  category: utilities
   description: Conversion copywriting formulas, headline templates, email copy patterns,
     landing page structures, CTA optimization, and writing style extraction. Activate
     for writing high-converting copy, crafting headlines, email campaigns, landing
@@ -152,7 +199,7 @@
   name: databases
   path: databases/SKILL.md
 - argument_hint: '[platform] [environment]'
-  category: other
+  category: infrastructure
   description: Deploy projects to any platform with auto-detection. Use when user
     says "deploy", "publish", "ship", "go live", "push to production", "host this
     app", or mentions any hosting platform (Vercel, Netlify, Cloudflare, Railway,
@@ -276,7 +323,7 @@
   name: git
   path: git/SKILL.md
 - argument_hint: '[symbol or query]'
-  category: other
+  category: dev-tools
   description: Semantic code analysis with GitLab Knowledge Graph. Use for go-to-definition,
     find-usages, impact analysis, architecture visualization. Supports Ruby, Java,
     Kotlin, Python, TypeScript/JavaScript.
@@ -308,7 +355,7 @@
   name: kanban
   path: kanban/SKILL.md
 - argument_hint: '[path|url] [--full] [--output path]'
-  category: other
+  category: dev-tools
   description: Generate llms.txt files from docs or codebase scanning. Follows llmstxt.org
     spec. Use for LLM-friendly site indexes, documentation summaries, AI context optimization.
   has_references: true
@@ -316,7 +363,7 @@
   name: llms
   path: llms/SKILL.md
 - argument_hint: '[file-or-directory]'
-  category: other
+  category: utilities
   description: View markdown files with calm, book-like reading experience via HTTP
     server. Use for long-form content, documentation preview, novel reading, report
     viewing, distraction-free reading.
@@ -351,7 +398,7 @@
   name: media-processing
   path: media-processing/SKILL.md
 - argument_hint: '[diagram-type or description]'
-  category: other
+  category: utilities
   description: Create diagrams with Mermaid.js v11 syntax. Use for flowcharts, sequence
     diagrams, class diagrams, ER diagrams, Gantt charts, state diagrams, architecture
     diagrams, timelines, user journeys.
@@ -360,7 +407,7 @@
   name: mermaidjs-v11
   path: mermaidjs-v11/SKILL.md
 - argument_hint: '[task] [path]'
-  category: other
+  category: dev-tools
   description: Build and deploy documentation sites with Mintlify. Use when creating
     API docs, developer portals, or knowledge bases. Covers docs.json configuration,
     MDX components (Cards, Steps, Tabs, Accordions, CodeGroup, Callouts, Mermaid,
@@ -428,7 +475,7 @@
   name: project-management
   path: project-management/SKILL.md
 - argument_hint: '[directories or files to organize]'
-  category: other
+  category: utilities
   description: Organize files, directories, and content structure in any project.
     Use when creating files, determining output paths, organizing existing assets,
     or standardizing project layout.
@@ -437,7 +484,7 @@
   name: project-organization
   path: project-organization/SKILL.md
 - argument_hint: '[component or pattern]'
-  category: other
+  category: frontend
   description: React and Next.js performance optimization guidelines from Vercel Engineering.
     This skill should be used when writing, reviewing, or refactoring React/Next.js
     code to ensure optimal performance patterns. Triggers on tasks involving React
@@ -448,7 +495,7 @@
   name: react-best-practices
   path: react-best-practices/SKILL.md
 - argument_hint: '[video or component]'
-  category: other
+  category: frontend
   description: Best practices for Remotion - Video creation in React
   has_references: false
   has_scripts: false
@@ -472,6 +519,15 @@
   has_scripts: false
   name: research
   path: research/SKILL.md
+- argument_hint: '[timeframe] [--compare] [--team] [--format html|md]'
+  category: utilities
+  description: Data-driven sprint retrospective. Gathers git metrics (commits, LOC,
+    hotspots, churn), computes derived health indicators, and generates a structured
+    markdown or HTML report. Use after sprints, weekly check-ins, or any review period.
+  has_references: true
+  has_scripts: false
+  name: retro
+  path: retro/SKILL.md
 - argument_hint: '[search-target] [ext]'
   category: dev-tools
   description: Fast codebase scouting using parallel agents. Use for file discovery,
@@ -482,7 +538,7 @@
   name: scout
   path: scout/SKILL.md
 - argument_hint: '[scope] [--secrets-only] [--deps-only] [--full]'
-  category: other
+  category: utilities
   description: Scan codebase for security vulnerabilities, hardcoded secrets, dependency
     issues, and OWASP patterns. Use when asked to 'security scan', 'check for secrets',
     'audit security', or before major releases.
@@ -500,7 +556,7 @@
   name: sequential-thinking
   path: sequential-thinking/SKILL.md
 - argument_hint: '[effect or pattern]'
-  category: other
+  category: frontend
   description: 'Write GLSL fragment shaders for procedural graphics. Topics: shapes
     (SDF), patterns, noise (Perlin/simplex/cellular), fBm, colors (HSB/RGB), matrices,
     gradients, animations. Use for generative art, textures, visual effects, WebGL,
@@ -511,7 +567,7 @@
   path: shader/SKILL.md
 - argument_hint: '[official|beta] [--skip-tests] [--skip-review] [--skip-journal]
     [--skip-docs] [--dry-run]'
-  category: other
+  category: dev-tools
   description: 'Ship pipeline: merge main, test, review, commit, push, PR. Single
     command from feature branch to PR URL. Use for shipping official releases to main/master
     or beta releases to dev/beta branches.'
@@ -537,8 +593,17 @@
   has_scripts: true
   name: skill-creator
   path: skill-creator/SKILL.md
+- argument_hint: '[design prompt or action]'
+  category: frontend
+  description: AI design generation with Google Stitch. Generate UI designs from text
+    prompts, export Tailwind/HTML/DESIGN.md, orchestrate design-to-code pipeline.
+    Use for rapid prototyping, UI generation, design exploration.
+  has_references: true
+  has_scripts: true
+  name: stitch
+  path: stitch/SKILL.md
 - argument_hint: '[framework] [feature]'
-  category: other
+  category: frameworks
   description: Build with TanStack Start (full-stack React framework), TanStack Form
     (headless form management), and TanStack AI (AI streaming/chat). Use when creating
     TanStack projects, routes, server functions, forms, validation, or AI chat features.
@@ -632,7 +697,7 @@
   name: web-frameworks
   path: web-frameworks/SKILL.md
 - argument_hint: '[test-type] [target]'
-  category: other
+  category: multimedia
   description: Web testing with Playwright, Vitest, k6. E2E/unit/integration/load/security/visual/a11y
     testing. Use for test automation, flakiness, Core Web Vitals, mobile gestures,
     cross-browser.

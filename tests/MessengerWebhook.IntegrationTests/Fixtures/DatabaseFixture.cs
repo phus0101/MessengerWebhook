@@ -1,5 +1,6 @@
 using MessengerWebhook.Data;
 using Microsoft.EntityFrameworkCore;
+using Pgvector.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 
 namespace MessengerWebhook.IntegrationTests.Fixtures;
@@ -29,7 +30,7 @@ public class DatabaseFixture : IAsyncLifetime
 
         // Create DbContext
         var options = new DbContextOptionsBuilder<MessengerBotDbContext>()
-            .UseNpgsql(ConnectionString)
+            .UseNpgsql(ConnectionString, o => o.UseVector())
             .Options;
 
         await using var context = new MessengerBotDbContext(options);
@@ -71,7 +72,7 @@ public class DatabaseFixture : IAsyncLifetime
     public MessengerBotDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<MessengerBotDbContext>()
-            .UseNpgsql(ConnectionString)
+            .UseNpgsql(ConnectionString, o => o.UseVector())
             .Options;
 
         return new MessengerBotDbContext(options);

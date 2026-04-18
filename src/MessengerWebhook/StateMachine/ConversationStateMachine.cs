@@ -286,6 +286,7 @@ public class ConversationStateMachine : IStateMachine
         context.SetData("rememberedCustomerLastInteractionAt", customer.LastInteractionAt);
         context.SetData("contactMemorySource", "customer-identity");
         context.SetData("contactNeedsConfirmation", true);
+        context.SetData("pendingContactQuestion", "confirm_old_contact");
     }
 
     private sealed class NullCustomerIntelligenceService : ICustomerIntelligenceService

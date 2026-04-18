@@ -134,6 +134,29 @@ public class IndexingProgressTrackerTests : IDisposable
     }
 
     [Fact]
+    public void TryCreateJob_ShouldReturnNull_WhenAnotherJobIsRunning()
+    {
+        _tracker.CreateJob(10);
+
+        var secondJobId = _tracker.TryCreateJob(20);
+
+        Assert.Null(secondJobId);
+    }
+
+    [Fact]
+    public void TryCreateJob_ShouldCreateNewJob_AfterRunningJobCompletes()
+    {
+        var firstJobId = _tracker.CreateJob(10);
+        _tracker.CompleteJob(firstJobId);
+
+        var secondJobId = _tracker.TryCreateJob(20);
+
+        Assert.NotNull(secondJobId);
+        Assert.NotEqual(Guid.Empty, secondJobId.Value);
+        Assert.Equal(IndexingStatus.Running, _tracker.GetJob(secondJobId.Value)!.Status);
+    }
+
+    [Fact]
     public void ProgressPercentage_ShouldCalculateCorrectly()
     {
         // Arrange

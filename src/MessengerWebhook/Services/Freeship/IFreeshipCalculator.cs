@@ -6,8 +6,7 @@ namespace MessengerWebhook.Services.Freeship;
 public interface IFreeshipCalculator
 {
     /// <summary>
-    /// Check if order is eligible for freeship
-    /// Rules: >= 2 products OR productCode == "COMBO_2"
+    /// Check if order is eligible for freeship based on current policy.
     /// </summary>
     bool IsEligibleForFreeship(List<string> productCodes);
 

@@ -257,25 +257,20 @@ public static class AdminOperationsEndpointExtensions
             var user = AdminApiEndpointHelpers.GetUser(httpContext);
             if (user == null) return Results.Unauthorized();
 
-            // Check for active jobs
-            var activeJobs = progressTracker.GetActiveJobs();
-            if (activeJobs.Count > 0)
-            {
-                return Results.Conflict(new { error = "An indexing job is already running", jobId = activeJobs[0].JobId });
-            }
-
-            // Capture tenant ID from current user context
             var tenantId = user.TenantId;
 
-            // Get product count first
             using var countScope = scopeFactory.CreateScope();
             var dbContext = countScope.ServiceProvider.GetRequiredService<MessengerBotDbContext>();
             var totalProducts = await dbContext.Products.CountAsync(cancellationToken);
 
-            // Create job
-            var jobId = progressTracker.CreateJob(totalProducts);
+            var jobId = progressTracker.TryCreateJob(totalProducts);
+            if (!jobId.HasValue)
+            {
+                var activeJobs = progressTracker.GetActiveJobs();
+                return Results.Conflict(new { error = "An indexing job is already running", jobId = activeJobs.FirstOrDefault()?.JobId ?? Guid.Empty });
+            }
 
-            // Run indexing in background scope to avoid blocking
+            var createdJobId = jobId.Value;
             var cts = new CancellationTokenSource();
             _ = Task.Run(async () =>
             {
@@ -284,30 +279,29 @@ public static class AdminOperationsEndpointExtensions
 
                 try
                 {
-                    logger.LogInformation("Starting background indexing job {JobId} for tenant {TenantId}", jobId, tenantId);
+                    logger.LogInformation("Starting background indexing job {JobId} for tenant {TenantId}", createdJobId, tenantId);
 
-                    // Set tenant context for background task
                     var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
                     tenantContext.Initialize(tenantId, null, null);
 
                     var pipeline = scope.ServiceProvider.GetRequiredService<ProductEmbeddingPipeline>();
-                    await pipeline.IndexAllProductsAsync(jobId, cts.Token);
+                    await pipeline.IndexAllProductsAsync(createdJobId, cts.Token);
 
-                    logger.LogInformation("Completed indexing all products to Pinecone for job {JobId}", jobId);
+                    logger.LogInformation("Completed indexing all products to Pinecone for job {JobId}", createdJobId);
                 }
                 catch (OperationCanceledException)
                 {
-                    logger.LogWarning("Indexing job {JobId} was cancelled", jobId);
-                    progressTracker.FailJob(jobId, "Job was cancelled");
+                    logger.LogWarning("Indexing job {JobId} was cancelled", createdJobId);
+                    progressTracker.FailJob(createdJobId, "Job was cancelled");
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Failed to index all products to Pinecone for job {JobId}. Error: {Message}", jobId, ex.Message);
-                    progressTracker.FailJob(jobId, ex.Message);
+                    logger.LogError(ex, "Failed to index all products to Pinecone for job {JobId}. Error: {Message}", createdJobId, ex.Message);
+                    progressTracker.FailJob(createdJobId, ex.Message);
                 }
             }, cts.Token);
 
-            return Results.Ok(new { success = true, jobId, message = "Indexing started in background" });
+            return Results.Ok(new { success = true, jobId = createdJobId, message = "Indexing started in background" });
         });
 
         group.MapPost("/vector-search/index-product/{productId}", async (

@@ -3,13 +3,18 @@ using MessengerWebhook.Configuration;
 using MessengerWebhook.Data;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Models;
+using MessengerWebhook.Services;
 using MessengerWebhook.Services.Tenants;
-using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace MessengerWebhook.Middleware;
 
+/// <summary>
+/// Resolves tenant context from webhook payload based on Facebook Page ID.
+/// Uses <see cref="FacebookPageConfigLookupService"/> for race-condition-safe page config creation.
+/// </summary>
 public class TenantResolutionMiddleware
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -19,25 +24,20 @@ public class TenantResolutionMiddleware
 
     private readonly RequestDelegate _next;
     private readonly ILogger<TenantResolutionMiddleware> _logger;
-    private readonly IHostEnvironment _environment;
-    private readonly AdminOptions _adminOptions;
 
     public TenantResolutionMiddleware(
         RequestDelegate next,
-        ILogger<TenantResolutionMiddleware> logger,
-        IHostEnvironment environment,
-        IOptions<AdminOptions> adminOptions)
+        ILogger<TenantResolutionMiddleware> logger)
     {
         _next = next;
         _logger = logger;
-        _environment = environment;
-        _adminOptions = adminOptions.Value;
     }
 
     public async Task InvokeAsync(
         HttpContext context,
         MessengerBotDbContext dbContext,
-        ITenantContext tenantContext)
+        ITenantContext tenantContext,
+        FacebookPageConfigLookupService lookupService)
     {
         if (context.Request.Method == "POST" && context.Request.Path == "/webhook")
         {
@@ -53,22 +53,9 @@ public class TenantResolutionMiddleware
 
                 if (!string.IsNullOrWhiteSpace(pageId))
                 {
-                    var pageConfig = await dbContext.FacebookPageConfigs
-                        .AsNoTracking()
-                        .FirstOrDefaultAsync(x => x.FacebookPageId == pageId && x.IsActive);
-
-                    if (pageConfig?.TenantId != null)
-                    {
-                        tenantContext.Initialize(
-                            pageConfig.TenantId.Value,
-                            pageConfig.FacebookPageId,
-                            pageConfig.DefaultManagerEmail);
-                    }
-                    else
-                    {
-                        var adoptedPageConfig = await TryAdoptUnknownDevelopmentPageAsync(dbContext, pageId, cancellationToken: context.RequestAborted);
-                        tenantContext.Initialize(adoptedPageConfig?.TenantId, pageId, adoptedPageConfig?.DefaultManagerEmail);
-                    }
+                    // Use consolidated service that handles lookup + race-safe auto-adoption
+                    var resolvedPageConfig = await lookupService.EnsurePageConfigAsync(pageId, context.RequestAborted);
+                    tenantContext.Initialize(resolvedPageConfig?.TenantId, pageId, resolvedPageConfig?.DefaultManagerEmail);
                 }
             }
             catch (JsonException ex)
@@ -78,46 +65,5 @@ public class TenantResolutionMiddleware
         }
 
         await _next(context);
-    }
-
-    private async Task<FacebookPageConfig?> TryAdoptUnknownDevelopmentPageAsync(
-        MessengerBotDbContext dbContext,
-        string pageId,
-        CancellationToken cancellationToken)
-    {
-        if (!_environment.IsDevelopment() ||
-            !_adminOptions.AllowTenantWideVisibilityInDevelopment ||
-            string.IsNullOrWhiteSpace(_adminOptions.BootstrapEmail))
-        {
-            return null;
-        }
-
-        var bootstrapPageConfig = await dbContext.FacebookPageConfigs
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(x => x.DefaultManagerEmail == _adminOptions.BootstrapEmail && x.IsActive, cancellationToken);
-        if (bootstrapPageConfig?.TenantId == null)
-        {
-            return null;
-        }
-
-        var adoptedConfig = new FacebookPageConfig
-        {
-            TenantId = bootstrapPageConfig.TenantId,
-            FacebookPageId = pageId,
-            PageName = $"Imported Dev Page {pageId}",
-            DefaultManagerEmail = _adminOptions.BootstrapEmail,
-            IsPrimaryPage = false,
-            IsActive = true
-        };
-
-        dbContext.FacebookPageConfigs.Add(adoptedConfig);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation(
-            "Adopted unknown Facebook page {PageId} into bootstrap tenant {TenantId} for development",
-            pageId,
-            bootstrapPageConfig.TenantId);
-
-        return adoptedConfig;
     }
 }

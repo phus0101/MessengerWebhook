@@ -4,3 +4,4 @@ Downloading pyyaml-6.0.3-cp312-cp312-win_amd64.whl (154 kB)
 Installing collected packages: pyyaml
 Successfully installed pyyaml-6.0.3
 Requirement already satisfied: pyyaml>=6.0 in .\.venv\Lib\site-packages (6.0.3)
+Requirement already satisfied: pyyaml>=6.0 in .\.venv\Lib\site-packages (6.0.3)

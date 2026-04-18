@@ -4,7 +4,8 @@ export type DraftOrderStatus =
   | "Approved"
   | "Rejected"
   | "SubmittedToNobita"
-  | "SubmitFailed";
+  | "SubmitFailed"
+  | "SubmittingToNobita";
 
 export type RiskLevel = "Low" | "Medium" | "High";
 
@@ -35,12 +36,14 @@ const enumMaps: Record<AdminEnumKind, Record<string, EnumPresentation>> = {
     "3": { label: "Rejected", tone: "rejected" },
     "4": { label: "Submitted to Nobita", tone: "submittedtonobita" },
     "5": { label: "Submit failed", tone: "submitfailed" },
+    "6": { label: "Submitting to Nobita", tone: "submittingtonobita" },
     Draft: { label: "Draft", tone: "draft" },
     PendingReview: { label: "Pending review", tone: "pendingreview" },
     Approved: { label: "Approved", tone: "approved" },
     Rejected: { label: "Rejected", tone: "rejected" },
     SubmittedToNobita: { label: "Submitted to Nobita", tone: "submittedtonobita" },
-    SubmitFailed: { label: "Submit failed", tone: "submitfailed" }
+    SubmitFailed: { label: "Submit failed", tone: "submitfailed" },
+    SubmittingToNobita: { label: "Submitting to Nobita", tone: "submittingtonobita" }
   },
   "risk-level": {
     "0": { label: "Low", tone: "low" },

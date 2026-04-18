@@ -16,10 +16,12 @@
 
 ## Sales Flow
 1. Customer clicks ad quick reply or sends a direct product-intent message.
-2. Bot replies with product + gift + shipping policy and asks for phone number + address.
-3. If customer asks follow-up questions, bot answers naturally but always closes with the same order CTA.
-4. If customer provides phone number + address, system creates a local draft order for manual review.
-5. If conversation hits policy boundaries or unsupported scenarios, system creates a support case and locks the bot for that thread.
+2. On pure greetings, bot replies naturally but still transitions into consultation instead of staying in generic small talk.
+3. When a product is in context, bot replies with product + current gift/shipping policy, not hardcoded promo shortcuts.
+4. Returning customers can reuse remembered phone/address, but bot asks for confirmation before using old contact info and allows updates in the same flow.
+5. If customer provides or confirms required contact info and shows explicit buy intent, system creates a local draft order for manual review.
+6. Explicit quantity mentioned by customer is persisted into the draft order.
+7. If conversation hits policy boundaries or unsupported scenarios, system creates a support case and locks the bot for that thread.
 
 ## New Building Blocks
 - `INobitaClient`
