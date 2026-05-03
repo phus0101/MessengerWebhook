@@ -10,6 +10,7 @@ using MessengerWebhook.Services.Customers;
 using MessengerWebhook.Services.Freeship;
 using MessengerWebhook.Services.GiftSelection;
 using MessengerWebhook.Services.Policy;
+using MessengerWebhook.Services.ProductGrounding;
 using MessengerWebhook.Services.ProductMapping;
 using MessengerWebhook.Services.RAG;
 using MessengerWebhook.Services.Support;
@@ -22,6 +23,7 @@ using MessengerWebhook.Services.ResponseValidation.Models;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.Metrics;
 using MessengerWebhook.Services.Metrics.Models;
+using MessengerWebhook.Services.SubIntent;
 using MessengerWebhook.StateMachine.Models;
 using MessengerWebhook.Utilities;
 using Microsoft.Extensions.Options;
@@ -47,7 +49,10 @@ public abstract class SalesStateHandlerBase : IStateHandler
     protected readonly IResponseValidationService ResponseValidationService;
     protected readonly IABTestService ABTestService;
     protected readonly IConversationMetricsService ConversationMetricsService;
+    protected readonly ISubIntentClassifier SubIntentClassifier;
+    private readonly IProductGroundingService _productGroundingService;
     protected readonly SalesBotOptions SalesBotOptions;
+    protected readonly PolicyGuardOptions PolicyGuardOptions;
     protected readonly RAGOptions RagOptions;
     protected readonly ILogger Logger;
 
@@ -70,9 +75,60 @@ public abstract class SalesStateHandlerBase : IStateHandler
         IResponseValidationService responseValidationService,
         IABTestService abTestService,
         IConversationMetricsService conversationMetricsService,
+        ISubIntentClassifier subIntentClassifier,
         IOptions<SalesBotOptions> salesBotOptions,
         IOptions<RAGOptions> ragOptions,
-        ILogger logger)
+        ILogger logger,
+        IProductGroundingService? productGroundingService = null)
+        : this(
+            geminiService,
+            policyGuardService,
+            productMappingService,
+            giftSelectionService,
+            freeshipCalculator,
+            caseEscalationService,
+            customerIntelligenceService,
+            draftOrderCoordinator,
+            ragService,
+            emotionDetectionService,
+            toneMatchingService,
+            conversationContextAnalyzer,
+            smallTalkService,
+            responseValidationService,
+            abTestService,
+            conversationMetricsService,
+            subIntentClassifier,
+            salesBotOptions,
+            Options.Create(new PolicyGuardOptions()),
+            ragOptions,
+            logger,
+            productGroundingService)
+    {
+    }
+
+    protected SalesStateHandlerBase(
+        IGeminiService geminiService,
+        IPolicyGuardService policyGuardService,
+        IProductMappingService productMappingService,
+        IGiftSelectionService giftSelectionService,
+        IFreeshipCalculator freeshipCalculator,
+        ICaseEscalationService caseEscalationService,
+        ICustomerIntelligenceService customerIntelligenceService,
+        DraftOrderCoordinator draftOrderCoordinator,
+        IRAGService? ragService,
+        IEmotionDetectionService emotionDetectionService,
+        IToneMatchingService toneMatchingService,
+        IConversationContextAnalyzer conversationContextAnalyzer,
+        ISmallTalkService smallTalkService,
+        IResponseValidationService responseValidationService,
+        IABTestService abTestService,
+        IConversationMetricsService conversationMetricsService,
+        ISubIntentClassifier subIntentClassifier,
+        IOptions<SalesBotOptions> salesBotOptions,
+        IOptions<PolicyGuardOptions> policyGuardOptions,
+        IOptions<RAGOptions> ragOptions,
+        ILogger logger,
+        IProductGroundingService? productGroundingService = null)
     {
         GeminiService = geminiService;
         PolicyGuardService = policyGuardService;
@@ -90,7 +146,10 @@ public abstract class SalesStateHandlerBase : IStateHandler
         ResponseValidationService = responseValidationService;
         ABTestService = abTestService;
         ConversationMetricsService = conversationMetricsService;
+        SubIntentClassifier = subIntentClassifier;
+        _productGroundingService = productGroundingService ?? new ProductGroundingService(new ProductNeedDetector(), new ProductMentionDetector());
         SalesBotOptions = salesBotOptions.Value;
+        PolicyGuardOptions = policyGuardOptions.Value;
         RagOptions = ragOptions.Value;
         Logger = logger;
     }
@@ -166,7 +225,15 @@ public abstract class SalesStateHandlerBase : IStateHandler
             }
         }
 
-        var decision = PolicyGuardService.Evaluate(message);
+        var policyRequest = BuildPolicyGuardRequest(ctx, message, history);
+        var decision = await PolicyGuardService.EvaluateAsync(policyRequest);
+        if (decision.Action == PolicyAction.SafeReply)
+        {
+            var safeReply = PolicyGuardOptions.SafeReplyMessage;
+            AddToHistory(ctx, "assistant", safeReply);
+            return safeReply;
+        }
+
         if (decision.RequiresEscalation)
         {
             var supportCase = await CaseEscalationService.EscalateAsync(
@@ -210,8 +277,13 @@ public abstract class SalesStateHandlerBase : IStateHandler
             "lên đơn", "len don", "chốt đơn", "chot don", "chốt nhé", "chot nhe", "chốt nha", "chot nha",
             "mua luôn", "mua luon", "đặt hàng", "dat hang", "ok em", "oke em", "ok e",
             "lấy sản phẩm này", "lay san pham nay", "lấy nhé", "lay nhe", "lấy nha", "lay nha");
+        var isRelatedSuggestionSelection = IsRelatedSuggestionSelection(message);
         var hasPendingFinalSummaryConfirmation = IsAwaitingFinalSummaryConfirmation(ctx);
-        var recentHistory = GetHistory(ctx).TakeLast(3).ToList();
+        var activeProductsForIntent = await GetActiveSelectedProductsAsync(ctx);
+        var intentGroundingContext = _productGroundingService.BuildContext(message, activeProductsForIntent, Array.Empty<GroundedProduct>());
+        var recentHistory = _productGroundingService
+            .SanitizeAssistantHistory(GetHistory(ctx).TakeLast(3), intentGroundingContext.AllowedProducts)
+            .ToList();
         var intentResult = await GeminiService.DetectIntentAsync(
             message,
             ctx.CurrentState,
@@ -219,6 +291,13 @@ public abstract class SalesStateHandlerBase : IStateHandler
             hasContact,
             recentHistory,
             CancellationToken.None);
+
+        var resolvedRelatedSuggestionSelection = false;
+        if (isRelatedSuggestionSelection)
+        {
+            resolvedRelatedSuggestionSelection = await TryResolveNumberedSuggestionSelectionAsync(ctx, message) != null;
+            hasProduct = HasSelectedProduct(ctx);
+        }
 
         Logger.LogInformation(
             "AI Intent Detection - PSID: {PSID}, Intent: {Intent}, Confidence: {Confidence}, Method: {Method}",
@@ -254,14 +333,26 @@ public abstract class SalesStateHandlerBase : IStateHandler
         if (!hasProduct &&
             (hasContact ||
              hasBuyIntentPhrase ||
+             (isRelatedSuggestionSelection && resolvedRelatedSuggestionSelection) ||
              ctx.CurrentState == ConversationState.CollectingInfo ||
              (useAiIntent &&
               (intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy ||
                intentResult.Intent == Services.AI.Models.CustomerIntent.Confirming))))
         {
             Logger.LogInformation("Ordering flow detected without product in context for PSID: {PSID}, attempting to extract product from history", ctx.FacebookPSID);
-            await TryExtractProductFromHistoryAsync(ctx);
+            await TryExtractProductFromHistoryAsync(ctx, message);
             hasProduct = HasSelectedProduct(ctx);
+        }
+
+        if (isRelatedSuggestionSelection && hasProduct)
+        {
+            var selectedSuggestionReply = await TryBuildOfferResponseAsync(ctx, message, Services.AI.Models.CustomerIntent.Browsing);
+            if (!string.IsNullOrWhiteSpace(selectedSuggestionReply))
+            {
+                ctx.CurrentState = ConversationState.Consulting;
+                AddToHistory(ctx, "assistant", selectedSuggestionReply);
+                return selectedSuggestionReply;
+            }
         }
 
         var nextState = useAiIntent
@@ -271,7 +362,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
         var isQuestioning = useAiIntent && intentResult.Intent == Services.AI.Models.CustomerIntent.Questioning;
         var isProductQuestion = ContainsAnyPhrase(message,
-            "nói thêm", "noi them", "chi tiet", "thành phần", "thanh phan", "công dụng", "cong dung",
+            "nói thêm", "noi them", "nói kỹ", "noi ky", "chi tiet", "thành phần", "thanh phan", "công dụng", "cong dung",
             "cách dùng", "cach dung", "phù hợp", "phu hop", "dùng sao", "dung sao");
         var isShippingQuestion = ContainsAnyPhrase(message,
             "freeship", "free ship", "phí ship", "phi ship", "vận chuyển", "van chuyen", "ship");
@@ -297,6 +388,15 @@ public abstract class SalesStateHandlerBase : IStateHandler
             "tổng tiền", "tong tien", "tổng cộng", "tong cong", "bao nhiêu sản phẩm", "bao nhieu san pham", "bao nhiêu món", "bao nhieu mon");
         var isAmbiguousProductReference = HasAmbiguousProductReference(message);
         var hasQuestionMarker = message.Contains('?');
+        var requiresProductGrounding = RequiresProductGrounding(
+            message,
+            isProductQuestion,
+            isPriceQuestion,
+            isInventoryQuestion,
+            isPolicyQuestion,
+            isQuestioning,
+            hasQuestionMarker,
+            ctx.CurrentState);
 
         if (hasPendingFinalSummaryConfirmation)
         {
@@ -394,6 +494,11 @@ public abstract class SalesStateHandlerBase : IStateHandler
                 AddToHistory(ctx, "assistant", inventoryReply);
                 return inventoryReply;
             }
+
+            var fallbackReply = BuildProductGroundingFallbackReply();
+            ctx.CurrentState = ConversationState.Consulting;
+            AddToHistory(ctx, "assistant", fallbackReply);
+            return fallbackReply;
         }
 
         if (isPriceQuestion)
@@ -405,6 +510,11 @@ public abstract class SalesStateHandlerBase : IStateHandler
                 AddToHistory(ctx, "assistant", priceReply);
                 return priceReply;
             }
+
+            var fallbackReply = BuildProductGroundingFallbackReply();
+            ctx.CurrentState = ConversationState.Consulting;
+            AddToHistory(ctx, "assistant", fallbackReply);
+            return fallbackReply;
         }
 
         if (hasBuyIntentPhrase && hasProduct)
@@ -470,7 +580,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
                 if (!hasProduct)
                 {
                     Logger.LogInformation("No product in context before creating draft order for PSID: {PSID}, attempting to extract from history", ctx.FacebookPSID);
-                    await TryExtractProductFromHistoryAsync(ctx);
+                    await TryExtractProductFromHistoryAsync(ctx, message);
                     hasProduct = HasSelectedProduct(ctx);
                 }
 
@@ -516,6 +626,23 @@ public abstract class SalesStateHandlerBase : IStateHandler
             return offerResponse;
         }
 
+        if (requiresProductGrounding && (!RagOptions.Enabled || RagService == null))
+        {
+            var activeProductsForFallback = await GetActiveSelectedProductsAsync(ctx);
+            var groundingContext = await _productGroundingService.BuildContextWithRelatedSuggestionsAsync(
+                message,
+                activeProductsForFallback,
+                Array.Empty<GroundedProduct>());
+
+            var fallbackReply = groundingContext.RequiresGrounding && !groundingContext.HasAllowedProducts
+                ? await BuildGroundedRelatedSuggestionOrFallbackAsync(ctx, message, groundingContext, null, null, null)
+                : BuildProductGroundingFallbackReply();
+
+            ctx.CurrentState = ConversationState.Consulting;
+            AddToHistory(ctx, "assistant", fallbackReply);
+            return fallbackReply;
+        }
+
         // Continue conversation based on detected intent
         ctx.CurrentState = nextState;
         var reply = await BuildNaturalReplyAsync(ctx, message, useAiIntent ? intentResult.Intent : null);
@@ -549,7 +676,39 @@ public abstract class SalesStateHandlerBase : IStateHandler
         return ctx.GetData<List<AiConversationMessage>>("conversationHistory") ?? new List<AiConversationMessage>();
     }
 
-    private async Task TryExtractProductFromHistoryAsync(StateContext ctx)
+    private PolicyGuardRequest BuildPolicyGuardRequest(
+        StateContext ctx,
+        string message,
+        IReadOnlyList<AiConversationMessage> history)
+    {
+        var selectedProductCodes = (ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>()).ToArray();
+        var previousTurns = history;
+        if (previousTurns.Count > 0 &&
+            string.Equals(previousTurns[^1].Role, "user", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(previousTurns[^1].Content, message, StringComparison.Ordinal))
+        {
+            previousTurns = previousTurns.Take(previousTurns.Count - 1).ToArray();
+        }
+
+        var recentTurns = previousTurns
+            .TakeLast(PolicyGuardOptions.MaxRecentTurns)
+            .Select(turn => new PolicyConversationTurn(turn.Role, turn.Content))
+            .Append(new PolicyConversationTurn("user", message))
+            .ToArray();
+
+        return new PolicyGuardRequest(
+            message,
+            ctx.GetData<Guid?>("supportCaseId").HasValue,
+            ctx.GetData<Guid?>("draftOrderId").HasValue || !string.IsNullOrWhiteSpace(ctx.GetData<string>("draftOrderCode")),
+            recentTurns,
+            ctx.FacebookPSID,
+            ctx.GetData<string>("facebookPageId"),
+            ctx.CurrentState.ToString(),
+            ctx.GetData<string>("knownIntent"),
+            selectedProductCodes);
+    }
+
+    private async Task TryExtractProductFromHistoryAsync(StateContext ctx, string? currentMessage = null)
     {
         if (HasSelectedProduct(ctx))
         {
@@ -560,6 +719,12 @@ public abstract class SalesStateHandlerBase : IStateHandler
         Logger.LogInformation("Attempting to extract product from conversation history for PSID: {PSID}", ctx.FacebookPSID);
 
         var recentMessages = GetHistory(ctx).TakeLast(10).ToList();
+        var hasNumberedSelection = ExtractRelatedSuggestionSelectionNumber(currentMessage).HasValue;
+        if (await TryResolveNumberedSuggestionSelectionAsync(ctx, currentMessage) != null || hasNumberedSelection)
+        {
+            return;
+        }
+
         var userCandidates = await CollectHistoryProductCandidatesAsync(recentMessages, "user");
         var assistantCandidates = await CollectHistoryProductCandidatesAsync(recentMessages, "assistant");
 
@@ -624,24 +789,27 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
         var snapshot = await BuildCommercialFactSnapshotForPolicyAsync(ctx, product);
         var priceMessage = snapshot?.PriceConfirmed == true && snapshot.ConfirmedPrice.HasValue
-            ? $"Dạ bên em có {product.Name}, giá hiện theo dữ liệu nội bộ là {snapshot.ConfirmedPrice.Value:N0}đ ạ."
-            : $"Dạ bên em có {product.Name} ạ. Giá chính xác em cần chốt theo phiên bản và dữ liệu runtime hiện tại rồi báo chị chuẩn hơn nha.";
+            ? $"Dạ bên em có {product.Name}, giá {snapshot.ConfirmedPrice.Value:N0}đ ạ."
+            : $"Dạ bên em có {product.Name} ạ. Giá chính xác em cần chốt theo phiên bản hiện tại rồi báo chị chuẩn hơn nha.";
         var readyToBuyPriceMessage = snapshot?.PriceConfirmed == true && snapshot.ConfirmedPrice.HasValue
-            ? $"Dạ em lên thông tin cho {product.Name} rồi nha, giá hiện theo dữ liệu nội bộ là {snapshot.ConfirmedPrice.Value:N0}đ ạ."
-            : $"Dạ em lên thông tin cho {product.Name} rồi nha. Giá chính xác em cần chốt theo phiên bản và dữ liệu runtime hiện tại rồi báo chị chuẩn hơn nha.";
-        var shippingMessage = "Em chưa dám chốt freeship hay phí ship ngay lúc này, để em kiểm tra lại theo đơn cụ thể rồi báo chị chính xác ạ.";
+            ? $"Dạ em lên thông tin cho {product.Name} rồi nha, giá {snapshot.ConfirmedPrice.Value:N0}đ ạ."
+            : $"Dạ em lên thông tin cho {product.Name} rồi nha. Giá chính xác em cần chốt theo phiên bản hiện tại rồi báo chị chuẩn hơn nha.";
+        var shippingMessage = "Về phí ship, em cần kiểm tra lại theo địa chỉ cụ thể của chị để báo chính xác nha.";
         var giftMessage = gift == null
-            ? "Hiện tại hệ thống chưa ghi nhận quà tặng áp dụng cho sản phẩm này."
-            : $"Quà tặng đang gắn theo dữ liệu nội bộ hiện tại là {gift.Name} ạ, còn ưu đãi khác em cần kiểm tra lại lúc chốt đơn.";
+            ? "Hiện tại em chưa thấy quà tặng nào được xác nhận cho sản phẩm này ạ."
+            : $"Quà tặng kèm theo là {gift.Name} ạ. Nếu có ưu đãi khác, em sẽ cập nhật thêm khi chốt đơn.";
 
         if (intent == Services.AI.Models.CustomerIntent.Browsing)
         {
             var lines = new List<string>
             {
                 priceMessage,
+                string.Empty,
                 shippingMessage,
+                string.Empty,
                 giftMessage,
-                "Nếu chị muốn em nói kỹ hơn về công dụng hoặc cách dùng thì em tư vấn tiếp ạ."
+                string.Empty,
+                "Chị muốn em tư vấn thêm về công dụng hay cách dùng không ạ?"
             };
 
             return string.Join(Environment.NewLine, lines);
@@ -650,7 +818,9 @@ public abstract class SalesStateHandlerBase : IStateHandler
         var readyToBuyLines = new List<string>
         {
             readyToBuyPriceMessage,
+            string.Empty,
             shippingMessage,
+            string.Empty,
             giftMessage,
             string.Empty,
             SalesMessageParser.BuildMissingInfoPrompt(ctx)
@@ -691,8 +861,18 @@ public abstract class SalesStateHandlerBase : IStateHandler
         var pipelineStartTime = DateTime.UtcNow;
 
         var history = GetHistory(ctx);
-        var productCodes = ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>();
+        var activeProducts = await GetActiveSelectedProductsAsync(ctx);
+        var productCodes = activeProducts.Select(product => product.Code).ToList();
         var contactSummary = GetContactSummary(ctx);
+
+        var earlyRagContext = await RetrieveRagContextAsync(ctx, message);
+        var groundingContext = await _productGroundingService.BuildContextWithRelatedSuggestionsAsync(message, activeProducts, earlyRagContext.Products);
+        if (groundingContext.RequiresGrounding && !groundingContext.HasAllowedProducts)
+        {
+            return await BuildGroundedRelatedSuggestionOrFallbackAsync(ctx, message, groundingContext, null, null, null);
+        }
+
+        history = _productGroundingService.SanitizeAssistantHistory(history, groundingContext.AllowedProducts).ToList();
 
         // Get VIP profile BEFORE building prompt
         var vipProfile = await GetVipProfileAsync(ctx);
@@ -814,39 +994,41 @@ Xung ho: {toneProfile.PronounText}
                     history.Count <= 2 &&
                     !string.IsNullOrWhiteSpace(smallTalkResponse.SuggestedResponse))
                 {
+                    var suggestedValidationContext = BuildFactValidationContext(
+                        smallTalkResponse.SuggestedResponse,
+                        toneProfile,
+                        conversationContext,
+                        smallTalkResponse,
+                        message,
+                        groundingContext.RequiresGrounding,
+                        groundingContext.AllowedProducts,
+                        allowPolicyFacts: false,
+                        allowInventoryFacts: false,
+                        allowOrderFacts: false);
+                    var suggestedValidationResult = await ResponseValidationService.ValidateAsync(suggestedValidationContext, CancellationToken.None);
+                    if (!suggestedValidationResult.IsValid)
+                    {
+                        Logger.LogWarning(
+                            "Small talk suggested response validation failed for PSID {PSID}: {Issues}",
+                            ctx.FacebookPSID,
+                            string.Join("; ", suggestedValidationResult.Issues.Select(i => i.Message)));
+                        return BuildProductGroundingFallbackReply();
+                    }
+
                     AddToHistory(ctx, "assistant", smallTalkResponse.SuggestedResponse);
                     return smallTalkResponse.SuggestedResponse;
                 }
             }
         }
 
-        // RAG context retrieval if enabled
-        string? ragContext = null;
-        if (RagOptions.Enabled && RagService != null)
-        {
-            try
-            {
-                var ragResult = await RagService.RetrieveContextAsync(
-                    message,
-                    topK: RagOptions.TopK);
-
-                ragContext = ragResult.FormattedContext;
-
-                Logger.LogInformation(
-                    "RAG retrieved {Count} products in {Ms}ms for PSID: {PSID}",
-                    ragResult.ProductIds.Count,
-                    ragResult.Metrics.TotalLatency.TotalMilliseconds,
-                    ctx.FacebookPSID);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex, "RAG retrieval failed, falling back to full context for PSID: {PSID}", ctx.FacebookPSID);
-            }
-        }
+        var ragContext = string.IsNullOrWhiteSpace(earlyRagContext.FormattedContext)
+            ? null
+            : earlyRagContext.FormattedContext;
 
         var prompt = $"""
 Khach vua nhan: "{message}"
 San pham dang quan tam: {(productCodes.Count == 0 ? "chua xac dinh" : string.Join(", ", productCodes))}
+San pham duoc phep neu can neu ten: {FormatAllowedProductNames(groundingContext.AllowedProducts)}
 Thong tin da co: {contactSummary}
 {vipInstruction}
 
@@ -870,35 +1052,35 @@ Quy tac:
         var pipelineLatency = (int)(DateTime.UtcNow - pipelineStartTime).TotalMilliseconds;
 
         // Validate response quality before sending to customer
-        ValidationResult? validationResult = null;
-        if (toneProfile != null && conversationContext != null)
+        var validationContext = BuildFactValidationContext(
+            response,
+            toneProfile,
+            conversationContext,
+            smallTalkResponse,
+            message,
+            groundingContext.RequiresGrounding,
+            groundingContext.AllowedProducts,
+            allowPolicyFacts: false,
+            allowInventoryFacts: false,
+            allowOrderFacts: false);
+
+        var validationResult = await ResponseValidationService.ValidateAsync(validationContext, CancellationToken.None);
+
+        if (!validationResult.IsValid)
         {
-            var validationContext = new ResponseValidationContext
-            {
-                Response = response,
-                ToneProfile = toneProfile,
-                ConversationContext = conversationContext,
-                SmallTalkResponse = smallTalkResponse
-            };
+            Logger.LogWarning(
+                "Response validation failed for PSID {PSID}: {Issues}",
+                ctx.FacebookPSID,
+                string.Join("; ", validationResult.Issues.Select(i => i.Message)));
+            return BuildProductGroundingFallbackReply();
+        }
 
-            validationResult = await ResponseValidationService
-                .ValidateAsync(validationContext, CancellationToken.None);
-
-            if (!validationResult.IsValid)
-            {
-                Logger.LogWarning(
-                    "Response validation failed for PSID {PSID}: {Issues}",
-                    ctx.FacebookPSID,
-                    string.Join("; ", validationResult.Issues.Select(i => i.Message)));
-            }
-
-            if (validationResult.Warnings.Any())
-            {
-                Logger.LogInformation(
-                    "Response validation warnings for PSID {PSID}: {Count} warnings",
-                    ctx.FacebookPSID,
-                    validationResult.Warnings.Count);
-            }
+        if (validationResult.Warnings.Any())
+        {
+            Logger.LogInformation(
+                "Response validation warnings for PSID {PSID}: {Count} warnings",
+                ctx.FacebookPSID,
+                validationResult.Warnings.Count);
         }
 
         // Log treatment metrics (with pipeline data)
@@ -928,14 +1110,78 @@ Quy tac:
         return response;
     }
 
+    private async Task<string> BuildGroundedRelatedSuggestionOrFallbackAsync(
+        StateContext ctx,
+        string message,
+        GroundedProductContext groundingContext,
+        Services.Tone.Models.ToneProfile? toneProfile,
+        Services.Conversation.Models.ConversationContext? conversationContext,
+        Services.SmallTalk.Models.SmallTalkResponse? smallTalkResponse)
+    {
+        if (!groundingContext.HasRelatedSuggestions || string.IsNullOrWhiteSpace(groundingContext.RelatedSuggestionReply))
+        {
+            return groundingContext.FallbackReply;
+        }
+
+        var validationContext = BuildFactValidationContext(
+            groundingContext.RelatedSuggestionReply,
+            toneProfile,
+            conversationContext,
+            smallTalkResponse,
+            message,
+            requiresProductGrounding: true,
+            groundingContext.RelatedSuggestions,
+            allowPolicyFacts: false,
+            allowInventoryFacts: false,
+            allowOrderFacts: false);
+
+        var validationResult = await ResponseValidationService.ValidateAsync(validationContext, CancellationToken.None);
+        if (!validationResult.IsValid)
+        {
+            Logger.LogWarning(
+                "Related product suggestion validation failed for PSID {PSID}: {Issues}",
+                ctx.FacebookPSID,
+                string.Join("; ", validationResult.Issues.Select(i => i.Message)));
+            return groundingContext.FallbackReply;
+        }
+
+        return groundingContext.RelatedSuggestionReply;
+    }
+
+    private async Task<RAGContext> RetrieveRagContextAsync(StateContext ctx, string message)
+    {
+        if (!RagOptions.Enabled || RagService == null)
+        {
+            return new RAGContext(string.Empty, new List<string>(), new List<GroundedProduct>(), new RAGMetrics(TimeSpan.Zero, TimeSpan.Zero, 0, false, "disabled"));
+        }
+
+        try
+        {
+            var ragResult = await RagService.RetrieveContextAsync(message, topK: RagOptions.TopK);
+
+            Logger.LogInformation(
+                "RAG retrieved {Count} products in {Ms}ms for PSID: {PSID}",
+                ragResult.ProductIds.Count,
+                ragResult.Metrics.TotalLatency.TotalMilliseconds,
+                ctx.FacebookPSID);
+
+            return ragResult;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "RAG retrieval failed for PSID: {PSID}", ctx.FacebookPSID);
+            return new RAGContext(string.Empty, new List<string>(), new List<GroundedProduct>(), new RAGMetrics(TimeSpan.Zero, TimeSpan.Zero, 0, false, "error"));
+        }
+    }
+
     /// <summary>
     /// Control group: Direct AI response without naturalness pipeline.
-    /// Skips emotion detection, tone matching, context analysis, small talk, and validation.
     /// </summary>
     private async Task<string> GenerateDirectAIResponseAsync(StateContext ctx, string message, Services.AI.Models.CustomerIntent? intent = null)
     {
         var history = GetHistory(ctx);
-        var productCodes = ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>();
+        var activeProducts = await GetActiveSelectedProductsAsync(ctx);
+        var productCodes = activeProducts.Select(product => product.Code).ToList();
         var contactSummary = GetContactSummary(ctx);
 
         // Get VIP profile for customer instruction only
@@ -956,6 +1202,7 @@ Quy tac:
 
         // RAG context retrieval if enabled
         string? ragContext = null;
+        var ragProducts = new List<GroundedProduct>();
         if (RagOptions.Enabled && RagService != null)
         {
             try
@@ -965,6 +1212,7 @@ Quy tac:
                     topK: RagOptions.TopK);
 
                 ragContext = ragResult.FormattedContext;
+                ragProducts = ragResult.Products;
 
                 Logger.LogInformation(
                     "RAG retrieved {Count} products in {Ms}ms for PSID: {PSID} (control group)",
@@ -978,10 +1226,19 @@ Quy tac:
             }
         }
 
+        var groundingContext = await _productGroundingService.BuildContextWithRelatedSuggestionsAsync(message, activeProducts, ragProducts);
+        if (groundingContext.RequiresGrounding && !groundingContext.HasAllowedProducts)
+        {
+            return await BuildGroundedRelatedSuggestionOrFallbackAsync(ctx, message, groundingContext, null, null, null);
+        }
+
+        history = _productGroundingService.SanitizeAssistantHistory(history, groundingContext.AllowedProducts).ToList();
+
         // Simple prompt without tone/emotion/context instructions
         var prompt = $"""
 Khach vua nhan: "{message}"
 San pham dang quan tam: {(productCodes.Count == 0 ? "chua xac dinh" : string.Join(", ", productCodes))}
+San pham duoc phep neu can neu ten: {FormatAllowedProductNames(groundingContext.AllowedProducts)}
 Thong tin da co: {contactSummary}
 {vipInstruction}
 
@@ -999,7 +1256,63 @@ Quy tac:
             history,
             ragContext: ragContext);
 
+        var validationContext = BuildFactValidationContext(
+            response,
+            null,
+            null,
+            null,
+            message,
+            groundingContext.RequiresGrounding,
+            groundingContext.AllowedProducts,
+            allowPolicyFacts: false,
+            allowInventoryFacts: false,
+            allowOrderFacts: false);
+        var validationResult = await ResponseValidationService.ValidateAsync(validationContext, CancellationToken.None);
+        if (!validationResult.IsValid)
+        {
+            Logger.LogWarning(
+                "Direct AI response validation failed for PSID {PSID}: {Issues}",
+                ctx.FacebookPSID,
+                string.Join("; ", validationResult.Issues.Select(i => i.Message)));
+            return BuildProductGroundingFallbackReply();
+        }
+
         return response;
+    }
+
+    private static ResponseValidationContext BuildFactValidationContext(
+        string response,
+        Services.Tone.Models.ToneProfile? toneProfile,
+        Services.Conversation.Models.ConversationContext? conversationContext,
+        Services.SmallTalk.Models.SmallTalkResponse? smallTalkResponse,
+        string customerMessage,
+        bool requiresProductGrounding,
+        IReadOnlyCollection<GroundedProduct> products,
+        bool allowPolicyFacts,
+        bool allowInventoryFacts,
+        bool allowOrderFacts)
+    {
+        return new ResponseValidationContext
+        {
+            Response = response,
+            ToneProfile = toneProfile ?? new Services.Tone.Models.ToneProfile(),
+            ConversationContext = conversationContext ?? new Services.Conversation.Models.ConversationContext(),
+            SmallTalkResponse = smallTalkResponse,
+            RequiresFactGrounding = requiresProductGrounding || products.Count > 0,
+            AllowedProductNames = products.Select(product => product.Name).ToList(),
+            AllowedProductCodes = products.Select(product => product.Code).ToList(),
+            AllowedPrices = products.Where(product => product.Price.HasValue).Select(product => product.Price!.Value).ToList(),
+            AllowPolicyFacts = allowPolicyFacts,
+            AllowInventoryFacts = allowInventoryFacts,
+            AllowOrderFacts = allowOrderFacts
+        };
+    }
+
+    private static string FormatAllowedProductNames(IReadOnlyCollection<GroundedProduct> products)
+    {
+        return products.Count == 0
+            ? "khong co"
+            : string.Join(", ", products.Select(product => $"{product.Name} ({product.Code})"));
     }
 
     private async Task<VipProfile?> GetVipProfileAsync(StateContext ctx)
@@ -1363,7 +1676,7 @@ CTA Instruction: Customer is in early consultation phase. Answer questions natur
         Product? activeProduct = null;
         if (selectedCodes.Count > 0)
         {
-            activeProduct = await ProductMappingService.GetProductByCodeAsync(selectedCodes[0]);
+            activeProduct = await ProductMappingService.GetActiveProductByCodeAsync(selectedCodes[0]);
             if (activeProduct != null)
             {
                 var directProduct = await ProductMappingService.GetProductByMessageAsync(message);
@@ -1393,7 +1706,7 @@ CTA Instruction: Customer is in early consultation phase. Answer questions natur
             return null;
         }
 
-        return await ProductMappingService.GetProductByCodeAsync(selectedCodes[0]);
+        return await ProductMappingService.GetActiveProductByCodeAsync(selectedCodes[0]);
     }
 
     private static bool ShouldSwitchActiveProduct(string message, Product activeProduct, Product directProduct)
@@ -1449,6 +1762,58 @@ CTA Instruction: Customer is in early consultation phase. Answer questions natur
         return HasDirectProductCommitment(normalized, directProduct);
     }
 
+    private async Task<Product?> TryResolveNumberedSuggestionSelectionAsync(StateContext ctx, string? currentMessage)
+    {
+        var recentMessages = GetHistory(ctx).TakeLast(10).ToList();
+        var numberedSuggestion = await ResolveNumberedAssistantSuggestionAsync(recentMessages, currentMessage);
+        if (numberedSuggestion == null)
+        {
+            return null;
+        }
+
+        Logger.LogInformation(
+            "Extracted product {ProductName} (Code: {ProductCode}) from numbered assistant suggestion for PSID: {PSID}",
+            numberedSuggestion.Name,
+            numberedSuggestion.Code,
+            ctx.FacebookPSID);
+
+        await ApplyResolvedProductAsync(ctx, numberedSuggestion, "numbered-suggestion");
+        return numberedSuggestion;
+    }
+
+    private async Task<Product?> ResolveNumberedAssistantSuggestionAsync(
+        List<AiConversationMessage> recentMessages,
+        string? currentMessage)
+    {
+        var selectedNumber = ExtractRelatedSuggestionSelectionNumber(currentMessage);
+        if (!selectedNumber.HasValue)
+        {
+            return null;
+        }
+
+        foreach (var msg in recentMessages
+                     .Where(x => string.Equals(x.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                     .Reverse())
+        {
+            var numberedLines = msg.Content
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(IsNumberedSuggestionLine)
+                .ToList();
+
+            if (numberedLines.Count == 0)
+            {
+                continue;
+            }
+
+            var selectedLine = numberedLines.FirstOrDefault(line => line.StartsWith($"{selectedNumber.Value})", StringComparison.Ordinal));
+            return selectedLine == null
+                ? null
+                : await ProductMappingService.GetProductByMessageAsync(selectedLine);
+        }
+
+        return null;
+    }
+
     private async Task<List<HistoryProductCandidate>> CollectHistoryProductCandidatesAsync(
         List<AiConversationMessage> recentMessages,
         string role)
@@ -1478,8 +1843,17 @@ CTA Instruction: Customer is in early consultation phase. Answer questions natur
         List<HistoryProductCandidate> candidates,
         string preferredRole)
     {
+        var candidateProducts = candidates
+            .Select(candidate => new GroundedProduct(
+                candidate.Product.Id,
+                candidate.Product.Code,
+                candidate.Product.Name,
+                candidate.Product.Category.ToString(),
+                candidate.Product.BasePrice))
+            .ToList();
+        var sanitizedMessages = _productGroundingService.SanitizeAssistantHistory(recentMessages, candidateProducts).ToList();
         var candidateSummary = string.Join(", ", candidates.Select(x => $"{x.Product.Name} ({x.Product.Code})"));
-        var historySummary = string.Join("\n", recentMessages.Select(x => $"{x.Role}: {x.Content}"));
+        var historySummary = string.Join("\n", sanitizedMessages.Select(x => $"{x.Role}: {x.Content}"));
         var prompt = $"""
 Chọn đúng 1 mã sản phẩm khách đang muốn mua nhất từ lịch sử chat gần đây.
 Ưu tiên message mới hơn và ưu tiên message từ user hơn assistant.
@@ -1494,7 +1868,7 @@ History:
         var aiResponse = await GeminiService.SendMessageAsync(
             ctx.FacebookPSID,
             prompt,
-            recentMessages,
+            sanitizedMessages,
             Services.AI.Models.GeminiModelType.FlashLite,
             cancellationToken: CancellationToken.None);
 
@@ -1522,12 +1896,29 @@ History:
         ctx.SetData("shippingFee", shippingFee);
     }
 
+    private async Task<List<Product>> GetActiveSelectedProductsAsync(StateContext ctx)
+    {
+        var selectedCodes = ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>();
+        var activeProducts = new List<Product>();
+
+        foreach (var productCode in selectedCodes.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var product = await ProductMappingService.GetActiveProductByCodeAsync(productCode);
+            if (product != null)
+            {
+                activeProducts.Add(product);
+            }
+        }
+
+        return activeProducts;
+    }
+
     private async Task<Product?> GetActiveProductOrResolveAsync(StateContext ctx, string message)
     {
         var selectedCodes = ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>();
         if (selectedCodes.Count > 0)
         {
-            var activeProduct = await ProductMappingService.GetProductByCodeAsync(selectedCodes[0]);
+            var activeProduct = await ProductMappingService.GetActiveProductByCodeAsync(selectedCodes[0]);
             if (activeProduct != null)
             {
                 var directProduct = await ProductMappingService.GetProductByMessageAsync(message);
@@ -1676,6 +2067,63 @@ History:
     private static bool ContainsAnyPhrase(string message, params string[] phrases)
     {
         return phrases.Any(phrase => message.Contains(phrase, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool RequiresProductGrounding(
+        string message,
+        bool isProductQuestion,
+        bool isPriceQuestion,
+        bool isInventoryQuestion,
+        bool isPolicyQuestion,
+        bool isQuestioning,
+        bool hasQuestionMarker,
+        ConversationState currentState)
+    {
+        if (isPriceQuestion || isInventoryQuestion || isProductQuestion || IsCatalogListingQuestion(message))
+        {
+            return true;
+        }
+
+        return isQuestioning &&
+               !isPolicyQuestion &&
+               (hasQuestionMarker || currentState == ConversationState.Consulting) &&
+               HasProductCategoryReference(message);
+    }
+
+    private static bool RequiresProductGrounding(string message)
+    {
+        return IsCatalogListingQuestion(message) ||
+               HasProductCategoryReference(message) && ContainsAnyPhrase(message,
+                   "giá", "gia", "công dụng", "cong dung", "tác dụng", "tac dung", "thành phần", "thanh phan",
+                   "cách dùng", "cach dung", "còn hàng", "con hang", "hết hàng", "het hang", "tồn kho", "ton kho");
+    }
+
+    private static bool IsCatalogListingQuestion(string message)
+    {
+        if (ContainsAnyPhrase(message, "catalog", "danh sách", "danh sach", "sản phẩm nào", "san pham nao"))
+        {
+            return true;
+        }
+
+        var hasListingIntent = ContainsAnyPhrase(message,
+            "các loại", "cac loai", "có loại nào", "co loai nao", "có những loại", "co nhung loai",
+            "loại nào", "loai nao", "dòng nào", "dong nao", "mẫu nào", "mau nao");
+        var asksShopHas = ContainsAnyPhrase(message, "bên em có", "ben em co", "shop có", "shop co");
+
+        return hasListingIntent && (asksShopHas || HasProductCategoryReference(message))
+            || asksShopHas && HasProductCategoryReference(message);
+    }
+
+    private static bool HasProductCategoryReference(string message)
+    {
+        return ContainsAnyPhrase(message,
+            "sản phẩm", "san pham", "mặt nạ", "mat na", "kem", "serum", "toner", "sữa rửa mặt", "sua rua mat",
+            "chống nắng", "chong nang", "dưỡng ẩm", "duong am", "mỹ phẩm", "my pham");
+    }
+
+    private static string BuildProductGroundingFallbackReply()
+    {
+        return ProductGroundingService.FallbackReply;
     }
 
     private static bool IsGenericBuyContinuationWhileAwaitingContactConfirmation(string message)
@@ -1872,6 +2320,48 @@ History:
         return $"Dạ với {product.Name} bản {snapshot.PriceLabel}, theo dữ liệu nội bộ hiện tại thì em đang chưa thấy còn hàng ạ. Nếu chị muốn em kiểm tra phương án khác thì em hỗ trợ tiếp nha.";
     }
 
+    private static bool IsNumberedSuggestionLine(string line)
+    {
+        return Regex.IsMatch(line, @"^([1-9]|1\d|20)\)", RegexOptions.CultureInvariant);
+    }
+
+    private static bool IsRelatedSuggestionSelection(string message)
+    {
+        return ExtractRelatedSuggestionSelectionNumber(message).HasValue;
+    }
+
+    private static int? ExtractRelatedSuggestionSelectionNumber(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        var normalized = NormalizeForMatching(message);
+
+        // Pattern 1: Có từ khóa rõ ràng (giữ nguyên logic cũ)
+        var match = Regex.Match(normalized, @"\b(san pham|mon|lua chon)\s*(so\s*)?(?<number>[1-9]|1\d|20)\b", RegexOptions.CultureInvariant);
+        if (!match.Success)
+        {
+            match = Regex.Match(normalized, @"\bchon\s*(san pham|mon|lua chon)?\s*(so\s*)?(?<number>[1-9]|1\d|20)\b", RegexOptions.CultureInvariant);
+        }
+
+        if (match.Success && int.TryParse(match.Groups["number"].Value, out var selectedNumber))
+        {
+            return selectedNumber;
+        }
+
+        // Pattern 2: Số đơn thuần (1-20) - chỉ accept nếu message chỉ chứa số
+        // Tránh false positive khi khách nói "tôi muốn 1 cái", "địa chỉ số 1"
+        match = Regex.Match(normalized, @"^(?<number>[1-9]|1\d|20)$", RegexOptions.CultureInvariant);
+        if (match.Success && int.TryParse(match.Groups["number"].Value, out selectedNumber))
+        {
+            return selectedNumber;
+        }
+
+        return null;
+    }
+
     private static bool HasAmbiguousProductReference(string message)
     {
         var normalized = NormalizeForMatching(message);
@@ -1938,7 +2428,7 @@ History:
         var products = new List<Product>();
         foreach (var productCode in selectedCodes.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var product = await ProductMappingService.GetProductByCodeAsync(productCode);
+            var product = await ProductMappingService.GetActiveProductByCodeAsync(productCode);
             if (product != null)
             {
                 products.Add(product);

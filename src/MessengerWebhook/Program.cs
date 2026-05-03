@@ -21,6 +21,7 @@ using MessengerWebhook.Services.LiveComments;
 using MessengerWebhook.Services.Nobita;
 using MessengerWebhook.Services.Policy;
 using MessengerWebhook.Services.ProductMapping;
+using MessengerWebhook.Services.ProductGrounding;
 using MessengerWebhook.Services.GiftSelection;
 using MessengerWebhook.Services.Freeship;
 using MessengerWebhook.Services.QuickReply;
@@ -82,6 +83,8 @@ builder.Services.Configure<SupportOptions>(
     builder.Configuration.GetSection(SupportOptions.SectionName));
 builder.Services.Configure<SalesBotOptions>(
     builder.Configuration.GetSection(SalesBotOptions.SectionName));
+builder.Services.Configure<PolicyGuardOptions>(
+    builder.Configuration.GetSection(PolicyGuardOptions.SectionName));
 builder.Services.Configure<AdminOptions>(
     builder.Configuration.GetSection(AdminOptions.SectionName));
 builder.Services.Configure<EmailOptions>(
@@ -107,11 +110,15 @@ builder.Services.Configure<MessengerWebhook.Services.ABTesting.Configuration.ABT
 builder.Services.AddSingleton<IValidateOptions<MessengerWebhook.Services.SmallTalk.Configuration.SmallTalkOptions>, MessengerWebhook.Services.SmallTalk.Configuration.ValidateSmallTalkOptions>();
 builder.Services.AddSingleton<IValidateOptions<FacebookOptions>, ValidateFacebookOptions>();
 builder.Services.AddSingleton<IValidateOptions<WebhookOptions>, ValidateWebhookOptions>();
+builder.Services.AddSingleton<IValidateOptions<GeminiOptions>, ValidateGeminiOptions>();
+builder.Services.AddSingleton<IValidateOptions<PolicyGuardOptions>, ValidatePolicyGuardOptions>();
 builder.Services.AddSingleton<IValidateOptions<MessengerWebhook.Services.Emotion.Configuration.EmotionDetectionOptions>, MessengerWebhook.Services.Emotion.Configuration.ValidateEmotionDetectionOptions>();
 builder.Services.AddSingleton<IValidateOptions<MessengerWebhook.Services.Tone.Configuration.ToneMatchingOptions>, MessengerWebhook.Services.Tone.Configuration.ValidateToneMatchingOptions>();
 builder.Services.AddSingleton<IValidateOptions<MessengerWebhook.Services.ABTesting.Configuration.ABTestingOptions>, MessengerWebhook.Services.ABTesting.Configuration.ValidateABTestingOptions>();
 builder.Services.AddOptions<FacebookOptions>().ValidateOnStart();
 builder.Services.AddOptions<WebhookOptions>().ValidateOnStart();
+builder.Services.AddOptions<GeminiOptions>().ValidateOnStart();
+builder.Services.AddOptions<PolicyGuardOptions>().ValidateOnStart();
 builder.Services.AddOptions<MessengerWebhook.Services.SmallTalk.Configuration.SmallTalkOptions>().ValidateOnStart();
 builder.Services.AddOptions<MessengerWebhook.Services.Emotion.Configuration.EmotionDetectionOptions>().ValidateOnStart();
 builder.Services.AddOptions<MessengerWebhook.Services.Tone.Configuration.ToneMatchingOptions>().ValidateOnStart();
@@ -184,6 +191,11 @@ builder.Services.AddMemoryCache(options =>
 builder.Services.AddSingleton<ISignatureValidator, SignatureValidator>();
 builder.Services.AddScoped<WebhookProcessor>();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddScoped<IPolicyMessageNormalizer, DefaultPolicyMessageNormalizer>();
+builder.Services.AddScoped<IPolicyRiskScorer, DefaultPolicyRiskScorer>();
+builder.Services.AddScoped<IPolicySignalDetector, KeywordPolicySignalDetector>();
+builder.Services.AddScoped<IPolicySignalDetector, RegexPolicySignalDetector>();
+builder.Services.AddScoped<IPolicySignalDetector, FuzzyPolicySignalDetector>();
 builder.Services.AddScoped<IPolicyGuardService, PolicyGuardService>();
 builder.Services.AddScoped<IRiskMessageSanitizer, RiskMessageSanitizer>();
 builder.Services.AddScoped<IBotLockService, BotLockService>();
@@ -224,6 +236,9 @@ builder.Services.AddScoped<ISessionManager, SessionManager>();
 
 // Register Phase 1 services (Quick Reply Handler)
 builder.Services.AddScoped<IProductMappingService, ProductMappingService>();
+builder.Services.AddScoped<IProductNeedDetector, ProductNeedDetector>();
+builder.Services.AddScoped<IProductMentionDetector, ProductMentionDetector>();
+builder.Services.AddScoped<IProductGroundingService, ProductGroundingService>();
 builder.Services.AddScoped<IGiftSelectionService, GiftSelectionService>();
 builder.Services.AddScoped<IFreeshipCalculator, FreeshipCalculator>();
 builder.Services.AddScoped<IQuickReplyHandler, QuickReplyHandler>();
@@ -279,6 +294,13 @@ builder.Services.AddScoped<MessengerWebhook.Services.Metrics.IMetricsAggregation
 
 // Response caching for metrics endpoints (Phase 7.3)
 builder.Services.AddResponseCaching();
+
+// Register SubIntent classification services
+builder.Services.Configure<MessengerWebhook.Configuration.SubIntentOptions>(
+    builder.Configuration.GetSection(MessengerWebhook.Configuration.SubIntentOptions.SectionName));
+builder.Services.AddSingleton<MessengerWebhook.Services.SubIntent.KeywordSubIntentDetector>();
+builder.Services.AddScoped<MessengerWebhook.Services.SubIntent.GeminiSubIntentClassifier>();
+builder.Services.AddScoped<MessengerWebhook.Services.SubIntent.ISubIntentClassifier, MessengerWebhook.Services.SubIntent.HybridSubIntentClassifier>();
 
 // Register state machine
 builder.Services.AddScoped<IStateMachine, ConversationStateMachine>();
@@ -404,6 +426,15 @@ builder.Services.AddHttpClient<IGeminiService, GeminiService>()
     })
     .AddHttpMessageHandler<GeminiAuthHandler>()
     .AddHttpMessageHandler<GeminiRetryHandler>()
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
+builder.Services.AddHttpClient<IPolicyIntentClassifier, GeminiPolicyIntentClassifier>()
+    .ConfigureHttpClient((sp, client) =>
+    {
+        var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+        client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+        client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+    })
     .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
 // Configure HttpClient for MessengerService with Polly resilience
