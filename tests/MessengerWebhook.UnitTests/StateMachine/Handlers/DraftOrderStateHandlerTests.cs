@@ -11,6 +11,7 @@ using MessengerWebhook.Services.Metrics;
 using MessengerWebhook.Services.Policy;
 using MessengerWebhook.Services.ProductMapping;
 using MessengerWebhook.Services.Support;
+using MessengerWebhook.Services.SubIntent;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
 using MessengerWebhook.Models;
@@ -34,7 +35,7 @@ public class DraftOrderStateHandlerTests
 
         var productMappingService = new Mock<IProductMappingService>();
         productMappingService
-            .Setup(x => x.GetProductByCodeAsync("MN"))
+            .Setup(x => x.GetActiveProductByCodeAsync("MN"))
             .ReturnsAsync(new Product { Code = "MN", Name = "Mat Na Ngu", BasePrice = 250000m });
         productMappingService
             .Setup(x => x.GetProductByMessageAsync(It.IsAny<string>()))
@@ -78,6 +79,7 @@ public class DraftOrderStateHandlerTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
             Options.Create(new SalesBotOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<DraftOrderStateHandler>>());

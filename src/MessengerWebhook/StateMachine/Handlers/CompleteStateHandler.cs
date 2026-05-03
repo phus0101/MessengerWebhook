@@ -8,6 +8,7 @@ using MessengerWebhook.Services.Freeship;
 using MessengerWebhook.Services.GiftSelection;
 using MessengerWebhook.Services.Policy;
 using MessengerWebhook.Services.ProductMapping;
+using MessengerWebhook.Services.ProductGrounding;
 using MessengerWebhook.Services.Support;
 using MessengerWebhook.Services.RAG;
 using MessengerWebhook.Services.Emotion;
@@ -18,6 +19,7 @@ using MessengerWebhook.Services.ResponseValidation;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.Metrics;
 using MessengerWebhook.Services.Survey;
+using MessengerWebhook.Services.SubIntent;
 using MessengerWebhook.BackgroundServices;
 using Microsoft.Extensions.Options;
 
@@ -47,11 +49,13 @@ public class CompleteStateHandler : SalesStateHandlerBase
         IResponseValidationService responseValidationService,
         IABTestService abTestService,
         IConversationMetricsService conversationMetricsService,
+        ISubIntentClassifier subIntentClassifier,
         IServiceProvider serviceProvider,
         IOptions<SalesBotOptions> salesBotOptions,
         IOptions<RAGOptions> ragOptions,
         IOptions<CSATSurveyOptions> surveyOptions,
-        ILogger<CompleteStateHandler> logger)
+        ILogger<CompleteStateHandler> logger,
+        IProductGroundingService? productGroundingService = null)
         : base(
             geminiService,
             policyGuardService,
@@ -69,9 +73,11 @@ public class CompleteStateHandler : SalesStateHandlerBase
             responseValidationService,
             abTestService,
             conversationMetricsService,
+            subIntentClassifier,
             salesBotOptions,
             ragOptions,
-            logger)
+            logger,
+            productGroundingService)
     {
         _serviceProvider = serviceProvider;
         _surveyOptions = surveyOptions.Value;
@@ -129,6 +135,47 @@ public class CompleteStateHandler : SalesStateHandlerBase
             return await HandleSalesConversationAsync(ctx, message);
         }
 
+        // Policy guard check before any draft order follow-up reply
+        AddToHistory(ctx, "user", message);
+        var history = GetHistory(ctx);
+        var policyRequest = new PolicyGuardRequest(
+            message,
+            ctx.GetData<Guid?>("supportCaseId").HasValue,
+            ctx.GetData<Guid?>("draftOrderId").HasValue || !string.IsNullOrWhiteSpace(ctx.GetData<string>("draftOrderCode")),
+            history
+                .TakeLast(PolicyGuardOptions.MaxRecentTurns)
+                .Select(turn => new PolicyConversationTurn(turn.Role, turn.Content))
+                .Append(new PolicyConversationTurn("user", message))
+                .ToArray(),
+            ctx.FacebookPSID,
+            ctx.GetData<string>("facebookPageId"),
+            ctx.CurrentState.ToString(),
+            ctx.GetData<string>("knownIntent"),
+            (ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>()).ToArray());
+
+        var decision = await PolicyGuardService.EvaluateAsync(policyRequest);
+        if (decision.Action == PolicyAction.SafeReply)
+        {
+            var safeReply = PolicyGuardOptions.SafeReplyMessage;
+            AddToHistory(ctx, "assistant", safeReply);
+            return safeReply;
+        }
+
+        if (decision.RequiresEscalation)
+        {
+            var supportCase = await CaseEscalationService.EscalateAsync(
+                ctx.FacebookPSID,
+                decision.Reason,
+                decision.Summary,
+                message);
+
+            ctx.SetData("supportCaseId", supportCase.Id);
+            ctx.CurrentState = ConversationState.HumanHandoff;
+            var handoffResponse = SalesBotOptions.UnsupportedFallbackMessage;
+            AddToHistory(ctx, "assistant", handoffResponse);
+            return handoffResponse;
+        }
+
         // Schedule CSAT survey only when this message still belongs to the completed-order follow-up flow
         if (_surveyOptions.Enabled && !ctx.GetData<bool>("surveySent"))
         {
@@ -151,15 +198,18 @@ public class CompleteStateHandler : SalesStateHandlerBase
             var giftSegment = string.IsNullOrWhiteSpace(giftName)
                 ? string.Empty
                 : $", quà tặng {giftName}";
-            return string.IsNullOrWhiteSpace(draftCodeForClarification)
+            var clarificationReply = string.IsNullOrWhiteSpace(draftCodeForClarification)
                 ? $"Dạ bên em sẽ kiểm tra lại giúp chị các thông tin như sản phẩm đã chốt, số lượng, SĐT, địa chỉ giao hàng, phí ship{giftSegment} trước khi xác nhận ạ."
                 : $"Dạ với đơn nháp {draftCodeForClarification}, bên em sẽ kiểm tra lại giúp chị sản phẩm đã chốt, số lượng, SĐT, địa chỉ giao hàng, phí ship{giftSegment} trước khi xác nhận ạ.";
+            AddToHistory(ctx, "assistant", clarificationReply);
+            return clarificationReply;
         }
 
         var draftCode = ctx.GetData<string>("draftOrderCode");
         var response = string.IsNullOrWhiteSpace(draftCode)
             ? "Dạ em da len don nhap cho chi roi a. Ben em se kiem tra lai thong tin va lien he xac nhan nha."
             : $"Dạ don nhap {draftCode} cua chi dang cho ben em kiem tra lai thong tin nha.";
+        AddToHistory(ctx, "assistant", response);
         return response;
     }
 

@@ -14,6 +14,7 @@ using MessengerWebhook.Services.Emotion;
 using MessengerWebhook.Services.Tone;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.Metrics;
+using MessengerWebhook.Services.SubIntent;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
 using Microsoft.Extensions.Logging;
@@ -65,6 +66,7 @@ public class IdleStateHandlerTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
             Options.Create(new SalesBotOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<IdleStateHandler>>());
