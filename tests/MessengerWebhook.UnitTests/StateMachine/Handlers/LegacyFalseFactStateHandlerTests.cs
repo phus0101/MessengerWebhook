@@ -34,6 +34,7 @@ public class LegacyFalseFactStateHandlerTests
             It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
             It.IsAny<MessengerWebhook.Services.AI.Models.GeminiModelType?>(),
             It.IsAny<string?>(),
+            It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -54,7 +55,8 @@ public class LegacyFalseFactStateHandlerTests
                 It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
                 It.IsAny<MessengerWebhook.Services.AI.Models.GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("view_cart");
 
         var response = await handler.HandleAsync(ctx, "xem giỏ hàng");
@@ -122,7 +124,8 @@ public class LegacyFalseFactStateHandlerTests
                 It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
                 It.IsAny<MessengerWebhook.Services.AI.Models.GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("view_details");
         var handler = new ProductDetailStateHandler(
             _geminiService.Object,
@@ -226,7 +229,8 @@ public class LegacyFalseFactStateHandlerTests
                 It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
                 It.IsAny<MessengerWebhook.Services.AI.Models.GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("da siêu trắng cần serum đặc trị 150.000đ");
         var handler = new SkinAnalysisStateHandler(
             _geminiService.Object,
@@ -266,7 +270,8 @@ public class LegacyFalseFactStateHandlerTests
                 It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
                 It.IsAny<MessengerWebhook.Services.AI.Models.GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Nên dùng Mặt nạ gạo giá 150.000đ để trẻ hóa da.");
         var handler = new SkinConsultationStateHandler(
             _geminiService.Object,
@@ -287,6 +292,7 @@ public class LegacyFalseFactStateHandlerTests
             It.IsAny<string>(),
             It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
             It.IsAny<MessengerWebhook.Services.AI.Models.GeminiModelType?>(),
+            It.IsAny<string?>(),
             It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }

@@ -30,6 +30,7 @@ public class GeminiServiceTests
             FlashLiteModel = "gemini-1.5-flash",
             MaxTokens = 2048,
             Temperature = 0.7,
+            AiDetectionTimeoutMs = 500,
             SystemPromptPath = "prompts/system.txt"
         };
     }
@@ -305,6 +306,35 @@ public class GeminiServiceTests
         body.Should().Contain("091****678");
         body.Should().NotContain("0912345678");
         body.Should().NotContain("123 Nguyen Trai Quan 1 TPHCM");
+    }
+
+    [Fact]
+    public async Task DetectConfirmationAsync_WhenTimeout_ReturnsFallback()
+    {
+        var timeoutOptions = new GeminiOptions
+        {
+            ApiKey = "test-api-key",
+            FlashLiteModel = "gemini-1.5-flash",
+            ProModel = "gemini-1.5-pro",
+            MaxTokens = 2048,
+            Temperature = 0.7,
+            TimeoutSeconds = 30,
+            AiDetectionTimeoutMs = 10,
+            EnableAiConfirmationDetection = true
+        };
+        var httpClient = MockHttpClientFactory.CreateWithDelay(TimeSpan.FromSeconds(2));
+        var service = new GeminiService(
+            httpClient,
+            Options.Create(timeoutOptions),
+            _strategyMock.Object,
+            _loggerMock.Object);
+
+        var result = await service.DetectConfirmationAsync("nhu cu", "0912345678", "123 Nguyen Trai");
+
+        result.IsConfirming.Should().BeFalse();
+        result.Confidence.Should().Be(0.0);
+        result.DetectionMethod.Should().Be("fallback");
+        result.Reason.Should().Contain("Timeout");
     }
 
     [Fact]

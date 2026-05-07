@@ -147,6 +147,7 @@ Production sales handlers must preserve these invariants because they are locked
 - Keep `selectedProductCodes` stable once an active product is established. Shipping, policy, gift, and checkout replies may refresh policy context, but must not drift to another product unless the customer explicitly switches products.
 - If product context is temporarily missing during checkout, recover it from recent history before drafting, preferring the latest user-selected product and using AI only as a tie-breaker for ambiguous histories.
 - Never create a draft order while remembered-contact confirmation is still pending.
+- Keep live AI/RAG transcript coverage opt-in only. `LiveAiRagTranscriptIntegrationTests` must return before external calls unless `RUN_LIVE_AI_RAG_TESTS=true`; env-on runs require `GEMINI_API_KEY`, `PINECONE_API_KEY`, `VERTEX_AI_PROJECT_ID`, `VERTEX_AI_SERVICE_ACCOUNT_KEY_PATH`, and already-indexed MN product data.
 
 **Adding New Transitions**:
 

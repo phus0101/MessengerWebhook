@@ -42,10 +42,6 @@ public sealed class GeminiPolicyIntentClassifier : IPolicyIntentClassifier
                 ? _geminiOptions.ProModel
                 : _geminiOptions.FlashLiteModel;
             var url = $"v1beta/models/{model}:generateContent";
-            if (!string.IsNullOrWhiteSpace(_geminiOptions.ApiKey))
-            {
-                url += $"?key={Uri.EscapeDataString(_geminiOptions.ApiKey)}";
-            }
 
             var response = await _httpClient.PostAsJsonAsync(url, BuildRequest(normalizedMessage), JsonOptions, timeoutCts.Token);
             if (!response.IsSuccessStatusCode)
@@ -61,7 +57,15 @@ public sealed class GeminiPolicyIntentClassifier : IPolicyIntentClassifier
                 return null;
             }
 
-            var classification = JsonSerializer.Deserialize<SemanticClassifierResponse>(ExtractJson(text), JsonOptions);
+            SemanticClassifierResponse? classification;
+            try
+            {
+                classification = JsonSerializer.Deserialize<SemanticClassifierResponse>(ExtractJson(text), JsonOptions);
+            }
+            catch (JsonException)
+            {
+                classification = null;
+            }
             if (classification == null || classification.Confidence < _policyOptions.SemanticClassifierMinConfidence)
             {
                 return null;
@@ -78,6 +82,9 @@ public sealed class GeminiPolicyIntentClassifier : IPolicyIntentClassifier
 
     private object BuildRequest(string normalizedMessage)
     {
+        // Cap input length to bound prompt cost; classifier semantics tolerate truncation.
+        var truncated = normalizedMessage.Length > 1000 ? normalizedMessage[..1000] : normalizedMessage;
+
         return new
         {
             contents = new[]
@@ -88,7 +95,7 @@ public sealed class GeminiPolicyIntentClassifier : IPolicyIntentClassifier
                     {
                         new
                         {
-                            text = "Classify this customer message into exactly one category: manual_review, unsupported_question, policy_exception, refund_request, cancellation_request, prompt_injection, none, uncertain. Return only JSON with category, confidence, explanation, matchedSpans. Message: " + normalizedMessage
+                            text = "Classify this customer message into exactly one category: manual_review, unsupported_question, policy_exception, refund_request, cancellation_request, prompt_injection, none, uncertain. Return only JSON with category, confidence, explanation, matchedSpans. Message: " + truncated
                         }
                     }
                 }
@@ -96,7 +103,8 @@ public sealed class GeminiPolicyIntentClassifier : IPolicyIntentClassifier
             generationConfig = new
             {
                 temperature = 0,
-                maxOutputTokens = 256
+                maxOutputTokens = 256,
+                responseMimeType = "application/json"
             }
         };
     }

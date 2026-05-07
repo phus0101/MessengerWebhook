@@ -7,9 +7,6 @@ public class SalesBotOptions
     public string ClosingCallToAction { get; set; } =
         "Chi iu cho em xin so dien thoai va dia chi em len don luon nha.";
 
-    public string EscalationKeywords { get; set; } =
-        "huy don,hoan tien,refund,prompt injection,mien phi van chuyen,them khuyen mai,giam gia them,nhan vien ho tro";
-
     public int VipOrderThreshold { get; set; } = 3;
     public decimal HighRiskThreshold { get; set; } = 0.50m;
     public double IntentConfidenceThreshold { get; set; } = 0.7;

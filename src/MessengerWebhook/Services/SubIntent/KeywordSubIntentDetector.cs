@@ -97,8 +97,13 @@ public sealed class KeywordSubIntentDetector : ISubIntentClassifier
         if (categoryScores.Count == 0)
             return null;
 
-        // Find highest scoring category
-        var best = categoryScores.OrderByDescending(kvp => kvp.Value.MatchCount).First();
+        // Deterministic tie-break: most matches → longest cumulative keyword length → alphabetical category.
+        // Without ThenBy chains, Dictionary enumeration order decides ties → flaky classification.
+        var best = categoryScores
+            .OrderByDescending(kvp => kvp.Value.MatchCount)
+            .ThenByDescending(kvp => kvp.Value.Matched.Sum(keyword => keyword.Length))
+            .ThenBy(kvp => kvp.Key.ToString(), StringComparer.Ordinal)
+            .First();
         var confidence = CalculateConfidence(best.Value.MatchCount);
 
         return SubIntentResult.Create(

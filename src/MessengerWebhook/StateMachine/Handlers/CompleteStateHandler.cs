@@ -145,7 +145,6 @@ public class CompleteStateHandler : SalesStateHandlerBase
             history
                 .TakeLast(PolicyGuardOptions.MaxRecentTurns)
                 .Select(turn => new PolicyConversationTurn(turn.Role, turn.Content))
-                .Append(new PolicyConversationTurn("user", message))
                 .ToArray(),
             ctx.FacebookPSID,
             ctx.GetData<string>("facebookPageId"),

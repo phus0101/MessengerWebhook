@@ -30,12 +30,10 @@ public class OrderPlacedStateHandler : BaseStateHandler
 
             var reply = $@"Theo dõi đơn hàng - {orderId}
 
-Trạng thái: Đang xử lý
-- Đơn hàng đã xác nhận ✓
-- Đã nhận thanh toán ✓
-- Đang chuẩn bị hàng...
+Trạng thái: shop sẽ cập nhật theo dữ liệu xử lý đơn thực tế.
+Nếu chị cần kiểm tra ngay, em sẽ chuyển nhân viên hỗ trợ đối soát giúp mình.
 
-Chúng tôi sẽ thông báo khi đơn hàng được giao!";
+Chúng tôi sẽ thông báo khi có cập nhật mới!";
 
             AddToHistory(ctx, "model", reply);
             return reply;

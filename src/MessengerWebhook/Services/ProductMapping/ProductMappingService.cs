@@ -1,23 +1,22 @@
-using System.Globalization;
-using System.Text;
 using System.Text.RegularExpressions;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
+using MessengerWebhook.Services.Tenants;
+using MessengerWebhook.Services.VectorSearch;
 
 namespace MessengerWebhook.Services.ProductMapping;
 
 /// <summary>
 /// Maps quick reply payloads and customer language into product records.
 /// </summary>
-public class ProductMappingService : IProductMappingService
+public partial class ProductMappingService(
+    IProductRepository productRepository,
+    IHybridSearchService hybridSearchService,
+    ITenantContext tenantContext)
+    : IProductMappingService
 {
-    private readonly IProductRepository _productRepository;
-    private static readonly Regex ProductCodeRegex = new(@"^[A-Z0-9_]+$", RegexOptions.Compiled);
-
-    public ProductMappingService(IProductRepository productRepository)
-    {
-        _productRepository = productRepository;
-    }
+    private const int SemanticSearchTopK = 5;
+    private static readonly Regex ProductCodeRegex = MyRegex();
 
     public async Task<Product?> GetProductByPayloadAsync(string payload)
     {
@@ -27,81 +26,73 @@ public class ProductMappingService : IProductMappingService
         }
 
         var code = payload.Replace("PRODUCT_", string.Empty, StringComparison.OrdinalIgnoreCase);
-        return IsValidProductCode(code) ? await GetProductByCodeAsync(code) : null;
+        return IsValidProductCode(code) ? await GetActiveProductByCodeAsync(code) : null;
     }
 
     public Task<Product?> GetProductByCodeAsync(string code)
     {
-        return _productRepository.GetByCodeAsync(code);
+        return productRepository.GetByCodeAsync(code);
+    }
+
+    public Task<Product?> GetActiveProductByCodeAsync(string code)
+    {
+        return tenantContext.TenantId.HasValue
+            ? productRepository.GetActiveByCodeAsync(code, tenantContext.TenantId.Value)
+            : Task.FromResult<Product?>(null);
     }
 
     public async Task<Product?> GetProductByMessageAsync(string message)
     {
-        if (string.IsNullOrWhiteSpace(message))
+        if (string.IsNullOrWhiteSpace(message) || !tenantContext.TenantId.HasValue)
         {
             return null;
         }
 
-        var normalized = Normalize(message);
-
-        // Kem Trị Nám Tàn Nhang
-        if (ContainsAny(normalized, "tri nam", "tan nhang", "nam", "ktn", "tri tham", "lam mo tham"))
+        var tenantId = tenantContext.TenantId.Value;
+        var directCode = ExtractProductCode(message);
+        if (directCode != null)
         {
-            return await GetProductByCodeAsync("KTN");
+            var product = await productRepository.GetActiveByCodeAsync(directCode, tenantId);
+            if (product != null)
+            {
+                return product;
+            }
         }
 
-        // Kem Chống Nắng
-        if (ContainsAny(normalized, "kem chong nang", "chong nang", "kcn", "spf"))
+        var filter = new Dictionary<string, object>
         {
-            return await GetProductByCodeAsync("KCN");
+            ["tenant_id"] = tenantId.ToString()
+        };
+
+        List<FusedResult> searchResults;
+        try
+        {
+            searchResults = await hybridSearchService.SearchAsync(
+                message,
+                topK: SemanticSearchTopK,
+                filter: filter);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
         }
 
-        // Mặt Nạ Ngủ
-        if (ContainsAny(normalized, "mat na ngu", "mat na", "mask"))
+        foreach (var result in searchResults)
         {
-            return await GetProductByCodeAsync("MN");
-        }
+            if (string.IsNullOrWhiteSpace(result.ProductId))
+            {
+                continue;
+            }
 
-        // Kem Lụa Dưỡng Ẩm
-        if (ContainsAny(normalized, "kem lua", "lua"))
-        {
-            return await GetProductByCodeAsync("KL");
-        }
-
-        // Sữa Rửa Mặt
-        if (ContainsAny(normalized, "sua rua mat", "rua mat", "srm", "lam sach"))
-        {
-            return await GetProductByCodeAsync("SRM");
-        }
-
-        // Toner
-        if (ContainsAny(normalized, "toner", "nuoc hoa hong", "can bang da"))
-        {
-            return await GetProductByCodeAsync("TN");
-        }
-
-        // Serum Vitamin C
-        if (ContainsAny(normalized, "serum", "vitamin c", "lam sang", "chong lao hoa"))
-        {
-            return await GetProductByCodeAsync("SR");
-        }
-
-        // Kem Dưỡng Mắt
-        if (ContainsAny(normalized, "kem mat", "duong mat", "quang tham", "bong mat"))
-        {
-            return await GetProductByCodeAsync("KDM");
-        }
-
-        // Combo 3 - Trị Nám Toàn Diện
-        if (ContainsAny(normalized, "combo 3", "combo tri nam", "combo toan dien"))
-        {
-            return await GetProductByCodeAsync("COMBO_3");
-        }
-
-        // Combo 2 - only when customer explicitly names the product
-        if (ContainsAny(normalized, "combo 2"))
-        {
-            return await GetProductByCodeAsync("COMBO_2");
+            var product = await productRepository.GetActiveByIdAsync(result.ProductId, tenantId);
+            if (product != null)
+            {
+                return product;
+            }
         }
 
         return null;
@@ -114,9 +105,19 @@ public class ProductMappingService : IProductMappingService
                payload.Length > "PRODUCT_".Length;
     }
 
-    private static bool ContainsAny(string text, params string[] values)
+    private static string? ExtractProductCode(string message)
     {
-        return values.Any(value => text.Contains(value, StringComparison.Ordinal));
+        var normalized = message.Trim().ToUpperInvariant();
+        if (IsValidProductCode(normalized))
+        {
+            return normalized;
+        }
+
+        var parenthesizedCode = ParenthesizedProductCodeRegex().Matches(message)
+            .Select(match => match.Groups["code"].Value.ToUpperInvariant())
+            .FirstOrDefault(IsValidProductCode);
+
+        return parenthesizedCode;
     }
 
     private static bool IsValidProductCode(string code)
@@ -124,27 +125,9 @@ public class ProductMappingService : IProductMappingService
         return !string.IsNullOrWhiteSpace(code) && ProductCodeRegex.IsMatch(code);
     }
 
-    private static string Normalize(string input)
-    {
-        var decomposed = input.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
-        var buffer = new List<char>(decomposed.Length);
+    [GeneratedRegex(@"^[A-Z0-9_]+$", RegexOptions.Compiled)]
+    private static partial Regex MyRegex();
 
-        foreach (var character in decomposed)
-        {
-            var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(character);
-            if (unicodeCategory == UnicodeCategory.NonSpacingMark)
-            {
-                continue;
-            }
-
-            buffer.Add(character switch
-            {
-                'đ' => 'd',
-                'Đ' => 'd',
-                _ => character
-            });
-        }
-
-        return new string(buffer.ToArray()).Normalize(NormalizationForm.FormC);
-    }
+    [GeneratedRegex(@"\((?<code>[A-Za-z0-9_]+)\)", RegexOptions.Compiled)]
+    private static partial Regex ParenthesizedProductCodeRegex();
 }

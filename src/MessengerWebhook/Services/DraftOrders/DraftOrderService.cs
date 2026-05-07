@@ -75,7 +75,12 @@ public class DraftOrderService : IDraftOrderService
 
         foreach (var productCode in productCodes.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var product = await _productRepository.GetByCodeAsync(productCode);
+            if (!_tenantContext.TenantId.HasValue)
+            {
+                continue;
+            }
+
+            var product = await _productRepository.GetActiveByCodeAsync(productCode, _tenantContext.TenantId.Value);
             if (product == null)
             {
                 continue;

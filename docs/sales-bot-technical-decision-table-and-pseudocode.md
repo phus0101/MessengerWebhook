@@ -24,12 +24,51 @@ final_price_summary_ready: boolean
 order_status: DISCOVER_NEED | CLARIFY_NEED | RECOMMEND_PRODUCTS | PRODUCT_DETAIL | ANSWER_POLICY_FACT | CLARIFY_CART | VERIFY_RETURNING_CUSTOMER | COLLECT_CUSTOMER_INFO | FINAL_CONFIRMATION | DRAFT_ORDER_CREATED | ORDER_CONFIRMED
 ```
 
+## SubIntent Classification Integration
+
+SubIntent được detect và sử dụng để route conversation flow chính xác hơn:
+
+```pseudo
+onIncomingMessage(ctx, userMessage):
+  // Step 1: Classify SubIntent
+  subIntent = await SubIntentClassifier.ClassifyAsync(userMessage)
+  
+  // Step 2: Log for analytics
+  LogSubIntent(subIntent.Category, subIntent.Confidence, subIntent.Source)
+  
+  // Step 3: Route based on SubIntent
+  if subIntent.Category == ProductQuestion:
+    ragContext = await RAGService.RetrieveContextAsync(
+      query: userMessage,
+      includeDetailedInfo: true  // Enable detailed info for product questions
+    )
+    systemPrompt = InjectSubIntentGuidance(systemPrompt, subIntent.Category)
+    return await BuildNaturalReplyAsync(ctx, userMessage, ragContext, systemPrompt)
+  
+  if subIntent.Category == PriceQuestion:
+    // Ensure active product resolved before answering
+    if ctx.active_product == null:
+      return clarifyWhichProduct()
+    return answerPriceDirectly(ctx.active_product)
+  
+  // ... other SubIntent routing
+```
+
+SubIntent categories supported:
+- **ProductQuestion**: Features, ingredients, usage, skin type compatibility
+- **PriceQuestion**: Price, discounts, promotions
+- **ShippingQuestion**: Delivery time, cost, tracking
+- **PolicyQuestion**: Return, refund, warranty, gifts
+- **AvailabilityQuestion**: Stock status
+- **ComparisonQuestion**: Product comparisons
+
 ## Decision Table
 
 | Condition | Additional Check | Required Action | Forbidden Action |
 |---|---|---|---|
 | User only greets | No verified customer profile | Move to need discovery | Pretend returning customer |
-| User expresses vague need | Need lacks actionable detail | Ask 1 clarifying question | Recommend 3+ unrelated products |
+| User expresses vague need | Need lacks actionable detail | Ask 1 clarifying question, or show up to 3 DB-grounded active same-tenant or global related products when catalog relation is deterministic | Recommend 3+ unrelated or ungrounded products |
+| User selects a related suggestion by code or number | Assistant history contains a DB-grounded suggestion line with product code, or user sends exact code | Resolve active same-tenant or global product by code before hybrid search and before natural AI reply, independent of AI intent classification | Ignore global suggestion or fall through to unrelated semantic match/natural fallback |
 | User asks product detail | Active product exists | Answer detail for active product | Drift to another product |
 | User asks price | Active product resolved | Answer product price directly; keep promo/inventory conservative unless separately confirmed | Over-assert promo/inventory together with price |
 | User asks shipping/promo | Shipping/promo not separately confirmed | Use safe phrasing and mark as provisional | State business fact as certain |
@@ -141,6 +180,7 @@ onIncomingMessage(ctx, userMessage):
 
   if indicatesProductInterest(intent):
     ctx.active_product = resolveProduct(ctx, userMessage)
+    // exact codes and numbered suggestion follow-ups resolve active same-tenant/global products before hybrid search
     ctx.order_status = PRODUCT_DETAIL
     return answerProductDetail(ctx.active_product)
 

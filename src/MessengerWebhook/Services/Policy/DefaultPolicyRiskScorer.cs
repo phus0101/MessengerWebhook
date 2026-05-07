@@ -105,19 +105,24 @@ public sealed class DefaultPolicyRiskScorer : IPolicyRiskScorer
         };
     }
 
+    // Counts how many prior user turns repeat the current message (same content, case-insensitive).
+    // Previously used `request.Message.Contains(turn.Content, ...)` which matched short turns like
+    // "ok"/"yes" against any message containing those words → false escalations for chatty users.
     private static int CountRepeatMentions(PolicyGuardRequest request)
     {
-        if (request.RecentTurns == null || request.RecentTurns.Count == 0)
+        if (request.RecentTurns == null || request.RecentTurns.Count == 0 || string.IsNullOrWhiteSpace(request.Message))
         {
             return 0;
         }
 
+        var current = request.Message.Trim();
         return request.RecentTurns
             .Where((turn, index) => index != request.RecentTurns.Count - 1 ||
                 !string.Equals(turn.Role, "user", StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(turn.Content, request.Message, StringComparison.Ordinal))
             .Count(turn =>
+                string.Equals(turn.Role, "user", StringComparison.OrdinalIgnoreCase) &&
                 !string.IsNullOrWhiteSpace(turn.Content) &&
-                request.Message.Contains(turn.Content, StringComparison.OrdinalIgnoreCase));
+                string.Equals(turn.Content.Trim(), current, StringComparison.OrdinalIgnoreCase));
     }
 }

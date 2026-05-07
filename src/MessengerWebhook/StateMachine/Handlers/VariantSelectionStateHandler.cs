@@ -2,6 +2,7 @@ using MessengerWebhook.Models;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.Tenants;
 using Microsoft.Extensions.Logging;
 
 namespace MessengerWebhook.StateMachine.Handlers;
@@ -9,17 +10,19 @@ namespace MessengerWebhook.StateMachine.Handlers;
 public class VariantSelectionStateHandler : BaseStateHandler
 {
     private readonly IProductRepository _productRepository;
+    private readonly ITenantContext _tenantContext;
 
     public override ConversationState HandledState => ConversationState.VariantSelection;
 
     public VariantSelectionStateHandler(
         IGeminiService geminiService,
-        
         IProductRepository productRepository,
+        ITenantContext tenantContext,
         ILogger<VariantSelectionStateHandler> logger)
         : base(geminiService, logger)
     {
         _productRepository = productRepository;
+        _tenantContext = tenantContext;
     }
 
     protected override async Task<string> HandleInternalAsync(Models.StateContext ctx, string message)
@@ -33,11 +36,17 @@ public class VariantSelectionStateHandler : BaseStateHandler
             return "Vui lòng chọn sản phẩm trước.";
         }
 
-        var product = await _productRepository.GetByIdAsync(productId);
+        if (!_tenantContext.TenantId.HasValue)
+        {
+            ctx.CurrentState = ConversationState.BrowsingProducts;
+            return "Em chưa xác định được catalog của shop. Chị thử tìm lại sản phẩm giúp em nhé.";
+        }
+
+        var product = await _productRepository.GetActiveByIdAsync(productId, _tenantContext.TenantId.Value);
         if (product == null)
         {
             ctx.CurrentState = ConversationState.BrowsingProducts;
-            return "Không tìm thấy sản phẩm.";
+            return "Không tìm thấy sản phẩm trong catalog hiện tại.";
         }
 
         // Check for back command

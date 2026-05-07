@@ -249,6 +249,10 @@ public abstract class SalesStateHandlerBase : IStateHandler
             return handoffResponse;
         }
 
+        var wasAwaitingOldContactConfirmation =
+            ctx.GetData<bool?>("contactNeedsConfirmation") == true &&
+            string.Equals(ctx.GetData<string>("pendingContactQuestion"), "confirm_old_contact", StringComparison.OrdinalIgnoreCase);
+
         // Capture customer details first (phone, address, etc.)
         await SalesMessageParser.CaptureCustomerDetailsAsync(ctx, message, GeminiService, Logger);
         SalesMessageParser.CaptureSelectedProductQuantity(ctx, message);
@@ -260,6 +264,36 @@ public abstract class SalesStateHandlerBase : IStateHandler
             SalesMessageParser.HasRequiredContact(ctx),
             ctx.GetData<bool?>("contactNeedsConfirmation") ?? false
         );
+
+        var confirmedRememberedContactNow = wasAwaitingOldContactConfirmation &&
+                                            ctx.GetData<bool?>("contactNeedsConfirmation") != true;
+        if (confirmedRememberedContactNow)
+        {
+            if (!HasSelectedProduct(ctx))
+            {
+                Logger.LogInformation("Remembered contact confirmed without product context for PSID: {PSID}, attempting history recovery", ctx.FacebookPSID);
+                await TryExtractProductFromHistoryAsync(ctx, message);
+            }
+
+            string? contactConfirmedReply = null;
+            if (SalesMessageParser.HasRequiredContact(ctx))
+            {
+                contactConfirmedReply = HasSelectedProduct(ctx)
+                    ? await BuildFinalOrderConfirmationReplyAsync(ctx, message)
+                    : "Dạ em đã dùng thông tin cũ cho đơn lần này rồi ạ, nhưng em chưa rõ chị muốn chốt sản phẩm nào. Chị nhắn lại tên hoặc mã sản phẩm giúp em nha.";
+            }
+            else
+            {
+                contactConfirmedReply = await BuildContactCollectionReplyAsync(ctx, message);
+            }
+
+            if (!string.IsNullOrWhiteSpace(contactConfirmedReply))
+            {
+                ctx.CurrentState = ConversationState.CollectingInfo;
+                AddToHistory(ctx, "assistant", contactConfirmedReply);
+                return contactConfirmedReply;
+            }
+        }
 
         if (history.Count <= 1 && IsPureGreeting(message) && !HasSelectedProduct(ctx))
         {
@@ -328,6 +362,23 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
         // Route based on AI-detected intent (only if confidence meets threshold)
         var useAiIntent = intentResult.Confidence >= SalesBotOptions.IntentConfidenceThreshold;
+
+        // Classify sub-intent for Consulting state (MUST run before question handlers to avoid early returns)
+        SubIntentResult? subIntent = null;
+        if (useAiIntent && intentResult.Intent == Services.AI.Models.CustomerIntent.Consulting)
+        {
+            subIntent = await SubIntentClassifier.ClassifyAsync(message);
+
+            if (subIntent != null)
+            {
+                Logger.LogInformation(
+                    "SubIntent detected: {Category} (confidence: {Confidence}, source: {Source})",
+                    subIntent.Category, subIntent.Confidence, subIntent.Source);
+
+                // Store in context for downstream use
+                ctx.SetData("subIntent", subIntent);
+            }
+        }
 
         // Recover product from history when customer is already in ordering flow but product context was lost.
         if (!hasProduct &&
@@ -644,8 +695,9 @@ public abstract class SalesStateHandlerBase : IStateHandler
         }
 
         // Continue conversation based on detected intent
+
         ctx.CurrentState = nextState;
-        var reply = await BuildNaturalReplyAsync(ctx, message, useAiIntent ? intentResult.Intent : null);
+        var reply = await BuildNaturalReplyAsync(ctx, message, useAiIntent ? intentResult.Intent : null, subIntent);
         AddToHistory(ctx, "assistant", reply);
         return reply;
     }
@@ -829,7 +881,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
         return string.Join(Environment.NewLine, readyToBuyLines);
     }
 
-    private async Task<string> BuildNaturalReplyAsync(StateContext ctx, string message, Services.AI.Models.CustomerIntent? intent = null)
+    private async Task<string> BuildNaturalReplyAsync(StateContext ctx, string message, Services.AI.Models.CustomerIntent? intent = null, SubIntentResult? subIntent = null)
     {
         var startTime = DateTime.UtcNow;
 
@@ -865,7 +917,11 @@ public abstract class SalesStateHandlerBase : IStateHandler
         var productCodes = activeProducts.Select(product => product.Code).ToList();
         var contactSummary = GetContactSummary(ctx);
 
-        var earlyRagContext = await RetrieveRagContextAsync(ctx, message);
+        // Get SubIntent from context if available
+        var contextSubIntent = ctx.GetData<SubIntentResult?>("subIntent");
+        var includeDetailedInfo = contextSubIntent?.Category == SubIntentCategory.ProductQuestion;
+
+        var earlyRagContext = await RetrieveRagContextAsync(ctx, message, includeDetailedInfo);
         var groundingContext = await _productGroundingService.BuildContextWithRelatedSuggestionsAsync(message, activeProducts, earlyRagContext.Products);
         if (groundingContext.RequiresGrounding && !groundingContext.HasAllowedProducts)
         {
@@ -1021,6 +1077,28 @@ Xung ho: {toneProfile.PronounText}
             }
         }
 
+        // Build SubIntent guidance text
+        string? subIntentGuidance = null;
+        if (subIntent != null)
+        {
+            subIntentGuidance = subIntent.Category switch
+            {
+                SubIntentCategory.ProductQuestion =>
+                    "Khách hỏi chi tiết về sản phẩm. Hãy cung cấp thông tin đầy đủ về thành phần, công dụng, cách dùng.",
+                SubIntentCategory.PriceQuestion =>
+                    "Khách hỏi về giá. Hãy giải thích rõ giá, chương trình khuyến mãi, so sánh giá trị.",
+                SubIntentCategory.ShippingQuestion =>
+                    "Khách hỏi về vận chuyển. Hãy giải thích chính sách ship, thời gian giao hàng.",
+                SubIntentCategory.AvailabilityQuestion =>
+                    "Khách hỏi về tình trạng hàng. Hãy thông báo còn hàng hay hết, dự kiến nhập hàng.",
+                SubIntentCategory.PolicyQuestion =>
+                    "Khách hỏi về chính sách. Hãy giải thích chính sách đổi trả, bảo hành.",
+                SubIntentCategory.ComparisonQuestion =>
+                    "Khách muốn so sánh sản phẩm. Hãy so sánh ưu nhược điểm, phù hợp với nhu cầu nào.",
+                _ => null
+            };
+        }
+
         var ragContext = string.IsNullOrWhiteSpace(earlyRagContext.FormattedContext)
             ? null
             : earlyRagContext.FormattedContext;
@@ -1046,7 +1124,8 @@ Quy tac:
             ctx.FacebookPSID,
             prompt,
             history,
-            ragContext: ragContext);
+            ragContext: ragContext,
+            subIntentGuidance: subIntentGuidance);
 
         // Capture pipeline latency
         var pipelineLatency = (int)(DateTime.UtcNow - pipelineStartTime).TotalMilliseconds;
@@ -1148,7 +1227,7 @@ Quy tac:
         return groundingContext.RelatedSuggestionReply;
     }
 
-    private async Task<RAGContext> RetrieveRagContextAsync(StateContext ctx, string message)
+    private async Task<RAGContext> RetrieveRagContextAsync(StateContext ctx, string message, bool includeDetailedInfo = false)
     {
         if (!RagOptions.Enabled || RagService == null)
         {
@@ -1157,13 +1236,14 @@ Quy tac:
 
         try
         {
-            var ragResult = await RagService.RetrieveContextAsync(message, topK: RagOptions.TopK);
+            var ragResult = await RagService.RetrieveContextAsync(message, topK: RagOptions.TopK, includeDetailedInfo);
 
             Logger.LogInformation(
-                "RAG retrieved {Count} products in {Ms}ms for PSID: {PSID}",
+                "RAG retrieved {Count} products in {Ms}ms for PSID: {PSID} (detailed: {Detailed})",
                 ragResult.ProductIds.Count,
                 ragResult.Metrics.TotalLatency.TotalMilliseconds,
-                ctx.FacebookPSID);
+                ctx.FacebookPSID,
+                includeDetailedInfo);
 
             return ragResult;
         }

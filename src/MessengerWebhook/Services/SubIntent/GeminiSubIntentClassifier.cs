@@ -48,10 +48,6 @@ public sealed class GeminiSubIntentClassifier : ISubIntentClassifier
                 : _geminiOptions.FlashLiteModel;
 
             var url = $"v1beta/models/{model}:generateContent";
-            if (!string.IsNullOrWhiteSpace(_geminiOptions.ApiKey))
-            {
-                url += $"?key={Uri.EscapeDataString(_geminiOptions.ApiKey)}";
-            }
 
             var request = BuildRequest(message, conversationContext);
             var response = await _httpClient.PostAsJsonAsync(url, request, JsonOptions, timeoutCts.Token);
@@ -70,7 +66,7 @@ public sealed class GeminiSubIntentClassifier : ISubIntentClassifier
                 return null;
             }
 
-            var classification = JsonSerializer.Deserialize<GeminiClassifierResponse>(ExtractJson(text), JsonOptions);
+            var classification = TryDeserializeClassification(text);
 
             if (classification == null || classification.Confidence < _subIntentOptions.MinConfidence)
             {
@@ -110,6 +106,7 @@ public sealed class GeminiSubIntentClassifier : ISubIntentClassifier
     {
         var prompt = BuildPrompt(message, context);
 
+        // Use Gemini structured output so we don't have to fence-strip markdown manually.
         return new
         {
             contents = new[]
@@ -125,9 +122,24 @@ public sealed class GeminiSubIntentClassifier : ISubIntentClassifier
             generationConfig = new
             {
                 temperature = 0.1,
-                maxOutputTokens = 150
+                maxOutputTokens = 150,
+                responseMimeType = "application/json"
             }
         };
+    }
+
+    private static GeminiClassifierResponse? TryDeserializeClassification(string text)
+    {
+        // Structured-output mode returns raw JSON, but tolerate legacy markdown-fence responses too.
+        var payload = ExtractJson(text);
+        try
+        {
+            return JsonSerializer.Deserialize<GeminiClassifierResponse>(payload, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private string BuildPrompt(string message, ConversationContext? context)

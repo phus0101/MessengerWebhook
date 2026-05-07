@@ -56,7 +56,8 @@ public sealed class HybridSubIntentClassifier : ISubIntentClassifier
 
         var aiResult = await _aiClassifier.ClassifyAsync(message, conversationContext, cancellationToken);
 
-        // Merge results: prefer AI if confidence > threshold
+        // Merge results: prefer AI if confidence > threshold.
+        // Preserve aiResult.Source ("ai") so telemetry can distinguish keyword vs AI decisions.
         if (aiResult != null && aiResult.Confidence >= _options.HybridAiAcceptanceThreshold)
         {
             _logger.LogInformation(
@@ -65,7 +66,7 @@ public sealed class HybridSubIntentClassifier : ISubIntentClassifier
                 aiResult.Confidence,
                 keywordResult?.Category.ToString() ?? "none");
 
-            return aiResult with { Source = "hybrid" };
+            return aiResult;
         }
 
         // AI failed or low confidence - fallback to keyword result

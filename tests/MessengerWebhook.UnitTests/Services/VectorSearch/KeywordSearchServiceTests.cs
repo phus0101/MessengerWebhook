@@ -1,5 +1,6 @@
 using MessengerWebhook.Data;
 using MessengerWebhook.Data.Entities;
+using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.Services.VectorSearch;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -13,6 +14,9 @@ public class KeywordSearchServiceTests : IDisposable
     private readonly MessengerBotDbContext _dbContext;
     private readonly KeywordSearchService _service;
     private readonly Mock<ILogger<KeywordSearchService>> _loggerMock;
+    private readonly NullTenantContext _tenantContext;
+    private readonly Guid _tenantId = Guid.NewGuid();
+    private readonly Guid _otherTenantId = Guid.NewGuid();
 
     public KeywordSearchServiceTests()
     {
@@ -23,7 +27,9 @@ public class KeywordSearchServiceTests : IDisposable
 
         _dbContext = new TestMessengerBotDbContext(options);
         _loggerMock = new Mock<ILogger<KeywordSearchService>>();
-        _service = new KeywordSearchService(_dbContext, _loggerMock.Object);
+        _tenantContext = new NullTenantContext();
+        _tenantContext.Initialize(_tenantId, "PAGE_1", null);
+        _service = new KeywordSearchService(_dbContext, _tenantContext, _loggerMock.Object);
 
         SeedTestData();
     }
@@ -58,7 +64,7 @@ public class KeywordSearchServiceTests : IDisposable
                 Description = "Kem chống nắng SPF 50 cho da nhạy cảm",
                 Category = ProductCategory.Cosmetics,
                 BasePrice = 250000,
-                TenantId = Guid.NewGuid()
+                TenantId = _tenantId
             },
             new()
             {
@@ -68,7 +74,7 @@ public class KeywordSearchServiceTests : IDisposable
                 Description = "Serum dưỡng trắng da với vitamin C",
                 Category = ProductCategory.Cosmetics,
                 BasePrice = 350000,
-                TenantId = Guid.NewGuid()
+                TenantId = _tenantId
             },
             new()
             {
@@ -78,7 +84,7 @@ public class KeywordSearchServiceTests : IDisposable
                 Description = "Nước hoa hồng cân bằng da",
                 Category = ProductCategory.Cosmetics,
                 BasePrice = 180000,
-                TenantId = Guid.NewGuid()
+                TenantId = _tenantId
             },
             new()
             {
@@ -88,7 +94,7 @@ public class KeywordSearchServiceTests : IDisposable
                 Description = "Kem dưỡng ẩm cho da khô",
                 Category = ProductCategory.Cosmetics,
                 BasePrice = 200000,
-                TenantId = Guid.NewGuid()
+                TenantId = _tenantId
             },
             new()
             {
@@ -98,7 +104,28 @@ public class KeywordSearchServiceTests : IDisposable
                 Description = "Serum se khít lỗ chân lông",
                 Category = ProductCategory.Cosmetics,
                 BasePrice = 280000,
-                TenantId = Guid.NewGuid()
+                TenantId = _tenantId
+            },
+            new()
+            {
+                Id = "inactive-mask",
+                Code = "MASK_INACTIVE",
+                Name = "Mặt nạ dưỡng ẩm inactive",
+                Description = "Mặt nạ dưỡng ẩm không còn bán",
+                Category = ProductCategory.Cosmetics,
+                BasePrice = 150000,
+                TenantId = _tenantId,
+                IsActive = false
+            },
+            new()
+            {
+                Id = "other-tenant-mask",
+                Code = "MASK_OTHER",
+                Name = "Mặt nạ dưỡng ẩm tenant khác",
+                Description = "Mặt nạ dưỡng ẩm thuộc tenant khác",
+                Category = ProductCategory.Cosmetics,
+                BasePrice = 160000,
+                TenantId = _otherTenantId
             }
         };
 
@@ -152,6 +179,26 @@ public class KeywordSearchServiceTests : IDisposable
         var topResult = results.First();
         Assert.Equal("p4", topResult.ProductId);
         Assert.Contains("dưỡng ẩm", topResult.Name);
+    }
+
+    [Fact]
+    public async Task SearchAsync_WithVietnameseQuery_ReturnsAsciiCatalogMatch()
+    {
+        _dbContext.Products.Add(new Product
+        {
+            Id = "ascii-mask",
+            Code = "MN",
+            Name = "Mat Na Ngu Duong Am",
+            Description = "Mat na ngu duong am phuc hoi da qua dem",
+            Category = ProductCategory.Cosmetics,
+            BasePrice = 320000,
+            TenantId = _tenantId
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var results = await _service.SearchAsync("mặt nạ dưỡng ẩm", topK: 5);
+
+        Assert.Contains(results, r => r.ProductId == "ascii-mask");
     }
 
     [Fact]
@@ -260,6 +307,25 @@ public class KeywordSearchServiceTests : IDisposable
             Assert.True(results[i].Score >= results[i + 1].Score,
                 $"Results not ordered by score: {results[i].Score} < {results[i + 1].Score}");
         }
+    }
+
+    [Fact]
+    public async Task SearchAsync_FiltersInactiveAndOtherTenantProducts()
+    {
+        var results = await _service.SearchAsync("mặt nạ dưỡng ẩm", topK: 5);
+
+        Assert.DoesNotContain(results, r => r.ProductId == "inactive-mask");
+        Assert.DoesNotContain(results, r => r.ProductId == "other-tenant-mask");
+    }
+
+    [Fact]
+    public async Task SearchAsync_WithNoTenantContext_ReturnsEmpty()
+    {
+        var service = new KeywordSearchService(_dbContext, _loggerMock.Object);
+
+        var results = await service.SearchAsync("mặt nạ dưỡng ẩm", topK: 5);
+
+        Assert.Empty(results);
     }
 
     [Fact]

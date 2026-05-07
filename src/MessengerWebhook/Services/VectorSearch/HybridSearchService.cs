@@ -37,7 +37,7 @@ public class HybridSearchService : IHybridSearchService
 
         // Execute searches in parallel
         var vectorTask = SearchVectorAsync(query, topK * 2, filter, cancellationToken);
-        var keywordTask = _keywordSearch.SearchAsync(query, topK * 2, cancellationToken);
+        var keywordTask = _keywordSearch.SearchAsync(query, topK * 2, ResolveTenantId(filter), cancellationToken);
 
         await Task.WhenAll(vectorTask, keywordTask);
 
@@ -60,6 +60,21 @@ public class HybridSearchService : IHybridSearchService
             stopwatch.ElapsedMilliseconds);
 
         return fusedResults;
+    }
+
+    private static Guid? ResolveTenantId(Dictionary<string, object>? filter)
+    {
+        if (filter?.TryGetValue("tenant_id", out var value) != true)
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            Guid tenantId => tenantId,
+            string tenantIdText when Guid.TryParse(tenantIdText, out var tenantId) => tenantId,
+            _ => null
+        };
     }
 
     private async Task<List<ProductSearchResult>> SearchVectorAsync(

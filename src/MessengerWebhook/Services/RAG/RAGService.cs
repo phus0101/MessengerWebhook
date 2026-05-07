@@ -1,4 +1,5 @@
 using MessengerWebhook.Configuration;
+using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.Services.VectorSearch;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
@@ -12,6 +13,7 @@ public class RAGService : IRAGService
 {
     private readonly IHybridSearchService _hybridSearch;
     private readonly IContextAssembler _contextAssembler;
+    private readonly ITenantContext _tenantContext;
     private readonly RAGOptions _options;
     private readonly ILogger<RAGService> _logger;
 
@@ -20,9 +22,20 @@ public class RAGService : IRAGService
         IContextAssembler contextAssembler,
         IOptions<RAGOptions> options,
         ILogger<RAGService> logger)
+        : this(hybridSearch, contextAssembler, new NullTenantContext(), options, logger)
+    {
+    }
+
+    public RAGService(
+        IHybridSearchService hybridSearch,
+        IContextAssembler contextAssembler,
+        ITenantContext tenantContext,
+        IOptions<RAGOptions> options,
+        ILogger<RAGService> logger)
     {
         _hybridSearch = hybridSearch;
         _contextAssembler = contextAssembler;
+        _tenantContext = tenantContext;
         _options = options.Value;
         _logger = logger;
     }
@@ -30,6 +43,7 @@ public class RAGService : IRAGService
     public async Task<RAGContext> RetrieveContextAsync(
         string query,
         int topK = 5,
+        bool includeDetailedInfo = false,
         CancellationToken cancellationToken = default)
     {
         var totalStopwatch = Stopwatch.StartNew();
@@ -37,11 +51,23 @@ public class RAGService : IRAGService
 
         try
         {
+            if (!_tenantContext.TenantId.HasValue)
+            {
+                retrievalStopwatch.Stop();
+                _logger.LogWarning("RAG retrieval skipped because tenant context is not resolved");
+                return CreateEmptyContext(totalStopwatch.Elapsed, retrievalStopwatch.Elapsed);
+            }
+
+            var filter = new Dictionary<string, object>
+            {
+                ["tenant_id"] = _tenantContext.TenantId.Value.ToString()
+            };
+
             // Step 1: Hybrid search
             var results = await _hybridSearch.SearchAsync(
                 query,
                 topK,
-                filter: null,
+                filter,
                 cancellationToken);
 
             retrievalStopwatch.Stop();
@@ -54,8 +80,9 @@ public class RAGService : IRAGService
 
             // Step 2: Context assembly
             var productIds = results.Select(r => r.ProductId).ToList();
-            var formattedContext = await _contextAssembler.AssembleContextAsync(
+            var assembledContext = await _contextAssembler.AssembleContextAsync(
                 productIds,
+                includeDetailedInfo,
                 cancellationToken);
 
             totalStopwatch.Stop();
@@ -64,16 +91,16 @@ public class RAGService : IRAGService
             var metrics = new RAGMetrics(
                 RetrievalLatency: retrievalStopwatch.Elapsed,
                 TotalLatency: totalStopwatch.Elapsed,
-                ProductsRetrieved: results.Count,
+                ProductsRetrieved: assembledContext.ProductIds.Count,
                 CacheHit: false, // Will be set by cache layer
-                Source: "hybrid");
+                Source: assembledContext.ProductIds.Count > 0 ? "hybrid" : "empty");
 
             _logger.LogInformation(
                 "RAG retrieval completed: {Count} products, {Latency}ms",
-                results.Count,
+                assembledContext.ProductIds.Count,
                 totalStopwatch.ElapsedMilliseconds);
 
-            return new RAGContext(formattedContext, productIds, metrics);
+            return new RAGContext(assembledContext.FormattedContext, assembledContext.ProductIds, assembledContext.Products, metrics);
         }
         catch (Exception ex)
         {
@@ -115,6 +142,7 @@ public class RAGService : IRAGService
         return new RAGContext(
             "Không tìm thấy sản phẩm phù hợp.",
             new List<string>(),
+            new List<MessengerWebhook.Services.ProductGrounding.GroundedProduct>(),
             metrics);
     }
 }

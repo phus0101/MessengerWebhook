@@ -29,7 +29,29 @@ public class ProductRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task GetActiveRelatedAsync_ReturnsOnlyActiveSameTenantProducts()
+    public async Task GetActiveByCodeAsync_GlobalProduct_ReturnsActiveProduct()
+    {
+        await SeedProductsAsync();
+
+        var result = await _repository.GetActiveByCodeAsync("MN_GLOBAL", _tenantId);
+
+        Assert.NotNull(result);
+        Assert.Equal("mask-global", result.Id);
+    }
+
+    [Fact]
+    public async Task GetActiveByIdAsync_GlobalProduct_ReturnsActiveProduct()
+    {
+        await SeedProductsAsync();
+
+        var result = await _repository.GetActiveByIdAsync("mask-global", _tenantId);
+
+        Assert.NotNull(result);
+        Assert.Equal("MN_GLOBAL", result.Code);
+    }
+
+    [Fact]
+    public async Task GetActiveRelatedAsync_ReturnsActiveTenantAndGlobalProductsOnly()
     {
         await SeedProductsAsync();
 
@@ -39,7 +61,64 @@ public class ProductRepositoryTests : IDisposable
             new[] { "mat na", "duong am" },
             3);
 
-        Assert.Equal(new[] { "mask-active" }, results.Select(product => product.Id));
+        Assert.Contains(results, product => product.Id == "mask-active");
+        Assert.Contains(results, product => product.Id == "mask-global");
+        Assert.DoesNotContain(results, product => product.Id == "mask-inactive");
+        Assert.DoesNotContain(results, product => product.Id == "mask-other-tenant");
+    }
+
+    [Fact]
+    public async Task GetActiveRelatedAsync_GlobalProduct_ReturnsAlongsideTenantSpecificProduct()
+    {
+        await SeedProductsAsync();
+
+        var results = await _repository.GetActiveRelatedAsync(
+            _tenantId,
+            ProductCategory.Cosmetics,
+            new[] { "mat na", "duong am" },
+            3);
+
+        Assert.Contains(results, product => product.Id == "mask-global");
+        Assert.DoesNotContain(results, product => product.Id == "mask-other-tenant");
+    }
+
+    [Fact]
+    public async Task GetActiveRelatedAsync_GlobalProductionMask_ReturnsForAccentInsensitiveNeed()
+    {
+        _dbContext.Products.Add(new Product
+        {
+            Id = "mask-production-global",
+            Code = "MN",
+            Name = "Mặt Nạ Ngủ Dưỡng Ẩm",
+            Description = "Mặt nạ ngủ cấp ẩm chuyên sâu, phục hồi da qua đêm",
+            Category = ProductCategory.Cosmetics,
+            BasePrice = 180000m,
+            IsActive = true,
+            TenantId = null
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var results = await _repository.GetActiveRelatedAsync(
+            _tenantId,
+            ProductCategory.Cosmetics,
+            new[] { "mat na", "dưỡng ẩm" },
+            3);
+
+        Assert.Contains(results, product => product.Id == "mask-production-global");
+    }
+
+    [Fact]
+    public async Task GetActiveRelatedAsync_TenantProduct_RanksBeforeGlobalProduct()
+    {
+        await SeedProductsAsync();
+
+        var results = await _repository.GetActiveRelatedAsync(
+            _tenantId,
+            ProductCategory.Cosmetics,
+            new[] { "mat na", "duong am" },
+            3);
+
+        Assert.True(results.FindIndex(product => product.Id == "mask-active") < results.FindIndex(product => product.Id == "mask-global"));
     }
 
     [Fact]
@@ -108,6 +187,17 @@ public class ProductRepositoryTests : IDisposable
                 BasePrice = 130000m,
                 IsActive = true,
                 TenantId = _otherTenantId
+            },
+            new Product
+            {
+                Id = "mask-global",
+                Code = "MN_GLOBAL",
+                Name = "Mặt nạ ngủ dưỡng ẩm global",
+                Description = "Mặt nạ cấp ẩm dùng chung catalog",
+                Category = ProductCategory.Cosmetics,
+                BasePrice = 125000m,
+                IsActive = true,
+                TenantId = null
             },
             new Product
             {

@@ -112,3 +112,5 @@ TestResults/
 .env
 .env.local
 .env.*.local
+src/MessengerWebhook/vertex-ai-key.json
+vertex-ai-key.json

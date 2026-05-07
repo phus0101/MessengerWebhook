@@ -505,7 +505,7 @@ Message: {sanitized}";
         ILogger? logger,
         CancellationToken cancellationToken)
     {
-        var normalized = message.Trim().ToLowerInvariant();
+        var normalized = NormalizeVietnameseText(message);
         if (string.IsNullOrWhiteSpace(normalized))
         {
             return false;

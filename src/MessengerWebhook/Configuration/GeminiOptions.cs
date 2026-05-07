@@ -12,6 +12,7 @@ public class GeminiOptions
     public double Temperature { get; set; } = 0.7;
     public int MaxRetries { get; set; } = 3;
     public int TimeoutSeconds { get; set; } = 60;
+    public int AiDetectionTimeoutMs { get; set; } = 500;
     public string SystemPromptPath { get; set; } = "Prompts/sales-closer-system-prompt.txt";
     public string ConfirmationDetectionPromptPath { get; set; } = "Prompts/confirmation-detection-prompt.txt";
     public bool EnableAiConfirmationDetection { get; set; } = true;

@@ -18,6 +18,8 @@ public interface IProductMappingService
     /// </summary>
     Task<Product?> GetProductByCodeAsync(string code);
 
+    Task<Product?> GetActiveProductByCodeAsync(string code);
+
     /// <summary>
     /// Resolve a product from a free-form customer message
     /// </summary>

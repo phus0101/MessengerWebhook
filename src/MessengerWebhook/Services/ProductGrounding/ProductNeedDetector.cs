@@ -46,10 +46,11 @@ public class ProductNeedDetector : IProductNeedDetector
             return false;
         }
 
+        // Removed the bare '?' shortcut — it tripped grounding on casual mentions like "kem rất tốt!".
+        // NeedTerms / CatalogIntentTerms / FactIntentTerms already cover real product questions.
         return ContainsAny(message, NeedTerms) ||
                ContainsAny(message, CatalogIntentTerms) ||
-               ContainsAny(message, FactIntentTerms) ||
-               message.Contains('?');
+               ContainsAny(message, FactIntentTerms);
     }
 
     private static bool ContainsAny(string value, IEnumerable<string> phrases)

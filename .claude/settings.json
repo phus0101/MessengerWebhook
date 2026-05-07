@@ -187,12 +187,14 @@
     "context7@claude-plugins-official": true,
     "superpowers@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": false,
     "github@claude-plugins-official": true,
     "postgres-best-practices@supabase-agent-skills": true,
     "typescript-lsp@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
-    "atlassian@claude-plugins-official": true,
-    "andrej-karpathy-skills@karpathy-skills": true
+    "atlassian@claude-plugins-official": false,
+    "andrej-karpathy-skills@karpathy-skills": true,
+    "pinecone@claude-plugins-official": true,
+    "csharp-lsp@claude-plugins-official": true
   }
 }

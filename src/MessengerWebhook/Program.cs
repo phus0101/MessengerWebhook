@@ -299,7 +299,16 @@ builder.Services.AddResponseCaching();
 builder.Services.Configure<MessengerWebhook.Configuration.SubIntentOptions>(
     builder.Configuration.GetSection(MessengerWebhook.Configuration.SubIntentOptions.SectionName));
 builder.Services.AddSingleton<MessengerWebhook.Services.SubIntent.KeywordSubIntentDetector>();
-builder.Services.AddScoped<MessengerWebhook.Services.SubIntent.GeminiSubIntentClassifier>();
+builder.Services.AddHttpClient<MessengerWebhook.Services.SubIntent.GeminiSubIntentClassifier>()
+    .ConfigureHttpClient((sp, client) =>
+    {
+        var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+        client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+        client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+    })
+    .AddHttpMessageHandler<GeminiAuthHandler>()
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddStandardResilienceHandler();
 builder.Services.AddScoped<MessengerWebhook.Services.SubIntent.ISubIntentClassifier, MessengerWebhook.Services.SubIntent.HybridSubIntentClassifier>();
 
 // Register state machine
@@ -435,7 +444,9 @@ builder.Services.AddHttpClient<IPolicyIntentClassifier, GeminiPolicyIntentClassi
         client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
         client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
     })
-    .SetHandlerLifetime(TimeSpan.FromMinutes(5));
+    .AddHttpMessageHandler<GeminiAuthHandler>()
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddStandardResilienceHandler();
 
 // Configure HttpClient for MessengerService with Polly resilience
 builder.Services.AddHttpClient<IMessengerService, MessengerService>()

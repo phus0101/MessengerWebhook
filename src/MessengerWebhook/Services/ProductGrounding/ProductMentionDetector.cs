@@ -24,7 +24,7 @@ public partial class ProductMentionDetector : IProductMentionDetector
 
     private static readonly string[] GenericContextStarts =
     {
-        "chị ", "chi ", "bạn ", "ban ", "mình ", "minh ", "khách ", "khach ", "sản phẩm này", "san pham nay", "sản phẩm đó", "san pham do"
+        "chị ", "chi ", "bạn ", "ban ", "mình ", "minh ", "khách ", "khach ", "này ", "nay ", "sản phẩm này", "san pham nay", "sản phẩm đó", "san pham do"
     };
 
     public IReadOnlyList<string> ExtractProductMentions(string text)
@@ -58,7 +58,10 @@ public partial class ProductMentionDetector : IProductMentionDetector
         var stopWords = new[]
         {
             " giá", " gia", " có", " co", " giúp", " giup", " cấp", " cap", " là", " la",
-            " chuyên", " rất", " rat", " tốt", " tot", " hợp", " hop", " phù hợp", " phu hop", " ạ", " nha", " nhé", " nhe"
+            " chuyên", " rất", " rat", " tốt", " tot", " hợp", " hop", " phù hợp", " phu hop",
+            " ạ", " nha", " nhé", " nhe",
+            // Conjunctions terminate a product mention to avoid spilling across products.
+            " và ", " va ", " hoặc ", " hoac ", " hay ", " or ", " and "
         };
 
         foreach (var stopWord in stopWords)
@@ -106,11 +109,20 @@ public partial class ProductMentionDetector : IProductMentionDetector
 
     private static string RemoveLeadingWords(string candidate)
     {
-        foreach (var leadingWord in LeadingWords)
+        // Loop until no leading word matches — chains like "Dạ bên dòng X" otherwise leave
+        // "bên dòng X" because the original implementation only stripped one prefix per call.
+        var changed = true;
+        while (changed)
         {
-            if (candidate.StartsWith(leadingWord + " ", StringComparison.OrdinalIgnoreCase))
+            changed = false;
+            foreach (var leadingWord in LeadingWords)
             {
-                return candidate[leadingWord.Length..].TrimStart();
+                if (candidate.StartsWith(leadingWord + " ", StringComparison.OrdinalIgnoreCase))
+                {
+                    candidate = candidate[leadingWord.Length..].TrimStart();
+                    changed = true;
+                    break;
+                }
             }
         }
 
@@ -132,7 +144,9 @@ public partial class ProductMentionDetector : IProductMentionDetector
     {
         var words = candidate.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var titleCaseCount = words.Count(word => char.IsUpper(word[0]));
-        return titleCaseCount >= 2 || candidate.Any(char.IsDigit) || candidate.Contains('-', StringComparison.Ordinal);
+        // Require alphanumeric token (e.g., "B5", "MN01") not bare digits like "30k" / "120".
+        var hasBrandToken = words.Any(word => word.Any(char.IsLetter) && word.Any(char.IsDigit));
+        return titleCaseCount >= 2 || hasBrandToken || candidate.Contains('-', StringComparison.Ordinal);
     }
 
     private static bool IsGenericContextPhrase(string candidate)

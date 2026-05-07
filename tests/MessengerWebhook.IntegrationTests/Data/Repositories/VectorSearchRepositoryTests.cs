@@ -15,6 +15,7 @@ namespace MessengerWebhook.IntegrationTests.Data.Repositories;
 public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
 {
     private readonly DatabaseFixture _fixture;
+    private static readonly Guid TestTenantId = Guid.NewGuid();
 
     public VectorSearchRepositoryTests(DatabaseFixture fixture)
     {
@@ -35,12 +36,14 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
         context.Database.ExecuteSqlRaw("DELETE FROM \"Products\"");
     }
 
-    private async Task<Product> SeedProductWithEmbedding(float[] embedding, string name = "Test Product", bool isActive = true)
+    private async Task<Product> SeedProductWithEmbedding(float[] embedding, string name = "Test Product", bool isActive = true, Guid? tenantId = null)
     {
         await using var context = _fixture.CreateDbContext();
+        tenantId ??= TestTenantId;
         var product = new Product
         {
             Id = Guid.NewGuid().ToString(),
+            TenantId = tenantId,
             Code = $"VECTOR_{Guid.NewGuid():N}",
             Name = name,
             Description = "Test description",
@@ -70,7 +73,7 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
             new object[]
             {
                 new NpgsqlParameter("@id", Guid.NewGuid()),
-                new NpgsqlParameter("@tenantId", DBNull.Value),
+                new NpgsqlParameter("@tenantId", tenantId.Value),
                 new NpgsqlParameter("@productId", product.Id),
                 embeddingParam,
                 new NpgsqlParameter("@createdAt", now),
@@ -92,7 +95,7 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
         var repository = CreateRepository();
         var queryEmbedding = Enumerable.Repeat(0.1f, 768).ToArray();
 
-        var results = await repository.SearchSimilarProductsAsync(queryEmbedding, limit: 5, similarityThreshold: 0.5);
+        var results = await repository.SearchSimilarProductsAsync(queryEmbedding, TestTenantId, limit: 5, similarityThreshold: 0.5);
 
         results.Should().NotBeEmpty();
         results.Should().Contain(p => p.Name == "Product 1");
@@ -112,7 +115,7 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
         for (int i = 0; i < 384; i++) queryEmbedding[i] = 0.0f;
         for (int i = 384; i < 768; i++) queryEmbedding[i] = 1.0f;
 
-        var results = await repository.SearchSimilarProductsAsync(queryEmbedding, limit: 5, similarityThreshold: 0.5);
+        var results = await repository.SearchSimilarProductsAsync(queryEmbedding, TestTenantId, limit: 5, similarityThreshold: 0.5);
 
         results.Should().BeEmpty();
     }
@@ -123,7 +126,7 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
         var repository = CreateRepository();
         var invalidEmbedding = new float[100];
 
-        var act = async () => await repository.SearchSimilarProductsAsync(invalidEmbedding);
+        var act = async () => await repository.SearchSimilarProductsAsync(invalidEmbedding, TestTenantId);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*768 dimensions*");
@@ -134,7 +137,7 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
     {
         var repository = CreateRepository();
 
-        var act = async () => await repository.SearchSimilarProductsAsync(null!);
+        var act = async () => await repository.SearchSimilarProductsAsync(null!, TestTenantId);
 
         await act.Should().ThrowAsync<ArgumentNullException>()
             .WithParameterName("queryEmbedding");
@@ -150,10 +153,27 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
 
         var repository = CreateRepository();
 
-        var results = await repository.SearchSimilarProductsAsync(embedding, limit: 10, similarityThreshold: 0.5);
+        var results = await repository.SearchSimilarProductsAsync(embedding, TestTenantId, limit: 10, similarityThreshold: 0.5);
 
         results.Should().NotContain(p => p.Name == "Inactive Product");
         results.Should().Contain(p => p.Name == "Active Product");
+    }
+
+    [Fact]
+    public async Task SearchSimilarProductsAsync_ExcludesProductsFromOtherTenants()
+    {
+        var embedding = Enumerable.Repeat(0.5f, 768).ToArray();
+        var otherTenantId = Guid.NewGuid();
+
+        await SeedProductWithEmbedding(embedding, "Tenant Product", tenantId: TestTenantId);
+        await SeedProductWithEmbedding(embedding, "Other Tenant Product", tenantId: otherTenantId);
+
+        var repository = CreateRepository();
+
+        var results = await repository.SearchSimilarProductsAsync(embedding, TestTenantId, limit: 10, similarityThreshold: 0.5);
+
+        results.Should().Contain(p => p.Name == "Tenant Product");
+        results.Should().NotContain(p => p.Name == "Other Tenant Product");
     }
 
     [Fact]
@@ -168,7 +188,7 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
 
         var repository = CreateRepository();
 
-        var results = await repository.SearchSimilarProductsAsync(embedding, limit: 3, similarityThreshold: 0.5);
+        var results = await repository.SearchSimilarProductsAsync(embedding, TestTenantId, limit: 3, similarityThreshold: 0.5);
 
         results.Should().HaveCount(3);
     }
@@ -182,16 +202,21 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
         var newEmbedding = Enumerable.Repeat(0.9f, 768).ToArray();
         var repository = CreateRepository();
 
-        await repository.UpdateProductEmbeddingAsync(product.Id, newEmbedding);
+        await repository.UpdateProductEmbeddingAsync(product.Id, TestTenantId, newEmbedding);
 
         await using var context = _fixture.CreateDbContext();
-        var sql = @"SELECT ""Embedding""::real[] FROM ""ProductEmbeddings"" WHERE ""ProductId"" = @productId";
+        var sql = @"SELECT ""Embedding""::real[] FROM ""ProductEmbeddings"" WHERE ""TenantId"" = @tenantId AND ""ProductId"" = @productId";
         await using var command = context.Database.GetDbConnection().CreateCommand();
         command.CommandText = sql;
         var param = command.CreateParameter();
         param.ParameterName = "@productId";
         param.Value = product.Id;
         command.Parameters.Add(param);
+
+        var tenantParam = command.CreateParameter();
+        tenantParam.ParameterName = "@tenantId";
+        tenantParam.Value = TestTenantId;
+        command.Parameters.Add(tenantParam);
 
         await context.Database.OpenConnectionAsync();
         await using var reader = await command.ExecuteReaderAsync();
@@ -202,13 +227,26 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
     }
 
     [Fact]
+    public async Task UpdateProductEmbeddingAsync_WrongTenant_ThrowsInvalidOperationException()
+    {
+        var embedding = Enumerable.Repeat(0.1f, 768).ToArray();
+        var product = await SeedProductWithEmbedding(embedding, "Other Tenant Product", tenantId: Guid.NewGuid());
+        var repository = CreateRepository();
+
+        var act = async () => await repository.UpdateProductEmbeddingAsync(product.Id, TestTenantId, embedding);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*not found*");
+    }
+
+    [Fact]
     public async Task UpdateProductEmbeddingAsync_ProductNotFound_ThrowsInvalidOperationException()
     {
         var repository = CreateRepository();
         var embedding = new float[768];
         var nonExistentId = Guid.NewGuid().ToString();
 
-        var act = async () => await repository.UpdateProductEmbeddingAsync(nonExistentId, embedding);
+        var act = async () => await repository.UpdateProductEmbeddingAsync(nonExistentId, TestTenantId, embedding);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*not found*");
@@ -223,7 +261,7 @@ public class VectorSearchRepositoryTests : IClassFixture<DatabaseFixture>
         var repository = CreateRepository();
         var invalidEmbedding = new float[100];
 
-        var act = async () => await repository.UpdateProductEmbeddingAsync(product.Id, invalidEmbedding);
+        var act = async () => await repository.UpdateProductEmbeddingAsync(product.Id, TestTenantId, invalidEmbedding);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*768 dimensions*");

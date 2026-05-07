@@ -1,5 +1,8 @@
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using MessengerWebhook.Data;
+using MessengerWebhook.Services.Tenants;
 using Microsoft.EntityFrameworkCore;
 
 namespace MessengerWebhook.Services.VectorSearch;
@@ -10,13 +13,23 @@ namespace MessengerWebhook.Services.VectorSearch;
 public class KeywordSearchService
 {
     private readonly MessengerBotDbContext _dbContext;
+    private readonly ITenantContext _tenantContext;
     private readonly ILogger<KeywordSearchService> _logger;
 
     public KeywordSearchService(
         MessengerBotDbContext dbContext,
         ILogger<KeywordSearchService> logger)
+        : this(dbContext, new NullTenantContext(), logger)
+    {
+    }
+
+    public KeywordSearchService(
+        MessengerBotDbContext dbContext,
+        ITenantContext tenantContext,
+        ILogger<KeywordSearchService> logger)
     {
         _dbContext = dbContext;
+        _tenantContext = tenantContext;
         _logger = logger;
     }
 
@@ -28,7 +41,15 @@ public class KeywordSearchService
         int topK = 10,
         CancellationToken cancellationToken = default)
     {
-        // Tokenize query
+        return await SearchAsync(query, topK, tenantId: null, cancellationToken);
+    }
+
+    public async Task<List<ProductSearchResult>> SearchAsync(
+        string query,
+        int topK,
+        Guid? tenantId,
+        CancellationToken cancellationToken = default)
+    {
         var queryTokens = Tokenize(query);
 
         if (queryTokens.Count == 0)
@@ -37,8 +58,17 @@ public class KeywordSearchService
             return new List<ProductSearchResult>();
         }
 
-        // Load products with term frequencies
-        var products = await _dbContext.Products
+        var resolvedTenantId = tenantId ?? _tenantContext.TenantId;
+        if (!resolvedTenantId.HasValue)
+        {
+            _logger.LogWarning("Keyword search skipped because tenant context is not resolved");
+            return new List<ProductSearchResult>();
+        }
+
+        var productQuery = _dbContext.Products
+            .Where(p => p.IsActive && p.TenantId == resolvedTenantId.Value);
+
+        var products = await productQuery
             .Select(p => new
             {
                 p.Id,
@@ -88,12 +118,28 @@ public class KeywordSearchService
 
     private List<string> Tokenize(string text)
     {
-        // Lowercase and split on non-alphanumeric (handles Vietnamese diacritics)
-        var tokens = Regex.Split(text.ToLower(), @"\W+")
+        var tokens = Regex.Split(NormalizeVietnameseText(text), @"\W+")
             .Where(t => t.Length > 1)
             .ToList();
 
         return tokens;
+    }
+
+    private static string NormalizeVietnameseText(string text)
+    {
+        var normalized = text.ToLowerInvariant().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(normalized.Length);
+
+        foreach (var character in normalized)
+        {
+            var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(character);
+            if (unicodeCategory != UnicodeCategory.NonSpacingMark)
+            {
+                builder.Append(character == 'đ' ? 'd' : character);
+            }
+        }
+
+        return builder.ToString().Normalize(NormalizationForm.FormC);
     }
 
     private double CalculateBM25(

@@ -1,6 +1,7 @@
 using MessengerWebhook.Data;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Services.AI.Embeddings;
+using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.Services.VectorSearch;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -17,6 +18,8 @@ public class HybridSearchIntegrationTests : IDisposable
     private readonly HybridSearchService _hybridSearchService;
     private readonly Mock<IEmbeddingService> _embeddingServiceMock;
     private readonly Mock<IVectorSearchService> _vectorSearchMock;
+    private readonly Guid _tenantId = Guid.NewGuid();
+    private readonly Guid _otherTenantId = Guid.NewGuid();
 
     // Test-specific DbContext that excludes ProductEmbedding to avoid Vector type issues
     private class TestMessengerBotDbContext : MessengerBotDbContext
@@ -53,9 +56,13 @@ public class HybridSearchIntegrationTests : IDisposable
             .AddInMemoryCollection(configData!)
             .Build();
 
+        var tenantContext = new NullTenantContext();
+        tenantContext.Initialize(_tenantId, "PAGE_1", null);
+
         // Create services
         var keywordSearch = new KeywordSearchService(
             _dbContext,
+            tenantContext,
             Mock.Of<ILogger<KeywordSearchService>>());
 
         var rrfFusion = new RRFFusionService(
@@ -79,7 +86,6 @@ public class HybridSearchIntegrationTests : IDisposable
 
     private void SeedTestData()
     {
-        var tenantId = Guid.NewGuid();
         var products = new List<Product>
         {
             new()
@@ -91,7 +97,7 @@ public class HybridSearchIntegrationTests : IDisposable
                 Category = ProductCategory.Cosmetics,
                 BasePrice = 850000,
                 Brand = "Murad",
-                TenantId = tenantId
+                TenantId = _tenantId
             },
             new()
             {
@@ -102,7 +108,7 @@ public class HybridSearchIntegrationTests : IDisposable
                 Category = ProductCategory.Cosmetics,
                 BasePrice = 650000,
                 Brand = "SkinCeuticals",
-                TenantId = tenantId
+                TenantId = _tenantId
             },
             new()
             {
@@ -113,7 +119,7 @@ public class HybridSearchIntegrationTests : IDisposable
                 Category = ProductCategory.Cosmetics,
                 BasePrice = 380000,
                 Brand = "Klairs",
-                TenantId = tenantId
+                TenantId = _tenantId
             },
             new()
             {
@@ -124,7 +130,7 @@ public class HybridSearchIntegrationTests : IDisposable
                 Category = ProductCategory.Cosmetics,
                 BasePrice = 420000,
                 Brand = "Cetaphil",
-                TenantId = tenantId
+                TenantId = _tenantId
             },
             new()
             {
@@ -135,7 +141,18 @@ public class HybridSearchIntegrationTests : IDisposable
                 Category = ProductCategory.Cosmetics,
                 BasePrice = 280000,
                 Brand = "The Ordinary",
-                TenantId = tenantId
+                TenantId = _tenantId
+            },
+            new()
+            {
+                Id = "other-tenant-moisturizer",
+                Code = "KEM_DUONG_AM_OTHER",
+                Name = "Kem dưỡng ẩm tenant khác",
+                Description = "Kem dưỡng ẩm không thuộc tenant hiện tại",
+                Category = ProductCategory.Cosmetics,
+                BasePrice = 390000,
+                Brand = "Other",
+                TenantId = _otherTenantId
             }
         };
 
@@ -401,6 +418,30 @@ public class HybridSearchIntegrationTests : IDisposable
         _vectorSearchMock.Verify(
             v => v.SearchSimilarAsync(queryEmbedding, 10, filter, It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task SearchAsync_WithTenantFilter_FiltersKeywordResults()
+    {
+        var query = "kem dưỡng ẩm";
+        var queryEmbedding = new float[768];
+        var filter = new Dictionary<string, object>
+        {
+            ["tenant_id"] = _tenantId.ToString()
+        };
+
+        _embeddingServiceMock
+            .Setup(e => e.EmbedAsync(query, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(queryEmbedding);
+
+        _vectorSearchMock
+            .Setup(v => v.SearchSimilarAsync(queryEmbedding, 10, filter, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ProductSearchResult>());
+
+        var results = await _hybridSearchService.SearchAsync(query, topK: 5, filter: filter);
+
+        Assert.Contains(results, r => r.ProductId == "p4");
+        Assert.DoesNotContain(results, r => r.ProductId == "other-tenant-moisturizer");
     }
 
     [Fact]

@@ -127,7 +127,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         // Act
@@ -175,7 +176,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         _draftOrderServiceMock
@@ -232,7 +234,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         // Act
@@ -282,7 +285,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         // Act
@@ -329,7 +333,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         // Act
@@ -411,7 +416,7 @@ public class SalesStateHandlerBaseTests
     }
 
     [Fact]
-    public async Task HandleAsync_ShouldCreateDraft_WhenReturningCustomerConfirmsRememberedContact()
+    public async Task HandleAsync_ShouldBuildFinalSummary_WhenReturningCustomerConfirmsRememberedContact()
     {
         var productMappingService = new Mock<IProductMappingService>();
         productMappingService
@@ -455,7 +460,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("{}");
 
         _geminiService
@@ -506,7 +512,148 @@ public class SalesStateHandlerBaseTests
     }
 
     [Fact]
-    public async Task HandleAsync_ShouldCreateDraft_WhenExplicitBuyIntentIncludesContactInfo()
+    public async Task HandleAsync_ShouldBuildFinalSummary_WhenCustomerConfirmsRememberedContactWithAccents()
+    {
+        var productMappingService = new Mock<IProductMappingService>();
+        productMappingService
+            .Setup(x => x.GetActiveProductByCodeAsync("MN"))
+            .ReturnsAsync(new Product { Code = "MN", Name = "Mặt Nạ Ngủ Dưỡng Ẩm", BasePrice = 320000m });
+        productMappingService
+            .Setup(x => x.GetProductByMessageAsync(It.IsAny<string>()))
+            .ReturnsAsync((Product?)null);
+
+        var handler = new TestSalesStateHandler(
+            _geminiService.Object,
+            new PolicyGuardService(Options.Create(_salesBotOptions)),
+            productMappingService.Object,
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            Mock.Of<ICaseEscalationService>(),
+            _customerService.Object,
+            new DraftOrderCoordinator(_draftOrderServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), NullLogger<DraftOrderCoordinator>.Instance),
+            null,
+            Mock.Of<MessengerWebhook.Services.Emotion.IEmotionDetectionService>(),
+            Mock.Of<MessengerWebhook.Services.Tone.IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Options.Create(_salesBotOptions),
+            Options.Create(new RAGOptions { Enabled = false }),
+            Mock.Of<ILogger<TestSalesStateHandler>>());
+
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.CollectingInfo };
+        ctx.SetData("selectedProductCodes", new List<string> { "MN" });
+        ctx.SetData("customerPhone", "0888129403");
+        ctx.SetData("shippingAddress", "4/6/20, ttn1, hcm");
+        ctx.SetData("contactNeedsConfirmation", true);
+        ctx.SetData("pendingContactQuestion", "confirm_old_contact");
+
+        var response = await handler.HandleAsync(ctx, "vẫn dùng thông tin cũ");
+
+        Assert.Contains("tóm tắt đơn", response, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Mặt Nạ Ngủ Dưỡng Ẩm", response, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("320,000đ", response, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("chưa tìm thấy dữ liệu sản phẩm phù hợp", response, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("xác nhận SĐT", response, StringComparison.OrdinalIgnoreCase);
+        Assert.False(ctx.GetData<bool?>("contactNeedsConfirmation") == true);
+        _draftOrderServiceMock.Verify(x => x.CreateFromContextAsync(It.IsAny<StateContext>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ShouldNotCallRag_WhenCustomerConfirmsRememberedContact()
+    {
+        var productMappingService = new Mock<IProductMappingService>();
+        productMappingService
+            .Setup(x => x.GetActiveProductByCodeAsync("MN"))
+            .ReturnsAsync(new Product { Code = "MN", Name = "Mặt Nạ Ngủ Dưỡng Ẩm", BasePrice = 320000m });
+
+        var ragService = new Mock<IRAGService>(MockBehavior.Strict);
+        var handler = new TestSalesStateHandler(
+            _geminiService.Object,
+            new PolicyGuardService(Options.Create(_salesBotOptions)),
+            productMappingService.Object,
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            Mock.Of<ICaseEscalationService>(),
+            _customerService.Object,
+            new DraftOrderCoordinator(_draftOrderServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), NullLogger<DraftOrderCoordinator>.Instance),
+            ragService.Object,
+            Mock.Of<MessengerWebhook.Services.Emotion.IEmotionDetectionService>(),
+            Mock.Of<MessengerWebhook.Services.Tone.IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Options.Create(_salesBotOptions),
+            Options.Create(new RAGOptions { Enabled = true }),
+            Mock.Of<ILogger<TestSalesStateHandler>>());
+
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.CollectingInfo };
+        ctx.SetData("selectedProductCodes", new List<string> { "MN" });
+        ctx.SetData("customerPhone", "0888129403");
+        ctx.SetData("shippingAddress", "4/6/20, ttn1, hcm");
+        ctx.SetData("contactNeedsConfirmation", true);
+        ctx.SetData("pendingContactQuestion", "confirm_old_contact");
+
+        var response = await handler.HandleAsync(ctx, "vẫn dùng thông tin cũ");
+
+        Assert.Contains("tóm tắt đơn", response, StringComparison.OrdinalIgnoreCase);
+        ragService.Verify(x => x.RetrieveContextAsync(
+            It.IsAny<string>(),
+            It.IsAny<int>(),
+            It.IsAny<bool>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ShouldAskProductClarification_WhenRememberedContactConfirmedButProductMissing()
+    {
+        var productMappingService = new Mock<IProductMappingService>();
+        productMappingService
+            .Setup(x => x.GetProductByMessageAsync(It.IsAny<string>()))
+            .ReturnsAsync((Product?)null);
+
+        var handler = new TestSalesStateHandler(
+            _geminiService.Object,
+            new PolicyGuardService(Options.Create(_salesBotOptions)),
+            productMappingService.Object,
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            Mock.Of<ICaseEscalationService>(),
+            _customerService.Object,
+            new DraftOrderCoordinator(_draftOrderServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), NullLogger<DraftOrderCoordinator>.Instance),
+            null,
+            Mock.Of<MessengerWebhook.Services.Emotion.IEmotionDetectionService>(),
+            Mock.Of<MessengerWebhook.Services.Tone.IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Options.Create(_salesBotOptions),
+            Options.Create(new RAGOptions { Enabled = false }),
+            Mock.Of<ILogger<TestSalesStateHandler>>());
+
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.CollectingInfo };
+        ctx.SetData("customerPhone", "0888129403");
+        ctx.SetData("shippingAddress", "4/6/20, ttn1, hcm");
+        ctx.SetData("contactNeedsConfirmation", true);
+        ctx.SetData("pendingContactQuestion", "confirm_old_contact");
+
+        var response = await handler.HandleAsync(ctx, "vẫn dùng thông tin cũ");
+
+        Assert.Contains("đã dùng thông tin cũ", response, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("chưa rõ chị muốn chốt sản phẩm nào", response, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("chưa tìm thấy dữ liệu sản phẩm phù hợp", response, StringComparison.OrdinalIgnoreCase);
+        Assert.False(ctx.GetData<bool?>("contactNeedsConfirmation") == true);
+        _draftOrderServiceMock.Verify(x => x.CreateFromContextAsync(It.IsAny<StateContext>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ShouldBuildFinalSummary_WhenExplicitBuyIntentIncludesContactInfo()
     {
         var productMappingService = new Mock<IProductMappingService>();
         productMappingService
@@ -547,7 +694,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("{}");
 
         _geminiService
@@ -652,7 +800,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("{}");
 
         _geminiService
@@ -745,7 +894,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("KL");
 
         _geminiService
@@ -775,6 +925,7 @@ public class SalesStateHandlerBaseTests
             It.Is<string>(prompt => prompt.Contains("Chọn đúng 1 mã sản phẩm", StringComparison.OrdinalIgnoreCase)),
             It.IsAny<List<AiConversationMessage>>(),
             It.IsAny<GeminiModelType?>(),
+            It.IsAny<string?>(),
             It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -855,6 +1006,7 @@ public class SalesStateHandlerBaseTests
             It.Is<string>(prompt => prompt.Contains("Chọn đúng 1 mã sản phẩm", StringComparison.OrdinalIgnoreCase)),
             It.IsAny<List<AiConversationMessage>>(),
             It.IsAny<GeminiModelType?>(),
+            It.IsAny<string?>(),
             It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -1398,7 +1550,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Mặt nạ gạo, mặt nạ nhau thai cừu, mặt nạ vàng");
 
         var response = await handler.HandleAsync(ctx, "bên em có các loại mặt nạ nào?");
@@ -1412,6 +1565,7 @@ public class SalesStateHandlerBaseTests
             It.IsAny<string>(),
             It.IsAny<List<AiConversationMessage>>(),
             It.IsAny<GeminiModelType?>(),
+            It.IsAny<string?>(),
             It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -1469,7 +1623,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Mặt nạ gạo giá 150.000đ");
 
         var response = await handler.HandleAsync(ctx, "mặt nạ giá bao nhiêu?");
@@ -1482,6 +1637,7 @@ public class SalesStateHandlerBaseTests
             It.IsAny<string>(),
             It.IsAny<List<AiConversationMessage>>(),
             It.IsAny<GeminiModelType?>(),
+            It.IsAny<string?>(),
             It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -1496,7 +1652,7 @@ public class SalesStateHandlerBaseTests
 
         var ragService = new Mock<IRAGService>();
         ragService
-            .Setup(x => x.RetrieveContextAsync("bên em có các loại mặt nạ nào?", 5, It.IsAny<CancellationToken>()))
+            .Setup(x => x.RetrieveContextAsync("bên em có các loại mặt nạ nào?", 5, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RAGContext(
                 "Không tìm thấy sản phẩm phù hợp.",
                 new List<string>(),
@@ -1548,7 +1704,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Mặt nạ gạo, mặt nạ nhau thai cừu, mặt nạ vàng");
 
         var response = await handler.HandleAsync(ctx, "bên em có các loại mặt nạ nào?");
@@ -1559,6 +1716,7 @@ public class SalesStateHandlerBaseTests
             It.IsAny<string>(),
             It.IsAny<List<AiConversationMessage>>(),
             It.IsAny<GeminiModelType?>(),
+            It.IsAny<string?>(),
             It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -1645,7 +1803,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ chị có thể dùng Mặt nạ gạo giá 150.000đ ạ.");
 
         var response = await handler.HandleAsync(ctx, "loại này dùng thế nào em?");
@@ -1715,7 +1874,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Mặt nạ cũ giá 150.000đ");
 
         var response = await handler.HandleAsync(ctx, "mặt nạ giá bao nhiêu?");
@@ -1727,6 +1887,7 @@ public class SalesStateHandlerBaseTests
             It.IsAny<string>(),
             It.IsAny<List<AiConversationMessage>>(),
             It.IsAny<GeminiModelType?>(),
+            It.IsAny<string?>(),
             It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -1803,7 +1964,7 @@ public class SalesStateHandlerBaseTests
 
         Assert.Contains("Mặt nạ cấp ẩm Rau Má", response, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(new[] { "OLD" }, ctx.GetData<List<string>>("selectedProductCodes"));
-        _geminiService.Verify(x => x.SendMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AiConversationMessage>>(), It.IsAny<GeminiModelType?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _geminiService.Verify(x => x.SendMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AiConversationMessage>>(), It.IsAny<GeminiModelType?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -1871,7 +2032,7 @@ public class SalesStateHandlerBaseTests
         var response = await handler.HandleAsync(ctx, "tôi đang tìm sản phẩm mặt nạ dưỡng ẩm");
 
         Assert.Contains("Mặt nạ phục hồi B5", response, StringComparison.OrdinalIgnoreCase);
-        _geminiService.Verify(x => x.SendMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AiConversationMessage>>(), It.IsAny<GeminiModelType?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _geminiService.Verify(x => x.SendMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AiConversationMessage>>(), It.IsAny<GeminiModelType?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -1950,7 +2111,7 @@ public class SalesStateHandlerBaseTests
         Assert.Contains("Mặt nạ cấp ẩm Rau Má", response, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("MN01", response, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(new[] { "OLD" }, ctx.GetData<List<string>>("selectedProductCodes"));
-        _geminiService.Verify(x => x.SendMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AiConversationMessage>>(), It.IsAny<GeminiModelType?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _geminiService.Verify(x => x.SendMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AiConversationMessage>>(), It.IsAny<GeminiModelType?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         productRepository.Verify(x => x.GetActiveRelatedAsync(tenantId, ProductCategory.Cosmetics, It.IsAny<IReadOnlyCollection<string>>(), 3, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -2013,7 +2174,7 @@ public class SalesStateHandlerBaseTests
         var selectedCodes = ctx.GetData<List<string>>("selectedProductCodes");
         var selectedCode = Assert.Single(selectedCodes!);
         Assert.Equal("MN", selectedCode);
-        _geminiService.Verify(x => x.SendMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AiConversationMessage>>(), It.IsAny<GeminiModelType?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _geminiService.Verify(x => x.SendMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AiConversationMessage>>(), It.IsAny<GeminiModelType?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -2127,7 +2288,7 @@ public class SalesStateHandlerBaseTests
             .Setup(x => x.DetectIntentAsync(It.IsAny<string>(), It.IsAny<ConversationState>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<List<AiConversationMessage>>(), default))
             .ReturnsAsync(new IntentDetectionResult { Intent = CustomerIntent.Consulting, Confidence = 0.95, Reason = "Customer selected current numbered suggestion" });
         _geminiService
-            .Setup(x => x.SendMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AiConversationMessage>>(), It.IsAny<GeminiModelType?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.SendMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AiConversationMessage>>(), It.IsAny<GeminiModelType?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em chưa xác định được sản phẩm trong lựa chọn hiện tại ạ.");
 
         var response = await handler.HandleAsync(ctx, "sản phẩm 2");
@@ -2387,7 +2548,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ shop có mở cửa hôm nay ạ.");
 
         var response = await handler.HandleAsync(ctx, "shop có mở cửa không?");
@@ -2399,6 +2561,7 @@ public class SalesStateHandlerBaseTests
             It.IsAny<string>(),
             It.IsAny<List<AiConversationMessage>>(),
             It.IsAny<GeminiModelType?>(),
+            It.IsAny<string?>(),
             It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -2752,7 +2915,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         var response = await handler.HandleAsync(ctx, "Cho chị hỏi thêm về sản phẩm");
@@ -2779,10 +2943,7 @@ public class SalesStateHandlerBaseTests
             ConversationHistoryLimit = 15,
             IntentConfidenceThreshold = 0.7
         };
-        var policyGuardOptions = new PolicyGuardOptions
-        {
-            SafeReplyMessage = "Safe reply from policy guard."
-        };
+        var policyGuardOptions = new PolicyGuardOptions();
         var caseEscalationService = new Mock<ICaseEscalationService>(MockBehavior.Strict);
 
         policyGuardService
@@ -2828,7 +2989,8 @@ public class SalesStateHandlerBaseTests
                 It.IsAny<List<AiConversationMessage>>(),
                 It.IsAny<GeminiModelType?>(),
                 It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync("Dạ em tư vấn cho chị ạ");
 
         var response = await handler.HandleAsync(ctx, "Ship thế nào em?");
@@ -2999,7 +3161,7 @@ public class SalesStateHandlerBaseTests
                 responseValidationService,
                 abTestService,
                 conversationMetricsService,
-                Mock.Of<ISubIntentClassifier>(),
+                subIntentClassifier,
                 salesBotOptions,
                 ragOptions,
                 logger,
