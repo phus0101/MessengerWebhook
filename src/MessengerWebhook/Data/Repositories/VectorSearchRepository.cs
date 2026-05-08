@@ -20,6 +20,7 @@ public class VectorSearchRepository : IVectorSearchRepository
 
     public async Task<List<Product>> SearchSimilarProductsAsync(
         float[] queryEmbedding,
+        Guid tenantId,
         int limit = 5,
         double similarityThreshold = 0.7,
         CancellationToken cancellationToken = default)
@@ -37,6 +38,8 @@ public class VectorSearchRepository : IVectorSearchRepository
             FROM ""Products"" p
             INNER JOIN ""ProductEmbeddings"" pe ON p.""Id"" = pe.""ProductId""
             WHERE p.""IsActive"" = true
+              AND p.""TenantId"" = @tenantId
+              AND pe.""TenantId"" = @tenantId
               AND 1 - (pe.""Embedding"" <=> @embedding::vector) >= @threshold
             ORDER BY pe.""Embedding"" <=> @embedding::vector
             LIMIT @limit";
@@ -49,6 +52,7 @@ public class VectorSearchRepository : IVectorSearchRepository
         var products = await _context.Products
             .FromSqlRaw(sql,
                 embeddingParam,
+                new NpgsqlParameter("@tenantId", tenantId),
                 new NpgsqlParameter("@threshold", similarityThreshold),
                 new NpgsqlParameter("@limit", limit))
             .Include(p => p.Images)
@@ -56,14 +60,15 @@ public class VectorSearchRepository : IVectorSearchRepository
             .ToListAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Vector search returned {Count} products with similarity >= {Threshold}",
-            products.Count, similarityThreshold);
+            "Vector search returned {Count} products for tenant {TenantId} with similarity >= {Threshold}",
+            products.Count, tenantId, similarityThreshold);
 
         return products;
     }
 
     public async Task UpdateProductEmbeddingAsync(
         string productId,
+        Guid tenantId,
         float[] embedding,
         CancellationToken cancellationToken = default)
     {
@@ -75,25 +80,21 @@ public class VectorSearchRepository : IVectorSearchRepository
             throw new ArgumentException("Embedding must have 768 dimensions", nameof(embedding));
         }
 
-        // Check if product exists
-        var exists = await _context.Products.AnyAsync(p => p.Id == productId, cancellationToken);
-        if (!exists)
-        {
-            throw new InvalidOperationException($"Product with ID {productId} not found");
-        }
-
         var product = await _context.Products
             .AsNoTracking()
-            .Where(p => p.Id == productId)
+            .Where(p => p.Id == productId && p.IsActive && p.TenantId == tenantId)
             .Select(p => new { p.Id, p.TenantId })
-            .SingleAsync(cancellationToken);
+            .SingleOrDefaultAsync(cancellationToken);
+        if (product == null)
+        {
+            throw new InvalidOperationException($"Active tenant product with ID {productId} not found");
+        }
 
         var now = DateTime.UtcNow;
         var sql = @"
             INSERT INTO ""ProductEmbeddings"" (""Id"", ""TenantId"", ""ProductId"", ""Embedding"", ""CreatedAt"", ""UpdatedAt"")
             VALUES (@id, @tenantId, @productId, @embedding::vector, @createdAt, @updatedAt)
-            ON CONFLICT (""ProductId"") DO UPDATE SET
-                ""TenantId"" = EXCLUDED.""TenantId"",
+            ON CONFLICT (""TenantId"", ""ProductId"") DO UPDATE SET
                 ""Embedding"" = EXCLUDED.""Embedding"",
                 ""UpdatedAt"" = EXCLUDED.""UpdatedAt"";";
 
@@ -107,7 +108,7 @@ public class VectorSearchRepository : IVectorSearchRepository
             new object[]
             {
                 new NpgsqlParameter("@id", Guid.NewGuid()),
-                new NpgsqlParameter("@tenantId", product.TenantId ?? (object)DBNull.Value),
+                new NpgsqlParameter("@tenantId", tenantId),
                 new NpgsqlParameter("@productId", product.Id),
                 embeddingParam,
                 new NpgsqlParameter("@createdAt", now),

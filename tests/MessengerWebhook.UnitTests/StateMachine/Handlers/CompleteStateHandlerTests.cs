@@ -15,6 +15,7 @@ using MessengerWebhook.Services.Tone;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.Metrics;
 using MessengerWebhook.Services.Survey;
+using MessengerWebhook.Services.SubIntent;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
 using Microsoft.Extensions.Caching.Memory;
@@ -63,6 +64,7 @@ public class CompleteStateHandlerTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
             Mock.Of<IServiceProvider>(),
             Options.Create(new SalesBotOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
@@ -259,5 +261,74 @@ public class CompleteStateHandlerTests
     public void HandledState_ShouldReturnComplete()
     {
         Assert.Equal(ConversationState.Complete, _handler.HandledState);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenCancellationRequestInCompleteState_ShouldEscalate()
+    {
+        var policyGuardService = new Mock<IPolicyGuardService>();
+        policyGuardService
+            .Setup(x => x.EvaluateAsync(It.IsAny<PolicyGuardRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PolicyDecision(
+                true,
+                SupportCaseReason.CancellationRequest,
+                "Customer wants to cancel draft order",
+                PolicyAction.HardEscalate,
+                0.85m,
+                1m));
+
+        var caseEscalationService = new Mock<ICaseEscalationService>();
+        caseEscalationService
+            .Setup(x => x.EscalateAsync(
+                It.IsAny<string>(),
+                It.IsAny<SupportCaseReason>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HumanSupportCase { Id = Guid.NewGuid() });
+
+        var handler = new CompleteStateHandler(
+            Mock.Of<IGeminiService>(),
+            policyGuardService.Object,
+            Mock.Of<IProductMappingService>(),
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            caseEscalationService.Object,
+            new DraftOrderCoordinator(Mock.Of<IDraftOrderService>(), Mock.Of<IMemoryCache>(), NullLogger<DraftOrderCoordinator>.Instance),
+            _customerService.Object,
+            null,
+            Mock.Of<IEmotionDetectionService>(),
+            Mock.Of<IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
+            Mock.Of<IServiceProvider>(),
+            Options.Create(new SalesBotOptions { UnsupportedFallbackMessage = "Da em xin phep chuyen chi qua ban ho tro cua Mui Xu de xu ly ky hon nha." }),
+            Options.Create(new RAGOptions { Enabled = false }),
+            Options.Create(new CSATSurveyOptions { Enabled = false }),
+            Mock.Of<ILogger<CompleteStateHandler>>());
+
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete };
+        ctx.SetData("draftOrderCode", "DR-TEST-001");
+
+        var response = await handler.HandleAsync(ctx, "chị muốn hủy đơn này");
+
+        Assert.Equal(ConversationState.HumanHandoff, ctx.CurrentState);
+        Assert.Contains("Mui Xu", response, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DR-TEST-001", response);
+        policyGuardService.Verify(x => x.EvaluateAsync(It.IsAny<PolicyGuardRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+        caseEscalationService.Verify(
+            x => x.EscalateAsync(
+                It.IsAny<string>(),
+                SupportCaseReason.CancellationRequest,
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

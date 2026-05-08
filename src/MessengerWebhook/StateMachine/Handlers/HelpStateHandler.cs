@@ -21,13 +21,13 @@ public class HelpStateHandler : BaseStateHandler
     {
         AddToHistory(ctx, "user", message);
 
-        var prompt = $@"User asked for help: '{message}'
-Provide a brief, helpful response in Vietnamese about using the cosmetics chatbot.
-Topics: browsing products, skin consultation, cart, checkout, order tracking.
-Keep response under 100 words.";
-
-        var history = GetHistory(ctx);
-        var helpResponse = await GeminiService.SendMessageAsync(ctx.FacebookPSID, prompt, history);
+        var helpResponse = """
+Dạ em có thể hỗ trợ chị:
+1. Xem sản phẩm trong catalog
+2. Tư vấn sản phẩm theo nhu cầu chăm sóc da
+3. Ghi nhận thông tin đặt hàng khi chị đã chọn sản phẩm
+4. Chuyển nhân viên hỗ trợ nếu cần kiểm tra chính sách hoặc đơn hàng
+""";
 
         // Return to previous state or main menu
         var previousState = ctx.GetData<ConversationState?>("previousState");

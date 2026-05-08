@@ -359,6 +359,7 @@ public class SalesMessageParserTests
                 It.IsAny<List<ConversationHistoryMessage>>(),
                 GeminiModelType.FlashLite,
                 null,
+                null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync("{\"Phone\":\"0988888888\",\"Address\":null}");
 
@@ -373,6 +374,7 @@ public class SalesMessageParserTests
             It.IsAny<string>(),
             It.IsAny<List<ConversationHistoryMessage>>(),
             GeminiModelType.FlashLite,
+            null,
             null,
             It.IsAny<CancellationToken>()), Times.Once);
 
@@ -400,6 +402,7 @@ public class SalesMessageParserTests
                 It.IsAny<List<ConversationHistoryMessage>>(),
                 GeminiModelType.FlashLite,
                 null,
+                null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(aiResponse);
 
@@ -414,6 +417,7 @@ public class SalesMessageParserTests
             It.IsAny<string>(),
             It.IsAny<List<ConversationHistoryMessage>>(),
             GeminiModelType.FlashLite,
+            null,
             null,
             It.IsAny<CancellationToken>()), Times.Once);
 

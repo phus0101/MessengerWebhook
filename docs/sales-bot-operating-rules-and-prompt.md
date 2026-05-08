@@ -37,6 +37,8 @@ Chỉ được khẳng định chắc chắn khi dữ liệu đã được groun
 - thông tin khách cũ
 - trạng thái đơn / mã đơn
 
+Catalog/list, giá, tồn kho, và fact về sản phẩm phải có sản phẩm đang active trong hội thoại hoặc sản phẩm RAG đã được DB xác thực. Nếu không có grounding này, bot trả fallback an toàn thay vì để Gemini đoán. Prompt runtime cũng phải giới hạn Gemini vào danh sách sản phẩm được phép và bỏ qua lịch sử assistant có nhắc sản phẩm không còn được phép.
+
 Nếu chưa chắc, dùng phrasing an toàn:
 
 - "Dạ để em kiểm tra lại chính sách hiện tại giúp mình nhé."
@@ -171,6 +173,19 @@ Cách trả lời:
 - Khi đã có đủ dữ kiện thì trả lời dứt khoát, rõ ràng.
 - Khi chưa đủ dữ kiện thì xác nhận lại trước.
 ```
+
+## SubIntent Classification Integration
+
+SubIntent classification được tích hợp vào sales conversation flow để cải thiện độ chính xác và tốc độ phản hồi:
+
+- **ProductQuestion**: Khi detect được, RAG service sẽ trả về thông tin chi tiết (thành phần, loại da phù hợp, công dụng)
+- **PriceQuestion**: Hệ thống ưu tiên trả giá trực tiếp từ database thay vì để AI đoán
+- **ShippingQuestion**: Inject shipping policy context vào prompt để trả lời chính xác
+- **PolicyQuestion**: Inject return/refund policy context để tránh hallucination
+- **AvailabilityQuestion**: Query real-time inventory trước khi trả lời
+- **ComparisonQuestion**: Load multiple products để so sánh chính xác
+
+System prompt nhận `{SUB_INTENT_CONTEXT}` placeholder để inject guidance phù hợp với từng loại câu hỏi.
 
 ## Recommended Runtime Checks
 

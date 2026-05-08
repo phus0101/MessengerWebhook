@@ -40,10 +40,10 @@ public class OrderConfirmationStateHandler : BaseStateHandler
 
             ctx.CurrentState = ConversationState.OrderPlaced;
 
-            var reply = $@"✅ Đặt hàng thành công!
+            var reply = $@"✅ Đã ghi nhận yêu cầu đặt hàng!
 
 Mã đơn hàng: {orderId}
-Dự kiến giao hàng: 3-5 ngày làm việc
+Thời gian giao hàng: shop sẽ xác nhận lại theo khu vực và lịch giao thực tế.
 
 Bạn có thể theo dõi đơn hàng bất cứ lúc nào bằng cách gõ 'theo dõi đơn hàng'.
 Gõ 'menu' để quay lại menu chính.";

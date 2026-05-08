@@ -2,6 +2,7 @@ using MessengerWebhook.Models;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.Tenants;
 using Microsoft.Extensions.Logging;
 
 namespace MessengerWebhook.StateMachine.Handlers;
@@ -9,17 +10,19 @@ namespace MessengerWebhook.StateMachine.Handlers;
 public class ProductDetailStateHandler : BaseStateHandler
 {
     private readonly IProductRepository _productRepository;
+    private readonly ITenantContext _tenantContext;
 
     public override ConversationState HandledState => ConversationState.ProductDetail;
 
     public ProductDetailStateHandler(
         IGeminiService geminiService,
-        
         IProductRepository productRepository,
+        ITenantContext tenantContext,
         ILogger<ProductDetailStateHandler> logger)
         : base(geminiService, logger)
     {
         _productRepository = productRepository;
+        _tenantContext = tenantContext;
     }
 
     protected override async Task<string> HandleInternalAsync(Models.StateContext ctx, string message)
@@ -33,11 +36,17 @@ public class ProductDetailStateHandler : BaseStateHandler
             return "Vui lòng chọn sản phẩm trước.";
         }
 
-        var product = await _productRepository.GetByIdAsync(productId);
+        if (!_tenantContext.TenantId.HasValue)
+        {
+            ctx.CurrentState = ConversationState.BrowsingProducts;
+            return "Em chưa xác định được catalog của shop. Chị thử tìm lại sản phẩm giúp em nhé.";
+        }
+
+        var product = await _productRepository.GetActiveByIdAsync(productId, _tenantContext.TenantId.Value);
         if (product == null)
         {
             ctx.CurrentState = ConversationState.BrowsingProducts;
-            return "Không tìm thấy sản phẩm. Hãy tìm lại nhé.";
+            return "Không tìm thấy sản phẩm trong catalog hiện tại. Hãy tìm lại nhé.";
         }
 
         // Check user intent
@@ -73,7 +82,7 @@ Respond with ONLY the intent name.";
         var variantList = string.Join("\n", variants.Select((v, i) =>
             $"{i + 1}. {v.VolumeML}ml {v.Texture} - {v.Price:N0}đ (còn {v.StockQuantity} sản phẩm)"));
 
-        var response = $"Các tùy chọn có sẵn:\n\n{variantList}\n\nTrả lời số để thêm vào giỏ hàng.";
+        var response = $"{product.Name}\nCác tùy chọn có sẵn:\n\n{variantList}\n\nTrả lời số để thêm vào giỏ hàng.";
         AddToHistory(ctx, "model", response);
         return response;
     }

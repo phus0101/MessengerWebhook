@@ -3,6 +3,7 @@ using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.Services.AI;
 using MessengerWebhook.Services.AI.Embeddings;
+using MessengerWebhook.Services.Tenants;
 using Microsoft.Extensions.Logging;
 
 namespace MessengerWebhook.StateMachine.Handlers;
@@ -11,6 +12,7 @@ public class SkinConsultationStateHandler : BaseStateHandler
 {
     private readonly IVectorSearchRepository _vectorSearchRepository;
     private readonly IEmbeddingService _embeddingService;
+    private readonly ITenantContext _tenantContext;
 
     public override ConversationState HandledState => ConversationState.SkinConsultation;
 
@@ -18,11 +20,13 @@ public class SkinConsultationStateHandler : BaseStateHandler
         IGeminiService geminiService,
         IVectorSearchRepository vectorSearchRepository,
         IEmbeddingService embeddingService,
+        ITenantContext tenantContext,
         ILogger<SkinConsultationStateHandler> logger)
         : base(geminiService, logger)
     {
         _vectorSearchRepository = vectorSearchRepository;
         _embeddingService = embeddingService;
+        _tenantContext = tenantContext;
     }
 
     protected override async Task<string> HandleInternalAsync(Models.StateContext ctx, string message)
@@ -47,34 +51,28 @@ What would you like to do?";
             return menuResponse;
         }
 
-        // Use Gemini to provide personalized skin consultation
-        var prompt = $@"User's skin concern: '{message}'
+        if (!_tenantContext.TenantId.HasValue)
+        {
+            return "Em chưa xác định được catalog của shop. Chị thử tìm lại sản phẩm giúp em nhé.";
+        }
 
-Provide a brief, helpful response about their skin concern.
-Include general advice and suggest they can browse products for their skin type.
-Keep response under 100 words.";
-
-        var history = GetHistory(ctx);
-        var consultation = await GeminiService.SendMessageAsync(ctx.FacebookPSID, prompt, history);
-
-        // Search for relevant products
         var embedding = await _embeddingService.EmbedAsync(message);
-        var products = await _vectorSearchRepository.SearchSimilarProductsAsync(embedding, limit: 3);
+        var products = await _vectorSearchRepository.SearchSimilarProductsAsync(embedding, _tenantContext.TenantId.Value, limit: 3);
 
-        var reply = consultation;
+        var reply = "Dạ em ghi nhận nhu cầu chăm sóc da của chị. Em chỉ gợi ý sản phẩm đang có trong catalog của shop bên dưới ạ.";
 
         if (products.Count > 0)
         {
             var productList = string.Join("\n", products.Select((p, i) =>
-                $"{i + 1}. {p.Name} - ${p.BasePrice:F2}"));
+                $"{i + 1}. {p.Name} - {p.BasePrice:N0}đ"));
 
-            reply += $"\n\nRecommended products:\n{productList}\n\nType a number to see details or 'menu' for main menu.";
+            reply += $"\n\nSản phẩm phù hợp trong catalog:\n{productList}\n\nChị trả lời số để xem chi tiết hoặc gõ 'menu' để về menu chính.";
             ctx.SetData("searchResults", products.Select(p => p.Id).ToList());
             ctx.CurrentState = ConversationState.BrowsingProducts;
         }
         else
         {
-            reply += "\n\nType 'menu' to return to main menu.";
+            reply += "\n\nChị gõ 'menu' để về menu chính.";
         }
 
         AddToHistory(ctx, "model", reply);

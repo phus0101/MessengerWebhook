@@ -8,6 +8,7 @@ using MessengerWebhook.Services.Freeship;
 using MessengerWebhook.Services.GiftSelection;
 using MessengerWebhook.Services.Policy;
 using MessengerWebhook.Services.ProductMapping;
+using MessengerWebhook.Services.ProductGrounding;
 using MessengerWebhook.Services.Support;
 using MessengerWebhook.Services.RAG;
 using MessengerWebhook.Services.Emotion;
@@ -17,6 +18,7 @@ using MessengerWebhook.Services.SmallTalk;
 using MessengerWebhook.Services.ResponseValidation;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.Metrics;
+using MessengerWebhook.Services.SubIntent;
 using Microsoft.Extensions.Options;
 
 namespace MessengerWebhook.StateMachine.Handlers;
@@ -42,9 +44,11 @@ public class HumanHandoffStateHandler : SalesStateHandlerBase
         IResponseValidationService responseValidationService,
         IABTestService abTestService,
         IConversationMetricsService conversationMetricsService,
+        ISubIntentClassifier subIntentClassifier,
         IOptions<SalesBotOptions> salesBotOptions,
         IOptions<RAGOptions> ragOptions,
-        ILogger<HumanHandoffStateHandler> logger)
+        ILogger<HumanHandoffStateHandler> logger,
+        IProductGroundingService? productGroundingService = null)
         : base(
             geminiService,
             policyGuardService,
@@ -62,9 +66,11 @@ public class HumanHandoffStateHandler : SalesStateHandlerBase
             responseValidationService,
             abTestService,
             conversationMetricsService,
+            subIntentClassifier,
             salesBotOptions,
             ragOptions,
-            logger)
+            logger,
+            productGroundingService)
     {
     }
 

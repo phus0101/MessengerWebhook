@@ -63,6 +63,7 @@ public class GeminiService : IGeminiService
         List<ConversationMessage> history,
         GeminiModelType? modelOverride = null,
         string? ragContext = null,
+        string? subIntentGuidance = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userId, nameof(userId));
@@ -88,7 +89,7 @@ public class GeminiService : IGeminiService
         // Build request
         var request = new
         {
-            contents = BuildContents(message, history, ragContext),
+            contents = BuildContents(message, history, ragContext, subIntentGuidance),
             generationConfig = new
             {
                 temperature = _options.Temperature,
@@ -146,7 +147,7 @@ public class GeminiService : IGeminiService
     {
         // Streaming implementation placeholder
         // For now, return the full response as a single chunk
-        var response = await SendMessageAsync(userId, message, history, modelOverride, null, cancellationToken);
+        var response = await SendMessageAsync(userId, message, history, modelOverride, null, null, cancellationToken);
         yield return response;
     }
 
@@ -464,7 +465,7 @@ Respond ONLY with valid JSON:
         };
     }
 
-    private object[] BuildContents(string message, List<ConversationMessage> history, string? ragContext = null)
+    private object[] BuildContents(string message, List<ConversationMessage> history, string? ragContext = null, string? subIntentGuidance = null)
     {
         var contents = new List<object>();
 
@@ -482,6 +483,18 @@ Respond ONLY with valid JSON:
             _logger.LogWarning("No RAG context provided, using fallback message");
             // If no RAG context, remove the placeholder
             systemPrompt = systemPrompt.Replace("{RAG_CONTEXT}", "Chưa có thông tin sản phẩm cụ thể.");
+        }
+
+        // Replace {SUB_INTENT_CONTEXT} placeholder with sub-intent guidance
+        if (!string.IsNullOrWhiteSpace(subIntentGuidance))
+        {
+            systemPrompt = systemPrompt.Replace("{SUB_INTENT_CONTEXT}",
+                $"YÊU CẦU ĐẶC BIỆT: {subIntentGuidance}");
+            _logger.LogInformation("Injecting SubIntent guidance into system prompt: {Guidance}", subIntentGuidance);
+        }
+        else
+        {
+            systemPrompt = systemPrompt.Replace("{SUB_INTENT_CONTEXT}", "");
         }
 
         // Log first 500 chars of system prompt to verify RAG injection

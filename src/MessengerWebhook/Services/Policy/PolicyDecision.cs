@@ -5,4 +5,9 @@ namespace MessengerWebhook.Services.Policy;
 public sealed record PolicyDecision(
     bool RequiresEscalation,
     SupportCaseReason Reason,
-    string Summary);
+    string Summary,
+    PolicyAction Action = PolicyAction.Allow,
+    decimal Score = 0m,
+    decimal Confidence = 0m,
+    IReadOnlyList<PolicySignal>? Signals = null,
+    bool SemanticClassifierAttempted = false);

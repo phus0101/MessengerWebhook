@@ -251,6 +251,139 @@ public class ResponseValidationServiceTests
     }
 
     [Fact]
+    public async Task ValidateAsync_GroundingError_ReturnsInvalidEvenWhenGenericErrorsAreLogOnly()
+    {
+        _options.BlockOnErrors = false;
+        var service = CreateService();
+        var context = CreateValidContext("Dạ bên em có Mặt nạ gạo giá 150.000đ ạ.");
+        context.RequiresFactGrounding = true;
+
+        var result = await service.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Issues, i => i.Category == "Grounding");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_UngroundedProductAndPriceFact_ReturnsInvalid()
+    {
+        _options.BlockOnErrors = true;
+        var service = CreateService();
+        var context = CreateValidContext("Dạ bên em có Mặt nạ Gạo Sakura giá 150.000đ, dưỡng sáng da rất tốt ạ.");
+        context.RequiresFactGrounding = true;
+        context.AllowedProductNames = new List<string> { "Mặt Nạ Ngủ Dưỡng Ẩm" };
+        context.AllowedPrices = new List<decimal> { 320000m };
+
+        var result = await service.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Issues, i => i.Category == "Grounding" && i.Message.Contains("product", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Issues, i => i.Category == "Grounding" && i.Message.Contains("price", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ValidateAsync_HallucinatedProductMentionWithoutGroundingRequirement_ReturnsInvalid()
+    {
+        _options.BlockOnErrors = false;
+        var service = CreateService();
+        var context = CreateValidContext("Dạ bên em có dòng mặt nạ Mặt nạ Tảo Biển Tươi Múi Xù cấp ẩm rất tốt ạ.");
+
+        var result = await service.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.True(context.ResponseContainsProductMention);
+        Assert.Contains(result.Issues, i => i.Category == "Grounding" && i.Message.Contains("Tảo Biển", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ValidateAsync_LowercaseHallucinatedProductMentionWithoutGroundingRequirement_ReturnsInvalid()
+    {
+        _options.BlockOnErrors = false;
+        var service = CreateService();
+        var context = CreateValidContext("Dạ bên em có tảo biển tươi múi xù cấp ẩm tốt ạ.");
+
+        var result = await service.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.True(context.ResponseContainsProductMention);
+        Assert.Contains(result.Issues, i => i.Category == "Grounding" && i.Message.Contains("tảo biển", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ValidateAsync_LowercaseRecommendationProductMentionWithoutGroundingRequirement_ReturnsInvalid()
+    {
+        _options.BlockOnErrors = false;
+        var service = CreateService();
+        var context = CreateValidContext("Dạ chị thử tảo biển tươi múi xù nha.");
+
+        var result = await service.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.True(context.ResponseContainsProductMention);
+        Assert.Contains(result.Issues, i => i.Category == "Grounding" && i.Message.Contains("tảo biển", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ValidateAsync_GroundedProductAndPriceFact_ReturnsValid()
+    {
+        _options.BlockOnErrors = true;
+        var service = CreateService();
+        var context = CreateValidContext("Dạ bên em có Mặt Nạ Ngủ Dưỡng Ẩm, giá 320.000đ ạ.");
+        context.RequiresFactGrounding = true;
+        context.AllowedProductNames = new List<string> { "Mặt Nạ Ngủ Dưỡng Ẩm" };
+        context.AllowedPrices = new List<decimal> { 320000m };
+
+        var result = await service.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+        Assert.DoesNotContain(result.Issues, i => i.Category == "Grounding");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ProductNameWithConversationalSuffix_ReturnsValid()
+    {
+        _options.BlockOnErrors = false;
+        var service = CreateService();
+        var context = CreateValidContext("Dạ Mat Na Ngu cho chị ạ. Sản phẩm này dưỡng ẩm da qua đêm ạ.");
+        context.RequiresFactGrounding = true;
+        context.AllowedProductNames = new List<string> { "Mat Na Ngu" };
+
+        var result = await service.ValidateAsync(context);
+
+        Assert.True(result.IsValid, string.Join("; ", result.Issues.Select(i => $"{i.Category}: {i.Message}")));
+        Assert.DoesNotContain(result.Issues, i => i.Category == "Grounding");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ProductNameWithHallucinatedSuffix_ReturnsInvalid()
+    {
+        _options.BlockOnErrors = false;
+        var service = CreateService();
+        var context = CreateValidContext("Dạ bên em có Mặt Nạ Ngủ Dưỡng Ẩm Premium Collagen ạ.");
+        context.AllowedProductNames = new List<string> { "Mặt Nạ Ngủ Dưỡng Ẩm" };
+
+        var result = await service.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Issues, i => i.Category == "Grounding" && i.Message.Contains("Premium", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ValidateAsync_UngroundedPolicyFact_ReturnsInvalid()
+    {
+        _options.BlockOnErrors = true;
+        var service = CreateService();
+        var context = CreateValidContext("Dạ đơn này được freeship và có quà tặng serum mini ạ.");
+        context.RequiresFactGrounding = true;
+        context.AllowPolicyFacts = false;
+
+        var result = await service.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Issues, i => i.Category == "Grounding" && i.Message.Contains("policy", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task ValidateAsync_ValidationDisabled_ReturnsValid()
     {
         // Arrange

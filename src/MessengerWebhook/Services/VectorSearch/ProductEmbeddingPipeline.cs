@@ -1,8 +1,10 @@
 using MessengerWebhook.Data;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Services.AI.Embeddings;
+using MessengerWebhook.Services.Tenants;
 using Microsoft.EntityFrameworkCore;
-using Pgvector;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace MessengerWebhook.Services.VectorSearch;
 
@@ -11,6 +13,7 @@ public class ProductEmbeddingPipeline
     private readonly IEmbeddingService _embeddingService;
     private readonly IVectorSearchService _vectorSearch;
     private readonly MessengerBotDbContext _dbContext;
+    private readonly ITenantContext _tenantContext;
     private readonly ILogger<ProductEmbeddingPipeline> _logger;
     private readonly IIndexingProgressTracker? _progressTracker;
 
@@ -18,12 +21,14 @@ public class ProductEmbeddingPipeline
         IEmbeddingService embeddingService,
         IVectorSearchService vectorSearch,
         MessengerBotDbContext dbContext,
+        ITenantContext tenantContext,
         ILogger<ProductEmbeddingPipeline> logger,
         IIndexingProgressTracker? progressTracker = null)
     {
         _embeddingService = embeddingService;
         _vectorSearch = vectorSearch;
         _dbContext = dbContext;
+        _tenantContext = tenantContext;
         _logger = logger;
         _progressTracker = progressTracker;
     }
@@ -32,8 +37,14 @@ public class ProductEmbeddingPipeline
         string productId,
         CancellationToken cancellationToken = default)
     {
+        if (!_tenantContext.TenantId.HasValue)
+        {
+            throw new InvalidOperationException("Tenant context is required to index products");
+        }
+
+        var tenantId = _tenantContext.TenantId.Value;
         var product = await _dbContext.Products
-            .FirstOrDefaultAsync(p => p.Id == productId, cancellationToken);
+            .FirstOrDefaultAsync(p => p.Id == productId && p.IsActive && p.TenantId == tenantId, cancellationToken);
 
         if (product == null)
         {
@@ -45,29 +56,7 @@ public class ProductEmbeddingPipeline
 
         if (SupportsProductEmbeddings())
         {
-            var productEmbedding = await _dbContext.ProductEmbeddings
-                .FirstOrDefaultAsync(e => e.ProductId == productId, cancellationToken);
-
-            if (productEmbedding == null)
-            {
-                productEmbedding = new ProductEmbedding
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = product.TenantId,
-                    ProductId = productId,
-                    Embedding = new Vector(embedding),
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                _dbContext.ProductEmbeddings.Add(productEmbedding);
-            }
-            else
-            {
-                productEmbedding.Embedding = new Vector(embedding);
-                productEmbedding.UpdatedAt = DateTime.UtcNow;
-            }
-
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await UpsertProductEmbeddingAsync(tenantId, productId, embedding, cancellationToken);
         }
         else
         {
@@ -104,7 +93,15 @@ public class ProductEmbeddingPipeline
         Guid? jobId = null,
         CancellationToken cancellationToken = default)
     {
-        var products = await _dbContext.Products.ToListAsync(cancellationToken);
+        if (!_tenantContext.TenantId.HasValue)
+        {
+            throw new InvalidOperationException("Tenant context is required to index products");
+        }
+
+        var tenantId = _tenantContext.TenantId.Value;
+        var products = await _dbContext.Products
+            .Where(p => p.IsActive && p.TenantId == tenantId)
+            .ToListAsync(cancellationToken);
 
         _logger.LogInformation(
             "Starting batch indexing for {Count} products",
@@ -128,36 +125,10 @@ public class ProductEmbeddingPipeline
 
                 if (SupportsProductEmbeddings())
                 {
-                    // Load existing embeddings to check for upsert
-                    var productIds = batch.Select(p => p.Id).ToList();
-                    var existingEmbeddings = await _dbContext.ProductEmbeddings
-                        .Where(e => productIds.Contains(e.ProductId))
-                        .ToDictionaryAsync(e => e.ProductId, cancellationToken);
-
-                    // Upsert to pgvector
                     foreach (var (product, idx) in batch.Select((p, i) => (p, i)))
                     {
-                        if (existingEmbeddings.TryGetValue(product.Id, out var existing))
-                        {
-                            existing.Embedding = new Vector(embeddings[idx]);
-                            existing.UpdatedAt = DateTime.UtcNow;
-                        }
-                        else
-                        {
-                            var productEmbedding = new ProductEmbedding
-                            {
-                                Id = Guid.NewGuid(),
-                                TenantId = product.TenantId,
-                                ProductId = product.Id,
-                                Embedding = new Vector(embeddings[idx]),
-                                CreatedAt = DateTime.UtcNow,
-                                UpdatedAt = DateTime.UtcNow
-                            };
-                            _dbContext.ProductEmbeddings.Add(productEmbedding);
-                        }
+                        await UpsertProductEmbeddingAsync(tenantId, product.Id, embeddings[idx], cancellationToken);
                     }
-
-                    await _dbContext.SaveChangesAsync(cancellationToken);
                 }
                 else
                 {
@@ -224,6 +195,39 @@ public class ProductEmbeddingPipeline
         }
     }
 
+    private async Task UpsertProductEmbeddingAsync(
+        Guid tenantId,
+        string productId,
+        float[] embedding,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var sql = @"
+            INSERT INTO ""ProductEmbeddings"" (""Id"", ""TenantId"", ""ProductId"", ""Embedding"", ""CreatedAt"", ""UpdatedAt"")
+            VALUES (@id, @tenantId, @productId, @embedding::vector, @createdAt, @updatedAt)
+            ON CONFLICT (""TenantId"", ""ProductId"") DO UPDATE SET
+                ""Embedding"" = EXCLUDED.""Embedding"",
+                ""UpdatedAt"" = EXCLUDED.""UpdatedAt"";";
+
+        var embeddingParam = new NpgsqlParameter("@embedding", NpgsqlDbType.Array | NpgsqlDbType.Real)
+        {
+            Value = embedding
+        };
+
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            sql,
+            new object[]
+            {
+                new NpgsqlParameter("@id", Guid.NewGuid()),
+                new NpgsqlParameter("@tenantId", tenantId),
+                new NpgsqlParameter("@productId", productId),
+                embeddingParam,
+                new NpgsqlParameter("@createdAt", now),
+                new NpgsqlParameter("@updatedAt", now)
+            },
+            cancellationToken);
+    }
+
     private bool SupportsProductEmbeddings()
     {
         return _dbContext.Model.FindEntityType(typeof(ProductEmbedding)) != null;
@@ -240,11 +244,13 @@ public class ProductEmbeddingPipeline
     {
         return new Dictionary<string, object>
         {
+            ["product_id"] = product.Id,
             ["product_code"] = product.Code,
             ["name"] = product.Name,
             ["category"] = product.Category.ToString(),
             ["price"] = product.BasePrice,
-            ["tenant_id"] = product.TenantId?.ToString() ?? ""
+            ["tenant_id"] = product.TenantId?.ToString() ?? "",
+            ["is_active"] = product.IsActive
         };
     }
 }

@@ -43,6 +43,7 @@ internal static class SalesHandlerFallbacks
     {
         public Task<Product?> GetProductByPayloadAsync(string payload) => Task.FromResult<Product?>(null);
         public Task<Product?> GetProductByCodeAsync(string code) => Task.FromResult<Product?>(null);
+        public Task<Product?> GetActiveProductByCodeAsync(string code) => Task.FromResult<Product?>(null);
         public Task<Product?> GetProductByMessageAsync(string message) => Task.FromResult<Product?>(null);
         public bool IsValidPayload(string payload) => false;
     }

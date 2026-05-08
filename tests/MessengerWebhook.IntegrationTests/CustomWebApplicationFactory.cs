@@ -41,14 +41,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
     public TestEmailNotificationService EmailSpy { get; } = new();
 
     protected virtual string HostEnvironment => "Testing";
+    protected virtual bool UseLiveAiRag => false;
     protected virtual IDictionary<string, string?> AdditionalConfiguration => new Dictionary<string, string?>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(HostEnvironment);
 
-        // Load .env file for integration tests
-        DotNetEnv.Env.Load();
+        LoadDotEnvFile();
 
         builder.ConfigureAppConfiguration((_, config) =>
         {
@@ -57,10 +57,6 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Facebook:AppSecret"] = AppSecret,
                 ["Facebook:PageAccessToken"] = "test_page_access_token",
                 ["Webhook:VerifyToken"] = VerifyToken,
-                ["Gemini:ApiKey"] = "test_gemini_api_key",
-                ["Pinecone:ApiKey"] = "test_pinecone_api_key",
-                ["Pinecone:Environment"] = "test",
-                ["Pinecone:IndexName"] = "test-index",
                 ["Admin:BootstrapEmail"] = PrimaryManagerEmail,
                 ["Admin:BootstrapPassword"] = AdminPassword,
                 ["Admin:BootstrapFullName"] = "Primary Manager",
@@ -70,6 +66,23 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Nobita:ApiKey"] = "test_nobita_api_key",
                 ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=ignored;Username=ignored;Password=ignored"
             };
+
+            if (UseLiveAiRag)
+            {
+                settings["Gemini:ApiKey"] = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+                settings["Pinecone:ApiKey"] = Environment.GetEnvironmentVariable("PINECONE_API_KEY");
+                settings["VertexAI:ProjectId"] = Environment.GetEnvironmentVariable("VERTEX_AI_PROJECT_ID");
+                settings["VertexAI:ServiceAccountKeyPath"] = Environment.GetEnvironmentVariable("VERTEX_AI_SERVICE_ACCOUNT_KEY_PATH");
+                settings["RAG:Enabled"] = "true";
+                settings["Redis:Enabled"] = "false";
+            }
+            else
+            {
+                settings["Gemini:ApiKey"] = "test_gemini_api_key";
+                settings["Pinecone:ApiKey"] = "test_pinecone_api_key";
+                settings["Pinecone:Environment"] = "test";
+                settings["Pinecone:IndexName"] = "test-index";
+            }
 
             foreach (var entry in AdditionalConfiguration)
             {
@@ -87,16 +100,29 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 options.UseInMemoryDatabase(_databaseName));
 
             services.RemoveAll<IMessengerService>();
-            services.RemoveAll<IGeminiService>();
-            services.RemoveAll<IEmbeddingService>();
             services.RemoveAll<INobitaClient>();
             services.RemoveAll<IEmailNotificationService>();
-
             services.AddSingleton<IMessengerService>(MessengerSpy);
-            services.AddSingleton<IGeminiService>(GeminiStub);
-            services.AddSingleton<IEmbeddingService>(EmbeddingStub);
             services.AddSingleton<INobitaClient>(NobitaStub);
             services.AddSingleton<IEmailNotificationService>(EmailSpy);
+
+            if (UseLiveAiRag)
+            {
+                services.RemoveAll<MessengerWebhook.Services.VectorSearch.IHybridSearchService>();
+                services.AddScoped<MessengerWebhook.Services.VectorSearch.IHybridSearchService, MessengerWebhook.Services.VectorSearch.HybridSearchService>();
+            }
+            else
+            {
+                services.RemoveAll<IGeminiService>();
+                services.RemoveAll<IEmbeddingService>();
+                services.RemoveAll<MessengerWebhook.Services.SubIntent.ISubIntentClassifier>();
+                services.RemoveAll<MessengerWebhook.Services.VectorSearch.IHybridSearchService>();
+
+                services.AddSingleton<IGeminiService>(GeminiStub);
+                services.AddSingleton<IEmbeddingService>(EmbeddingStub);
+                services.AddSingleton<MessengerWebhook.Services.SubIntent.ISubIntentClassifier>(new TestSubIntentClassifier());
+                services.AddSingleton<MessengerWebhook.Services.VectorSearch.IHybridSearchService>(new TestHybridSearchService());
+            }
 
             services.Configure<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckServiceOptions>(options =>
             {
@@ -134,6 +160,24 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
     {
         await ResetStateAsync();
         return Services.CreateScope();
+    }
+
+    private static void LoadDotEnvFile()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            var envPath = Path.Combine(directory.FullName, ".env");
+            if (File.Exists(envPath))
+            {
+                DotNetEnv.Env.Load(envPath);
+                return;
+            }
+
+            directory = directory.Parent;
+        }
+
+        DotNetEnv.Env.Load();
     }
 
     private void SeedDatabase(MessengerBotDbContext dbContext)
@@ -531,6 +575,11 @@ public sealed class DevelopmentAdminWebApplicationFactory : CustomWebApplication
     };
 }
 
+public sealed class LiveAiRagWebApplicationFactory : CustomWebApplicationFactory
+{
+    protected override bool UseLiveAiRag => true;
+}
+
 public sealed class TestMessengerService : IMessengerService
 {
     private readonly ConcurrentQueue<SentMessageRecord> _messages = new();
@@ -586,11 +635,34 @@ public sealed class TestGeminiService : IGeminiService
 
     public IReadOnlyCollection<(string UserId, string Message)> Requests => _requests.ToArray();
 
-    public Task<string> SendMessageAsync(string userId, string message, List<MessengerWebhook.Services.AI.Models.ConversationMessage> history, MessengerWebhook.Services.AI.Models.GeminiModelType? modelOverride = null, string? ragContext = null, CancellationToken cancellationToken = default)
+    public Task<string> SendMessageAsync(string userId, string message, List<MessengerWebhook.Services.AI.Models.ConversationMessage> history, MessengerWebhook.Services.AI.Models.GeminiModelType? modelOverride = null, string? ragContext = null, string? subIntentGuidance = null, CancellationToken cancellationToken = default)
     {
         _requests.Enqueue((userId, message));
 
         var normalized = message.ToLowerInvariant();
+
+        // Simulate detailed response for "nói kỹ hơn" when SubIntent guidance is present
+        if (!string.IsNullOrWhiteSpace(subIntentGuidance) && (normalized.Contains("noi ky hon") || normalized.Contains("nói kỹ hơn")))
+        {
+            return Task.FromResult("Da em xin gioi thieu chi tiet hon ve san pham nay a. San pham co thanh phan chinh la X, Y, Z. Cong dung chinh la giup da cua chi... Cach dung: chi nen su dung vao buoi sang va toi sau khi rua mat sach. Loi ich: giup da cua chi trang min, giam mun, va cai thien sac to da a.");
+        }
+
+        // Product-related responses (check before shipping to avoid false matches)
+        if (normalized.Contains("sua rua mat") || normalized.Contains("sữa rửa mặt"))
+        {
+            return Task.FromResult("Da em xin gioi thieu sua rua mat cho chi a. San pham nay rat tot cho da dau va mun a.");
+        }
+
+        if (normalized.Contains("kem chong nang") || normalized.Contains("kem chống nắng"))
+        {
+            return Task.FromResult("Da em xin gioi thieu kem chong nang cho chi a. San pham nay bao ve da khoi tia UV a.");
+        }
+
+        if (normalized.Contains("mat na ngu") || normalized.Contains("mặt nạ ngủ"))
+        {
+            return Task.FromResult("Da em xin gioi thieu mat na ngu cho chi a. San pham nay duong am da qua dem a.");
+        }
+
         if (normalized.Contains("freeship") || normalized.Contains("phi ship") || normalized.Contains("van chuyen") || normalized.Contains("ship"))
         {
             return Task.FromResult("Da phi van chuyen tam tinh la 30.000d a. Chi muon em tu van them hay len don luon a?");
@@ -647,9 +719,11 @@ public sealed class TestGeminiService : IGeminiService
                 => MessengerWebhook.Services.AI.Models.CustomerIntent.ReadyToBuy,
             var m when m.Contains("dung roi") || m.Contains("đúng rồi") || m.Contains("ok") || m.Contains("van dung")
                 => MessengerWebhook.Services.AI.Models.CustomerIntent.Confirming,
-            var m when m.Contains("freeship") || m.Contains("ship") || m.Contains("gia") || m.Contains("?")
+            var m when m.Contains("freeship") || m.Contains("ship") || m.Contains("?")
                 => MessengerWebhook.Services.AI.Models.CustomerIntent.Questioning,
-            var m when m.Contains("tu van") || m.Contains("hoi")
+            var m when m.Contains("tu van") || m.Contains("hoi") || m.Contains("noi ky hon") || m.Contains("nói kỹ hơn") ||
+                       m.Contains("chi tiet") || m.Contains("chi tiết") || m.Contains("gia") || m.Contains("giá") ||
+                       m.Contains("bao nhieu") || m.Contains("bao nhiêu")
                 => MessengerWebhook.Services.AI.Models.CustomerIntent.Consulting,
             _ => MessengerWebhook.Services.AI.Models.CustomerIntent.Browsing
         };
@@ -771,5 +845,104 @@ public sealed class TestEmailNotificationService : IEmailNotificationService
         while (_notifications.TryDequeue(out _))
         {
         }
+    }
+}
+
+public sealed class TestHybridSearchService : MessengerWebhook.Services.VectorSearch.IHybridSearchService
+{
+    private readonly Guid _primaryTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+    public Task<List<MessengerWebhook.Services.VectorSearch.FusedResult>> SearchAsync(
+        string query,
+        int topK = 5,
+        Dictionary<string, object>? filter = null,
+        CancellationToken cancellationToken = default)
+    {
+        var results = new List<MessengerWebhook.Services.VectorSearch.FusedResult>();
+
+        // Only return results for primary tenant
+        var tenantId = filter?.GetValueOrDefault("tenant_id")?.ToString();
+        Console.WriteLine($"[TestHybridSearchService] Query: '{query}'");
+        Console.WriteLine($"[TestHybridSearchService] TenantId filter: '{tenantId}'");
+        Console.WriteLine($"[TestHybridSearchService] Expected: '{_primaryTenantId}'");
+
+        if (tenantId != _primaryTenantId.ToString())
+        {
+            Console.WriteLine("[TestHybridSearchService] Tenant mismatch - returning empty results");
+            return Task.FromResult(results);
+        }
+
+        var queryLower = query.ToLowerInvariant();
+        Console.WriteLine($"[TestHybridSearchService] Query lowercase: '{queryLower}'");
+
+        // Map keywords to seeded products
+        if (queryLower.Contains("kem chống nắng") || queryLower.Contains("kcn") || queryLower.Contains("chong nang"))
+        {
+            Console.WriteLine("[TestHybridSearchService] Matched: product-kcn");
+            results.Add(new MessengerWebhook.Services.VectorSearch.FusedResult { ProductId = "product-kcn", RRFScore = 0.95f });
+        }
+
+        if (queryLower.Contains("mặt nạ") || queryLower.Contains("mn") || queryLower.Contains("mat na"))
+        {
+            Console.WriteLine("[TestHybridSearchService] Matched: product-mn");
+            results.Add(new MessengerWebhook.Services.VectorSearch.FusedResult { ProductId = "product-mn", RRFScore = 0.90f });
+        }
+
+        if (queryLower.Contains("kem lụa") || queryLower.Contains("kl") || queryLower.Contains("lua"))
+        {
+            Console.WriteLine("[TestHybridSearchService] Matched: product-kl");
+            results.Add(new MessengerWebhook.Services.VectorSearch.FusedResult { ProductId = "product-kl", RRFScore = 0.85f });
+        }
+
+        if (queryLower.Contains("combo") || queryLower.Contains("combo 2"))
+        {
+            Console.WriteLine("[TestHybridSearchService] Matched: product-combo");
+            results.Add(new MessengerWebhook.Services.VectorSearch.FusedResult { ProductId = "product-combo", RRFScore = 0.80f });
+        }
+
+        Console.WriteLine($"[TestHybridSearchService] Total results: {results.Count}");
+        return Task.FromResult(results.Take(topK).ToList());
+    }
+}
+
+public sealed class TestSubIntentClassifier : MessengerWebhook.Services.SubIntent.ISubIntentClassifier
+{
+    public Task<MessengerWebhook.Services.SubIntent.SubIntentResult?> ClassifyAsync(
+        string message,
+        MessengerWebhook.Services.SubIntent.ConversationContext? conversationContext = null,
+        CancellationToken cancellationToken = default)
+    {
+        var normalized = message.ToLowerInvariant();
+        Console.WriteLine($"[TestSubIntentClassifier] Message: '{message}', Normalized: '{normalized}'");
+
+        // Detect ProductQuestion for "nói kỹ hơn" and similar phrases
+        if (normalized.Contains("noi ky hon") || normalized.Contains("nói kỹ hơn") ||
+            normalized.Contains("chi tiet") || normalized.Contains("chi tiết"))
+        {
+            return Task.FromResult<MessengerWebhook.Services.SubIntent.SubIntentResult?>(
+                new MessengerWebhook.Services.SubIntent.SubIntentResult
+                {
+                    Category = MessengerWebhook.Services.SubIntent.SubIntentCategory.ProductQuestion,
+                    Confidence = 0.95m,
+                    Source = "test-mock"
+                });
+        }
+
+        // Detect PriceQuestion (check both with and without diacritics)
+        if (normalized.Contains("gia") || normalized.Contains("giá") ||
+            normalized.Contains("bao nhieu") || normalized.Contains("bao nhiêu") ||
+            normalized.Contains("gia bao nhieu") || normalized.Contains("giá bao nhiêu"))
+        {
+            return Task.FromResult<MessengerWebhook.Services.SubIntent.SubIntentResult?>(
+                new MessengerWebhook.Services.SubIntent.SubIntentResult
+                {
+                    Category = MessengerWebhook.Services.SubIntent.SubIntentCategory.PriceQuestion,
+                    Confidence = 0.90m,
+                    Source = "test-mock"
+                });
+        }
+
+        // Default: no sub-intent detected
+        return Task.FromResult<MessengerWebhook.Services.SubIntent.SubIntentResult?>(null);
     }
 }

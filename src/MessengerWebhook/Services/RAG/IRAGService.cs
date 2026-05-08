@@ -1,3 +1,5 @@
+using MessengerWebhook.Services.ProductGrounding;
+
 namespace MessengerWebhook.Services.RAG;
 
 /// <summary>
@@ -11,6 +13,7 @@ public interface IRAGService
     Task<RAGContext> RetrieveContextAsync(
         string query,
         int topK = 5,
+        bool includeDetailedInfo = false,
         CancellationToken cancellationToken = default);
 }
 
@@ -20,7 +23,13 @@ public interface IRAGService
 public record RAGContext(
     string FormattedContext,
     List<string> ProductIds,
+    List<GroundedProduct> Products,
     RAGMetrics Metrics);
+
+public record AssembledRAGContext(
+    string FormattedContext,
+    List<string> ProductIds,
+    List<GroundedProduct> Products);
 
 /// <summary>
 /// Performance metrics for RAG retrieval

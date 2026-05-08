@@ -1,3 +1,5 @@
+using MessengerWebhook.Configuration;
+using MessengerWebhook.IntegrationTests;
 using MessengerWebhook.Services.Emotion.Configuration;
 using MessengerWebhook.Services.Tone.Configuration;
 using MessengerWebhook.Services.Conversation.Configuration;
@@ -400,5 +402,40 @@ public class ConfigurationValidationIntegrationTests
         Assert.True(conversationResult.Succeeded);
         Assert.True(smallTalkResult.Succeeded);
         Assert.True(validationResult.Succeeded);
+    }
+
+    [Fact]
+    public void Configuration_GeminiOptions_InvalidAiDetectionTimeout_ShouldFailDuringRealStartup()
+    {
+        using var factory = new InvalidGeminiAiDetectionTimeoutFactory();
+
+        var exception = Assert.ThrowsAny<Exception>(() =>
+        {
+            using var client = factory.CreateClient();
+        });
+
+        var validationException = FindOptionsValidationException(exception);
+        Assert.NotNull(validationException);
+        Assert.Contains("Gemini:AiDetectionTimeoutMs must be greater than 0.", validationException!.Failures);
+    }
+
+    private static OptionsValidationException? FindOptionsValidationException(Exception exception)
+    {
+        if (exception is OptionsValidationException optionsValidationException)
+        {
+            return optionsValidationException;
+        }
+
+        return exception.InnerException is null
+            ? null
+            : FindOptionsValidationException(exception.InnerException);
+    }
+
+    private sealed class InvalidGeminiAiDetectionTimeoutFactory : CustomWebApplicationFactory
+    {
+        protected override IDictionary<string, string?> AdditionalConfiguration => new Dictionary<string, string?>
+        {
+            ["Gemini:AiDetectionTimeoutMs"] = "0"
+        };
     }
 }

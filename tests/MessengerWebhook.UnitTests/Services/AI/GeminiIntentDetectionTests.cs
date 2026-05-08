@@ -29,7 +29,8 @@ public class GeminiIntentDetectionTests
             ApiKey = "test-api-key",
             FlashLiteModel = "gemini-1.5-flash",
             EnableAiIntentDetection = true,
-            IntentConfidenceThreshold = 0.7
+            IntentConfidenceThreshold = 0.7,
+            AiDetectionTimeoutMs = 500
         };
     }
 
@@ -334,8 +335,16 @@ public class GeminiIntentDetectionTests
     public async Task DetectIntentAsync_WhenTimeout_ReturnsFallbackConsulting()
     {
         // Arrange
+        var timeoutOptions = new GeminiOptions
+        {
+            ApiKey = "test-api-key",
+            FlashLiteModel = "gemini-1.5-flash",
+            EnableAiIntentDetection = true,
+            IntentConfidenceThreshold = 0.7,
+            AiDetectionTimeoutMs = 10
+        };
         var httpClient = MockHttpClientFactory.CreateWithDelay(TimeSpan.FromSeconds(2));
-        var service = new GeminiService(httpClient, Options.Create(_options), _strategyMock.Object, _loggerMock.Object);
+        var service = new GeminiService(httpClient, Options.Create(timeoutOptions), _strategyMock.Object, _loggerMock.Object);
 
         // Act
         var result = await service.DetectIntentAsync(

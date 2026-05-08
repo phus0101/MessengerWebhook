@@ -3,6 +3,7 @@ using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Data.Repositories;
 using MessengerWebhook.Services.AI;
 using MessengerWebhook.Services.AI.Embeddings;
+using MessengerWebhook.Services.Tenants;
 using Microsoft.Extensions.Logging;
 
 namespace MessengerWebhook.StateMachine.Handlers;
@@ -11,6 +12,7 @@ public class BrowsingProductsStateHandler : BaseStateHandler
 {
     private readonly IVectorSearchRepository _vectorSearchRepository;
     private readonly IEmbeddingService _embeddingService;
+    private readonly ITenantContext _tenantContext;
 
     public override ConversationState HandledState => ConversationState.BrowsingProducts;
 
@@ -19,11 +21,13 @@ public class BrowsingProductsStateHandler : BaseStateHandler
         
         IVectorSearchRepository vectorSearchRepository,
         IEmbeddingService embeddingService,
+        ITenantContext tenantContext,
         ILogger<BrowsingProductsStateHandler> logger)
         : base(geminiService, logger)
     {
         _vectorSearchRepository = vectorSearchRepository;
         _embeddingService = embeddingService;
+        _tenantContext = tenantContext;
     }
 
     protected override async Task<string> HandleInternalAsync(Models.StateContext ctx, string message)
@@ -48,9 +52,13 @@ public class BrowsingProductsStateHandler : BaseStateHandler
             return "Quay lại menu chính.";
         }
 
-        // Generate embedding for search query
+        if (!_tenantContext.TenantId.HasValue)
+        {
+            return "Em chưa xác định được catalog của shop. Chị thử tìm lại sản phẩm giúp em nhé.";
+        }
+
         var embedding = await _embeddingService.EmbedAsync(message);
-        var products = await _vectorSearchRepository.SearchSimilarProductsAsync(embedding, limit: 5);
+        var products = await _vectorSearchRepository.SearchSimilarProductsAsync(embedding, _tenantContext.TenantId.Value, limit: 5);
 
         if (products.Count == 0)
         {

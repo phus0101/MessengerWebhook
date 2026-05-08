@@ -55,8 +55,7 @@ Respond with ONLY the intent name.";
         }
 
         // Show cart summary
-        var total = cartItems.Count * 29.99m; // Simplified calculation
-        var response = $"Giỏ hàng của bạn ({cartItems.Count} sản phẩm):\nTổng tạm tính: {total:N0}đ\n\nTùy chọn:\n1. Thanh toán\n2. Tiếp tục mua sắm";
+        var response = $"Giỏ hàng của bạn ({cartItems.Count} sản phẩm):\nTổng tạm tính: em cần kiểm tra lại giá sản phẩm trong catalog trước khi báo chính xác.\n\nTùy chọn:\n1. Thanh toán\n2. Tiếp tục mua sắm";
         AddToHistory(ctx, "model", response);
         return response;
     }
