@@ -2,7 +2,7 @@
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
 **Last Updated**: 2026-05-09
-**Version**: R-02 service extraction (SalesContextResolver, SalesPromptBuilder) reflected
+**Version**: R-03 service extraction (ContactConfirmationFlow) reflected
 
 ---
 
@@ -59,6 +59,7 @@ Multi-tenant conversational commerce platform for cosmetics retail via Facebook 
 **Sales Services** (`Services/Sales/`):
 - `SalesContextResolver` (implements `ISalesContextResolver`): Pure reads + in-memory `StateContext` mutations only. Handles VIP profile lookup, product resolution, history recovery, numbered suggestion detection, commercial fact snapshots, policy context sync. No DB writes, no Messenger sends.
 - `SalesPromptBuilder` (implements `ISalesPromptBuilder`): Completely pure — no async, no injected services. All methods return strings from input. Handles customer instruction building, CTA context, fact validation context, contact summaries, draft confirmation, state determination.
+- `ContactConfirmationFlow` (implements `IContactConfirmationFlow`): Encapsulates contact confirmation invariants. Detects new contact, handles remembered contact reuse explicitly, manages partial contacts (phone-only/address-only), detects generic buy continuations, returns decision object for base class delegation. 66 unit tests covering all scenarios.
 - `SalesTextHelper`: Internal static utility for Vietnamese text normalization (`NormalizeForMatching`). Used by context resolver and predicates.
 - `HistoryProductCandidate`: Public record for product candidates extracted from conversation history.
 
@@ -136,14 +137,14 @@ public class StateContext
 
 #### Production-Locked Sales Invariants
 
-`SalesStateHandlerBase` (1955 lines after R-02 refactoring, reduced from 2793 lines) acts as the invariant gate for transcript-driven ordering flows. R-02 extracted core functionality to dedicated services while preserving all invariants:
+`SalesStateHandlerBase` (1860 lines after R-03 refactoring, reduced from 2793 lines) acts as the invariant gate for transcript-driven ordering flows. R-02/R-03 extracted core functionality to dedicated services while preserving all invariants:
 
-**Architecture**: Delegates to `ISalesContextResolver` and `ISalesPromptBuilder` via composition; still owns order-context recovery, conversation history, customer-contact memory, product grounding enforcement, and state invariant validation.
+**Architecture**: Delegates to `ISalesContextResolver`, `ISalesPromptBuilder`, and `IContactConfirmationFlow` via composition; still owns order-context recovery, conversation history, product grounding enforcement, and state invariant validation.
 
 **Invariants**:
-- Remembered contact reuse is always explicit: if prior phone/address exist, `contactNeedsConfirmation` and `pendingContactQuestion=confirm_old_contact` keep checkout in confirmation mode until the customer explicitly confirms or replaces the details.
-- Partial remembered contact is handled gracefully: `BuildPendingContactClarificationReply()` (now in `ISalesPromptBuilder`) branches on available data (phone-only, address-only, or both) to ask for the missing piece instead of assuming completeness.
-- Generic buy continuations such as `ok`, `ok e`, `lên đơn`, `chốt nhé`, and `đặt luôn` only trigger a full contact-summary reminder while confirmation is pending; they must not create a draft order.
+- Remembered contact reuse is always explicit: if prior phone/address exist, `contactNeedsConfirmation` and `pendingContactQuestion=confirm_old_contact` keep checkout in confirmation mode until the customer explicitly confirms or replaces the details. Enforced by `IContactConfirmationFlow.EvaluateAsync()`.
+- Partial remembered contact is handled gracefully: `IContactConfirmationFlow` and `ISalesPromptBuilder` detect phone-only/address-only scenarios and ask for the missing piece instead of assuming completeness.
+- Generic buy continuations such as `ok`, `ok e`, `lên đơn`, `chốt nhé`, and `đặt luôn` only trigger a full contact-summary reminder while confirmation is pending; they must not create a draft order. Enforced by `IContactConfirmationFlow.EvaluateAsync()`.
 - Active product lock is sticky via `selectedProductCodes`; shipping, policy, gift, and order-estimate responses refresh policy context for that same product and only switch when the message contains an explicit replacement signal.
 - Product-fact replies are gated by `ProductGroundingService`: Gemini receives an allowed-product list built from active selected products plus DB-confirmed RAG products, and the handler returns either deterministic DB-backed related suggestions or the safe catalog fallback when exact grounding is required but unavailable.
 - If checkout loses product context, the handler reverse-scans recent conversation history (via `ISalesContextResolver`), prefers user messages over assistant mentions, and uses Gemini only to break ambiguous ties before continuing.

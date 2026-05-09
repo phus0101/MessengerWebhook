@@ -2,7 +2,7 @@
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
 **Last Updated**: 2026-05-09
-**Phase**: R-02 service extraction (SalesContextResolver, SalesPromptBuilder) reflected
+**Phase**: R-03 service extraction (ContactConfirmationFlow) reflected
 
 ---
 
@@ -190,6 +190,14 @@ MessengerWebhook/
 - Public record for product candidates extracted from conversation history
 - Properties: ProductName, ProductCode, Confidence, FoundInMessageIndex, Context
 
+**ContactConfirmationFlow** (`Services/Sales/Contact/ContactConfirmationFlow.cs`):
+- Implements `IContactConfirmationFlow` interface
+- Encapsulates contact confirmation invariants: remembered contact reuse is always explicit, partial contacts are handled gracefully, generic buy continuations trigger reminder but not draft creation
+- Pure orchestration: delegates to context resolver and prompt builder for decisions
+- Methods: `EvaluateAsync(userMessage, salesContext, stateContext, cancellationToken)` returns decision object
+- Handles: new contact detection, remembered contact reuse, partial contact (phone-only/address-only) scenarios, generic buy phrase detection, state-machine transitions for confirmation flow
+- 66 unit tests covering all contact decision paths and edge cases
+
 #### Messenger Services
 
 **MessengerService** (`MessengerService.cs`):
@@ -223,11 +231,12 @@ MessengerWebhook/
 - Classic commerce handlers remain for catalog/cart flows (`IdleStateHandler`, `GreetingStateHandler`, `MainMenuStateHandler`, `BrowsingProductsStateHandler`, `ProductDetailStateHandler`, `VariantSelectionStateHandler`, `AddToCartStateHandler`, `CartReviewStateHandler`, `ShippingAddressStateHandler`, `PaymentMethodStateHandler`, `OrderConfirmationStateHandler`, `OrderPlacedStateHandler`, `OrderTrackingStateHandler`, `HelpStateHandler`, `ErrorStateHandler`).
 - Sales-conversation handlers now also drive the Messenger order-closing flow (`ConsultingStateHandler`, `CollectingInfoStateHandler`, `DraftOrderStateHandler`, `CompleteStateHandler`, `QuickReplySalesStateHandler`, `HumanHandoffStateHandler`) on top of `SalesStateHandlerBase`.
 
-**SalesStateHandlerBase** (1955 lines after R-02 refactoring, reduced from 2793 lines):
+**SalesStateHandlerBase** (1860 lines after R-03 refactoring, reduced from 1955 lines):
 - Refactored to delegate core tasks to extracted services via composition
 - Still owns: order-context recovery, conversation history, customer-contact memory, product grounding before Gemini product-fact replies, and state invariant enforcement
 - Delegates to `ISalesContextResolver`: product resolution, history recovery, policy context sync
 - Delegates to `ISalesPromptBuilder`: prompt/response text building
+- Delegates to `IContactConfirmationFlow`: contact confirmation decision logic
 - Self-instantiates extracted services as fallback in constructor (proper DI registration deferred to Phase R-05)
 - Transcript production-readiness logic verified in code:
   - `DraftOrderStateHandler` first returns `TryCreateDraftConfirmationAsync(...)` output, then falls back to a generic local-draft acknowledgement.

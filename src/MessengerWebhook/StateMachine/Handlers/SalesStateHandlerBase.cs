@@ -23,6 +23,7 @@ using MessengerWebhook.Services.ResponseValidation.Models;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.Metrics;
 using MessengerWebhook.Services.Metrics.Models;
+using MessengerWebhook.Services.Sales.Contact;
 using MessengerWebhook.Services.Sales.Context;
 using MessengerWebhook.Services.Sales.Prompt;
 using MessengerWebhook.Services.SubIntent;
@@ -60,6 +61,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
     private readonly ISalesContextResolver _contextResolver;
     private readonly ISalesPromptBuilder _promptBuilder;
+    private readonly IContactConfirmationFlow _contactFlow;
 
     public abstract ConversationState HandledState { get; }
 
@@ -135,7 +137,8 @@ public abstract class SalesStateHandlerBase : IStateHandler
         ILogger logger,
         IProductGroundingService? productGroundingService = null,
         ISalesContextResolver? contextResolver = null,
-        ISalesPromptBuilder? promptBuilder = null)
+        ISalesPromptBuilder? promptBuilder = null,
+        IContactConfirmationFlow? contactFlow = null)
     {
         GeminiService = geminiService;
         PolicyGuardService = policyGuardService;
@@ -163,6 +166,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             customerIntelligenceService, productMappingService, giftSelectionService,
             freeshipCalculator, _productGroundingService, geminiService, logger);
         _promptBuilder = promptBuilder ?? new SalesPromptBuilder();
+        _contactFlow = contactFlow ?? new ContactConfirmationFlow(_contextResolver, _promptBuilder);
     }
 
     public async Task<string> HandleAsync(StateContext ctx, string message)
@@ -295,7 +299,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             }
             else
             {
-                contactConfirmedReply = await BuildContactCollectionReplyAsync(ctx, message);
+                contactConfirmedReply = await _contactFlow.BuildContactCollectionReplyAsync(ctx, message);
             }
 
             if (!string.IsNullOrWhiteSpace(contactConfirmedReply))
@@ -420,7 +424,6 @@ public abstract class SalesStateHandlerBase : IStateHandler
         var nextState = useAiIntent
             ? _promptBuilder.DetermineNextState(intentResult.Intent, hasProduct, hasContact)
             : (hasProduct ? ConversationState.CollectingInfo : ConversationState.Consulting);
-        var needsConfirmation = ctx.GetData<bool?>("contactNeedsConfirmation") == true;
 
         var isQuestioning = useAiIntent && intentResult.Intent == Services.AI.Models.CustomerIntent.Questioning;
         var isProductQuestion = ContainsAnyPhrase(message,
@@ -436,16 +439,9 @@ public abstract class SalesStateHandlerBase : IStateHandler
         var isInventoryQuestion = ContainsAnyPhrase(message,
             "còn hàng", "con hang", "hết hàng", "het hang", "còn không", "con khong", "hết chưa", "het chua",
             "sẵn hàng", "san hang", "có sẵn", "co san", "out stock", "in stock", "tồn kho", "ton kho");
-        var isContactMemoryQuestion = ContainsAnyPhrase(message,
-            "có thông tin của chị chưa", "co thong tin cua chi chua", "em có thông tin của chị chưa", "em co thong tin cua chi chua",
-            "có số của chị chưa", "co so cua chi chua", "có địa chỉ của chị chưa", "co dia chi cua chi chua",
-            "em có số điện thoại của chị chưa", "em co so dien thoai cua chi chua");
-        var isPendingContactClarification = needsConfirmation &&
-                                           string.Equals(ctx.GetData<string>("pendingContactQuestion"), "confirm_old_contact", StringComparison.OrdinalIgnoreCase) &&
-                                           ContainsAnyPhrase(message, "thông tin nào", "thong tin nao", "thông tin gì", "thong tin gi", "xác nhận thông tin nào", "xac nhan thong tin nao");
-        var isGenericPendingContactBuyReply = needsConfirmation &&
-                                              string.Equals(ctx.GetData<string>("pendingContactQuestion"), "confirm_old_contact", StringComparison.OrdinalIgnoreCase) &&
-                                              IsGenericBuyContinuationWhileAwaitingContactConfirmation(message);
+        var isContactMemoryQuestion = _contactFlow.IsContactMemoryQuestion(message);
+        var isPendingContactClarification = _contactFlow.IsPendingClarificationQuestion(ctx, message);
+        var isGenericPendingContactBuyReply = _contactFlow.IsGenericBuyContinuationPendingConfirmation(ctx, message);
         var isOrderEstimateQuestion = ContainsAnyPhrase(message,
             "tổng tiền", "tong tien", "tổng cộng", "tong cong", "bao nhiêu sản phẩm", "bao nhieu san pham", "bao nhiêu món", "bao nhieu mon");
         var isAmbiguousProductReference = HasAmbiguousProductReference(message);
@@ -483,7 +479,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
         if (isContactMemoryQuestion)
         {
-            var contactMemoryReply = await BuildContactMemoryReplyAsync(ctx, message);
+            var contactMemoryReply = await _contactFlow.BuildContactMemoryReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(contactMemoryReply))
             {
                 ctx.CurrentState = ConversationState.CollectingInfo;
@@ -581,7 +577,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
         if (hasBuyIntentPhrase && hasProduct)
         {
-            var contactReply = await BuildContactCollectionReplyAsync(ctx, message);
+            var contactReply = await _contactFlow.BuildContactCollectionReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(contactReply))
             {
                 ctx.CurrentState = ConversationState.CollectingInfo;
@@ -594,9 +590,14 @@ public abstract class SalesStateHandlerBase : IStateHandler
         // 1. Has both contact and product
         // 2. Contact info is confirmed (not waiting for confirmation)
         // 3. Customer is explicitly in buy/confirm path, not just asking a question
+        //
+        // NOTE: reads contactNeedsConfirmation live (no snapshot). Nothing above this line
+        // mutates contactNeedsConfirmation after CaptureCustomerDetailsAsync, so the read
+        // is equivalent to the removed `needsConfirmation` snapshot. Keep that invariant if
+        // expanding this method.
         var canCreateDraftNow = hasContact &&
                                 hasProduct &&
-                                !needsConfirmation &&
+                                ctx.GetData<bool?>("contactNeedsConfirmation") != true &&
                                 (
                                     (useAiIntent &&
                                      (intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy ||
@@ -636,7 +637,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             ctx.SetData("consultationDeclined", true);
 
             // If has contact info, create order immediately (only if confirmed)
-            if (hasContact && !needsConfirmation)
+            if (hasContact && ctx.GetData<bool?>("contactNeedsConfirmation") != true)
             {
                 // Extract product from history if not already in context
                 if (!hasProduct)
@@ -1387,63 +1388,6 @@ Quy tac:
         return $"Dạ với {productLabel}, {shippingMessage} {giftMessage} Nếu chị cần em tính lại theo đơn cụ thể hoặc hỗ trợ chốt đơn thì em làm tiếp cho mình nha.";
     }
 
-    private async Task<string?> BuildContactMemoryReplyAsync(StateContext ctx, string message)
-    {
-        var product = await _contextResolver.GetActiveProductOrResolveAsync(ctx, message);
-        var productName = product?.Name;
-        var hasPhone = !string.IsNullOrWhiteSpace(ctx.GetData<string>("customerPhone"));
-        var hasAddress = !string.IsNullOrWhiteSpace(ctx.GetData<string>("shippingAddress"));
-        var needsConfirmation = ctx.GetData<bool?>("contactNeedsConfirmation") == true;
-
-        if (hasPhone && hasAddress)
-        {
-            if (needsConfirmation)
-            {
-                var phone = ctx.GetData<string>("customerPhone");
-                var address = ctx.GetData<string>("shippingAddress");
-                return string.IsNullOrWhiteSpace(productName)
-                    ? $"Dạ em đang có thông tin cũ của chị rồi ạ. Chị giúp em xác nhận lại SĐT {phone} và địa chỉ {address} còn dùng đúng không ạ?"
-                    : $"Dạ em đang có sẵn thông tin giao hàng rồi ạ. Nếu mình chốt {productName} thì chị giúp em xác nhận lại SĐT {phone} và địa chỉ {address} còn dùng đúng không ạ?";
-            }
-
-            return string.IsNullOrWhiteSpace(productName)
-                ? "Dạ em đang có đủ thông tin giao hàng của chị rồi ạ. Khi chị chốt sản phẩm em lên đơn ngay cho mình nha."
-                : $"Dạ em đang có đủ thông tin để chốt {productName} cho chị rồi ạ. Nếu chị đồng ý em lên đơn theo thông tin này cho mình nha.";
-        }
-
-        var missing = string.Join(" và ", _promptBuilder.GetMissingContactInfo(ctx).Select(x => x == "so dien thoai" ? "số điện thoại" : "địa chỉ"));
-        return string.IsNullOrWhiteSpace(productName)
-            ? $"Dạ em chưa đủ thông tin của chị ạ. Chị gửi em {missing} giúp em nha."
-            : $"Dạ để em chốt đúng {productName} cho chị thì chị gửi em {missing} giúp em nha.";
-    }
-
-    private async Task<string?> BuildContactCollectionReplyAsync(StateContext ctx, string message)
-    {
-        var product = await _contextResolver.GetActiveProductOrResolveAsync(ctx, message);
-        var productName = product?.Name;
-        var missingInfo = _promptBuilder.GetMissingContactInfo(ctx);
-        var needsConfirmation = ctx.GetData<bool?>("contactNeedsConfirmation") == true;
-
-        if (needsConfirmation && missingInfo.Count == 0)
-        {
-            var phone = ctx.GetData<string>("customerPhone");
-            var address = ctx.GetData<string>("shippingAddress");
-            return string.IsNullOrWhiteSpace(productName)
-                ? $"Dạ em đang có thông tin giao hàng lần trước của chị rồi ạ. Chị giúp em xác nhận SĐT {phone} và địa chỉ {address} còn dùng đúng không, hay chị muốn đổi thông tin mới để em lên đơn cho lần này ạ?"
-                : $"Dạ em đang có sẵn thông tin để chốt {productName} cho chị rồi ạ. Chị giúp em xác nhận SĐT {phone} và địa chỉ {address} còn dùng đúng không, hay chị muốn đổi thông tin mới để em lên đơn cho lần này ạ?";
-        }
-
-        if (missingInfo.Count == 0)
-        {
-            return null;
-        }
-
-        var missing = string.Join(" và ", missingInfo.Select(x => x == "so dien thoai" ? "số điện thoại" : "địa chỉ"));
-        return string.IsNullOrWhiteSpace(productName)
-            ? $"Dạ chị gửi em {missing} để em lên đơn cho mình nha."
-            : $"Dạ chị gửi em {missing} để em chốt {productName} cho mình nha.";
-    }
-
     private async Task<string?> BuildOrderEstimateReplyAsync(StateContext ctx, string message)
     {
         var product = await _contextResolver.GetActiveProductOrResolveAsync(ctx, message);
@@ -1582,40 +1526,6 @@ Quy tac:
         return ContainsAnyPhrase(message,
             "sản phẩm", "san pham", "mặt nạ", "mat na", "kem", "serum", "toner", "sữa rửa mặt", "sua rua mat",
             "chống nắng", "chong nang", "dưỡng ẩm", "duong am", "mỹ phẩm", "my pham");
-    }
-
-    private static bool IsGenericBuyContinuationWhileAwaitingContactConfirmation(string message)
-    {
-        var normalized = SalesTextHelper.NormalizeForMatching(message);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return false;
-        }
-
-        if (normalized.Contains("dung roi", StringComparison.Ordinal)
-            || normalized.Contains("van dung", StringComparison.Ordinal)
-            || normalized.Contains("nhu cu", StringComparison.Ordinal)
-            || normalized.Contains("thong tin cu", StringComparison.Ordinal)
-            || normalized.Contains("cu nhu vay", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        return normalized == "ok"
-               || normalized == "oke"
-               || normalized == "okay"
-               || normalized == "ok e"
-               || normalized == "ok em"
-               || normalized == "oke e"
-               || normalized == "oke em"
-               || normalized.Contains("len don", StringComparison.Ordinal)
-               || normalized.Contains("chot", StringComparison.Ordinal)
-               || normalized.Contains("dat hang", StringComparison.Ordinal)
-               || normalized.Contains("dat luon", StringComparison.Ordinal)
-               || normalized.Contains("mua luon", StringComparison.Ordinal)
-               || normalized.Contains("lay san pham nay", StringComparison.Ordinal)
-               || normalized.Contains("lay nha", StringComparison.Ordinal)
-               || normalized.Contains("lay nhe", StringComparison.Ordinal);
     }
 
     private static bool IsAwaitingFinalSummaryConfirmation(StateContext ctx)
