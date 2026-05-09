@@ -112,4 +112,162 @@ public class ConsultingStateHandlerTests
         Assert.Null(ctx.GetData<string>("draftOrderCode"));
         Assert.DoesNotContain("DR-TEST-001", response, StringComparison.OrdinalIgnoreCase);
     }
+
+    // ── NEW TESTS (coverage bridging) ────────────────────────────────────────
+
+    // A. HandledState property
+    [Fact]
+    public void HandledState_ShouldReturnConsulting()
+    {
+        var geminiService = new Mock<IGeminiService>();
+        var customerService = new Mock<ICustomerIntelligenceService>();
+        customerService
+            .Setup(x => x.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), default))
+            .ReturnsAsync(new CustomerIdentity());
+        customerService
+            .Setup(x => x.GetVipProfileAsync(It.IsAny<CustomerIdentity>(), default))
+            .ReturnsAsync(new VipProfile { GreetingStyle = string.Empty });
+
+        var handler = new ConsultingStateHandler(
+            geminiService.Object,
+            new PolicyGuardService(Options.Create(new SalesBotOptions())),
+            Mock.Of<IProductMappingService>(),
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            Mock.Of<ICaseEscalationService>(),
+            new DraftOrderCoordinator(Mock.Of<IDraftOrderService>(), Mock.Of<IMemoryCache>(), NullLogger<DraftOrderCoordinator>.Instance),
+            customerService.Object,
+            null,
+            Mock.Of<IEmotionDetectionService>(),
+            Mock.Of<IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
+            Options.Create(new SalesBotOptions()),
+            Options.Create(new RAGOptions { Enabled = false }),
+            Mock.Of<ILogger<ConsultingStateHandler>>());
+
+        Assert.Equal(ConversationState.Consulting, handler.HandledState);
+    }
+
+    // B. Gemini returns response → bot reply returned
+    [Fact]
+    public async Task HandleAsync_WhenGeminiReturnsResponse_ShouldReturnBotReply()
+    {
+        var geminiService = new Mock<IGeminiService>();
+        var customerService = new Mock<ICustomerIntelligenceService>();
+        customerService
+            .Setup(x => x.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), default))
+            .ReturnsAsync(new CustomerIdentity());
+        customerService
+            .Setup(x => x.GetVipProfileAsync(It.IsAny<CustomerIdentity>(), default))
+            .ReturnsAsync(new VipProfile { GreetingStyle = string.Empty });
+        geminiService
+            .Setup(x => x.SendMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(), It.IsAny<MessengerWebhook.Services.AI.Models.GeminiModelType?>(), It.IsAny<string?>(), It.IsAny<string?>(), default))
+            .ReturnsAsync("Dạ chị muốn mua sản phẩm nào ạ?");
+        geminiService
+            .Setup(x => x.DetectIntentAsync(
+                It.IsAny<string>(),
+                It.IsAny<ConversationState>(),
+                It.IsAny<bool>(),
+                It.IsAny<bool>(),
+                It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
+                default))
+            .ReturnsAsync(new MessengerWebhook.Services.AI.Models.IntentDetectionResult
+            {
+                Intent = MessengerWebhook.Services.AI.Models.CustomerIntent.Browsing,
+                Confidence = 0.8,
+                Reason = "browsing"
+            });
+
+        var handler = new ConsultingStateHandler(
+            geminiService.Object,
+            new PolicyGuardService(Options.Create(new SalesBotOptions())),
+            Mock.Of<IProductMappingService>(),
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            Mock.Of<ICaseEscalationService>(),
+            new DraftOrderCoordinator(Mock.Of<IDraftOrderService>(), Mock.Of<IMemoryCache>(), NullLogger<DraftOrderCoordinator>.Instance),
+            customerService.Object,
+            null,
+            Mock.Of<IEmotionDetectionService>(),
+            Mock.Of<IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
+            Options.Create(new SalesBotOptions()),
+            Options.Create(new RAGOptions { Enabled = false }),
+            Mock.Of<ILogger<ConsultingStateHandler>>());
+
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Consulting };
+
+        var response = await handler.HandleAsync(ctx, "em muốn mua kem");
+
+        Assert.NotEmpty(response);
+    }
+
+    // C. Empty message → no exception, returns some response
+    [Fact]
+    public async Task HandleAsync_WhenMessageIsEmpty_ShouldNotThrow()
+    {
+        var geminiService = new Mock<IGeminiService>();
+        var customerService = new Mock<ICustomerIntelligenceService>();
+        customerService
+            .Setup(x => x.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), default))
+            .ReturnsAsync(new CustomerIdentity());
+        customerService
+            .Setup(x => x.GetVipProfileAsync(It.IsAny<CustomerIdentity>(), default))
+            .ReturnsAsync(new VipProfile { GreetingStyle = string.Empty });
+        geminiService
+            .Setup(x => x.SendMessageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(), It.IsAny<MessengerWebhook.Services.AI.Models.GeminiModelType?>(), It.IsAny<string?>(), It.IsAny<string?>(), default))
+            .ReturnsAsync("Dạ em có thể giúp gì cho chị ạ?");
+        geminiService
+            .Setup(x => x.DetectIntentAsync(
+                It.IsAny<string>(),
+                It.IsAny<ConversationState>(),
+                It.IsAny<bool>(),
+                It.IsAny<bool>(),
+                It.IsAny<List<MessengerWebhook.Services.AI.Models.ConversationMessage>>(),
+                default))
+            .ReturnsAsync(new MessengerWebhook.Services.AI.Models.IntentDetectionResult
+            {
+                Intent = MessengerWebhook.Services.AI.Models.CustomerIntent.Browsing,
+                Confidence = 0.5,
+                Reason = "empty"
+            });
+
+        var handler = new ConsultingStateHandler(
+            geminiService.Object,
+            new PolicyGuardService(Options.Create(new SalesBotOptions())),
+            Mock.Of<IProductMappingService>(),
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            Mock.Of<ICaseEscalationService>(),
+            new DraftOrderCoordinator(Mock.Of<IDraftOrderService>(), Mock.Of<IMemoryCache>(), NullLogger<DraftOrderCoordinator>.Instance),
+            customerService.Object,
+            null,
+            Mock.Of<IEmotionDetectionService>(),
+            Mock.Of<IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
+            Options.Create(new SalesBotOptions()),
+            Options.Create(new RAGOptions { Enabled = false }),
+            Mock.Of<ILogger<ConsultingStateHandler>>());
+
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Consulting };
+
+        var exception = await Record.ExceptionAsync(() => handler.HandleAsync(ctx, ""));
+
+        Assert.Null(exception);
+    }
 }

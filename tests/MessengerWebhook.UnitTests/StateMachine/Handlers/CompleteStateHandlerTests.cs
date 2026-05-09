@@ -331,4 +331,263 @@ public class CompleteStateHandlerTests
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
+
+    // ── NEW TESTS (coverage bridging) ────────────────────────────────────────
+
+    // A. pendingContactQuestion with ambiguous reply → clarification prompt
+    [Fact]
+    public async Task HandleAsync_WhenPendingContactQuestionAndAmbiguousReply_ShouldReturnClarificationPrompt()
+    {
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete };
+        ctx.SetData("pendingContactQuestion", "ask_save_new_contact");
+        ctx.SetData("draftOrderCode", "DR-TEST-001");
+
+        var response = await _handler.HandleAsync(ctx, "sau này tính");
+
+        // Neither yes nor no → clarification prompt is returned
+        Assert.Contains("có em cập nhật", response, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("không em cứ giữ", response, StringComparison.OrdinalIgnoreCase);
+        // pendingContactQuestion NOT cleared
+        Assert.NotNull(ctx.GetData<string>("pendingContactQuestion"));
+    }
+
+    // B. pendingContactQuestion with whitespace-only message → falls through to normal follow-up
+    [Fact]
+    public async Task HandleAsync_WhenPendingContactQuestionAndWhitespaceMessage_ShouldFallThroughToNormalFlow()
+    {
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete };
+        ctx.SetData("pendingContactQuestion", "ask_save_new_contact");
+        ctx.SetData("draftOrderCode", "DR-TEST-001");
+
+        // Whitespace is trimmed to empty → HandleSaveUpdatedContactReplyAsync returns null
+        var response = await _handler.HandleAsync(ctx, "   ");
+
+        // Falls through to normal follow-up flow, draft code should appear
+        Assert.Contains("DR-TEST-001", response);
+        // pendingContactQuestion is NOT cleared by the normal follow-up path
+        Assert.NotNull(ctx.GetData<string>("pendingContactQuestion"));
+    }
+
+    // C. Policy SafeReply → returns safe reply message, state stays Complete
+    [Fact]
+    public async Task HandleAsync_WhenPolicySafeReply_ShouldReturnSafeReplyMessage()
+    {
+        var policyGuardService = new Mock<IPolicyGuardService>();
+        policyGuardService
+            .Setup(x => x.EvaluateAsync(It.IsAny<PolicyGuardRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PolicyDecision(
+                false,
+                default,
+                "",
+                PolicyAction.SafeReply,
+                0.5m,
+                0.5m));
+
+        var handler = new CompleteStateHandler(
+            Mock.Of<IGeminiService>(),
+            policyGuardService.Object,
+            Mock.Of<IProductMappingService>(),
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            Mock.Of<ICaseEscalationService>(),
+            new DraftOrderCoordinator(Mock.Of<IDraftOrderService>(), Mock.Of<IMemoryCache>(), NullLogger<DraftOrderCoordinator>.Instance),
+            _customerService.Object,
+            null,
+            Mock.Of<IEmotionDetectionService>(),
+            Mock.Of<IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
+            Mock.Of<IServiceProvider>(),
+            Options.Create(new SalesBotOptions()),
+            Options.Create(new RAGOptions { Enabled = false }),
+            Options.Create(new CSATSurveyOptions { Enabled = false }),
+            Mock.Of<ILogger<CompleteStateHandler>>());
+
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete };
+        ctx.SetData("draftOrderCode", "DR-TEST-001");
+
+        var response = await handler.HandleAsync(ctx, "tôi muốn khiếu nại");
+
+        Assert.Equal(new PolicyGuardOptions().SafeReplyMessage, response);
+        Assert.Equal(ConversationState.Complete, ctx.CurrentState);
+    }
+
+    // D. CSAT enabled + not yet sent → surveySent becomes true
+    [Fact]
+    public async Task HandleAsync_WhenCsatEnabledAndNotYetSent_ShouldMarkSurveySent()
+    {
+        var handler = new CompleteStateHandler(
+            Mock.Of<IGeminiService>(),
+            new PolicyGuardService(Options.Create(new SalesBotOptions())),
+            Mock.Of<IProductMappingService>(),
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            Mock.Of<ICaseEscalationService>(),
+            new DraftOrderCoordinator(Mock.Of<IDraftOrderService>(), Mock.Of<IMemoryCache>(), NullLogger<DraftOrderCoordinator>.Instance),
+            _customerService.Object,
+            null,
+            Mock.Of<IEmotionDetectionService>(),
+            Mock.Of<IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
+            Mock.Of<IServiceProvider>(),
+            Options.Create(new SalesBotOptions()),
+            Options.Create(new RAGOptions { Enabled = false }),
+            Options.Create(new CSATSurveyOptions { Enabled = true, DelayMinutes = 5 }),
+            Mock.Of<ILogger<CompleteStateHandler>>());
+
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete, SessionId = "session-csat-test" };
+        ctx.SetData("draftOrderCode", "DR-TEST-001");
+        ctx.SetData("surveySent", false);
+
+        // ScheduleSurvey fires a background Task.Run — it won't throw synchronously
+        await handler.HandleAsync(ctx, "ok");
+
+        Assert.True(ctx.GetData<bool>("surveySent"));
+    }
+
+    // E. CSAT enabled + already sent → surveySent stays true, no double scheduling
+    [Fact]
+    public async Task HandleAsync_WhenCsatEnabledAndAlreadySent_ShouldNotRescheduleSurvey()
+    {
+        var handler = new CompleteStateHandler(
+            Mock.Of<IGeminiService>(),
+            new PolicyGuardService(Options.Create(new SalesBotOptions())),
+            Mock.Of<IProductMappingService>(),
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            Mock.Of<ICaseEscalationService>(),
+            new DraftOrderCoordinator(Mock.Of<IDraftOrderService>(), Mock.Of<IMemoryCache>(), NullLogger<DraftOrderCoordinator>.Instance),
+            _customerService.Object,
+            null,
+            Mock.Of<IEmotionDetectionService>(),
+            Mock.Of<IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
+            Mock.Of<IServiceProvider>(),
+            Options.Create(new SalesBotOptions()),
+            Options.Create(new RAGOptions { Enabled = false }),
+            Options.Create(new CSATSurveyOptions { Enabled = true, DelayMinutes = 5 }),
+            Mock.Of<ILogger<CompleteStateHandler>>());
+
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete, SessionId = "session-csat-already-sent" };
+        ctx.SetData("draftOrderCode", "DR-TEST-001");
+        ctx.SetData("surveySent", true);
+
+        var response = await handler.HandleAsync(ctx, "ok");
+
+        Assert.True(ctx.GetData<bool>("surveySent"));
+        Assert.NotEmpty(response);
+    }
+
+    // F. "thông tin nào" without draft code → generic clarification
+    [Fact]
+    public async Task HandleAsync_WhenThongTinNaoWithoutDraftCode_ShouldReturnGenericClarification()
+    {
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete };
+        // No draftOrderCode set
+
+        var response = await _handler.HandleAsync(ctx, "thông tin nào vậy em");
+
+        Assert.DoesNotContain("DR-", response);
+        Assert.DoesNotContain("đơn nháp", response, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("sản phẩm đã chốt", response, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SĐT", response, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // G. "thong tin nao" ASCII variant with draft code → includes draft code
+    [Fact]
+    public async Task HandleAsync_WhenThongTinNaoAsciiVariantWithDraftCode_ShouldIncludeDraftCode()
+    {
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete };
+        ctx.SetData("draftOrderCode", "DR-TEST-002");
+
+        var response = await _handler.HandleAsync(ctx, "thong tin nao vay em");
+
+        Assert.Contains("DR-TEST-002", response);
+    }
+
+    // H. Greeting with trailing punctuation → starts new conversation
+    [Fact]
+    public async Task HandleAsync_WhenGreetingWithPunctuation_ShouldStartNewConversation()
+    {
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete };
+        ctx.SetData("draftOrderCode", "DR-TEST-001");
+        ctx.SetData("surveySent", true);
+
+        await _handler.HandleAsync(ctx, "hi!");
+
+        Assert.NotEqual(ConversationState.Complete, ctx.CurrentState);
+        Assert.Null(ctx.GetData<string>("draftOrderCode"));
+    }
+
+    // I. Various greeting variants all start new conversation
+    [Theory]
+    [InlineData("hello")]
+    [InlineData("chào em")]
+    [InlineData("alo shop")]
+    [InlineData("alô em")]
+    [InlineData("chao shop")]
+    public async Task HandleAsync_WhenGreetingVariants_ShouldStartNewConversation(string greeting)
+    {
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete };
+        ctx.SetData("draftOrderCode", "DR-TEST-001");
+
+        await _handler.HandleAsync(ctx, greeting);
+
+        Assert.NotEqual(ConversationState.Complete, ctx.CurrentState);
+        Assert.Null(ctx.GetData<string>("draftOrderCode"));
+    }
+
+    // J. New conversation resets ALL order-related fields
+    [Fact]
+    public async Task HandleAsync_WhenNewConversationStarts_ShouldResetAllOrderRelatedFields()
+    {
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete };
+        ctx.SetData("selectedProductCodes", new List<string> { "KCN" });
+        ctx.SetData("selectedProductQuantities", new Dictionary<string, int> { ["KCN"] = 2 });
+        ctx.SetData("selectedGiftCode", "GIFT_001");
+        ctx.SetData("selectedGiftName", "Mặt nạ dưỡng sáng");
+        ctx.SetData("shippingFee", 30000m);
+        ctx.SetData("customerPhone", "0901234567");
+        ctx.SetData("shippingAddress", "12 Hoa Mai");
+        ctx.SetData("rememberedCustomerPhone", "0901234567");
+        ctx.SetData("rememberedShippingAddress", "12 Hoa Mai");
+        ctx.SetData("contactNeedsConfirmation", true);
+        ctx.SetData("vipGreetingSent", true);
+        ctx.SetData("consultationRejectionCount", 3);
+        ctx.SetData("awaitingFinalSummaryConfirmation", true);
+        ctx.SetData("final_price_summary_ready", true);
+        ctx.SetData("price_confirmed", true);
+        ctx.SetData("surveySent", true);
+
+        await _handler.HandleAsync(ctx, "hi");
+
+        Assert.Null(ctx.GetData<string>("selectedGiftCode"));
+        Assert.Null(ctx.GetData<string>("selectedGiftName"));
+        Assert.Null(ctx.GetData<string>("customerPhone"));
+        Assert.Null(ctx.GetData<string>("shippingAddress"));
+        Assert.Null(ctx.GetData<string>("rememberedCustomerPhone"));
+        Assert.Null(ctx.GetData<string>("rememberedShippingAddress"));
+        Assert.False(ctx.GetData<bool>("contactNeedsConfirmation"));
+        // vipGreetingSent is cleared then potentially set again by greeting handler — just verify state changed
+        Assert.Equal(0, ctx.GetData<int>("consultationRejectionCount"));
+        Assert.False(ctx.GetData<bool>("awaitingFinalSummaryConfirmation"));
+        Assert.False(ctx.GetData<bool>("final_price_summary_ready"));
+        Assert.False(ctx.GetData<bool>("price_confirmed"));
+        Assert.False(ctx.GetData<bool>("surveySent"));
+        Assert.Null(ctx.GetData<string>("draftOrderCode"));
+    }
 }

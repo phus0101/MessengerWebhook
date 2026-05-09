@@ -100,4 +100,139 @@ public class DraftOrderStateHandlerTests
         Assert.DoesNotContain("280,000đ", response, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Mat na mini phuc hoi", response, StringComparison.OrdinalIgnoreCase);
     }
+
+    // ── NEW TESTS (coverage bridging) ────────────────────────────────────────
+
+    // A. HandledState property
+    [Fact]
+    public void HandledState_ShouldReturnDraftOrder()
+    {
+        var handler = new DraftOrderStateHandler(
+            Mock.Of<IGeminiService>(),
+            new PolicyGuardService(Options.Create(new SalesBotOptions())),
+            Mock.Of<IProductMappingService>(),
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            Mock.Of<ICaseEscalationService>(),
+            new DraftOrderCoordinator(Mock.Of<IDraftOrderService>(), Mock.Of<IMemoryCache>(), NullLogger<DraftOrderCoordinator>.Instance),
+            Mock.Of<ICustomerIntelligenceService>(),
+            null,
+            Mock.Of<MessengerWebhook.Services.Emotion.IEmotionDetectionService>(),
+            Mock.Of<MessengerWebhook.Services.Tone.IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
+            Options.Create(new SalesBotOptions()),
+            Options.Create(new RAGOptions { Enabled = false }),
+            Mock.Of<ILogger<DraftOrderStateHandler>>());
+
+        Assert.Equal(ConversationState.DraftOrder, handler.HandledState);
+    }
+
+    // B. No product selected → TryCreateDraftConfirmationAsync returns empty → transitions to Complete
+    [Fact]
+    public async Task HandleAsync_WhenNoProductSelected_ShouldTransitionToComplete()
+    {
+        var customerService = new Mock<ICustomerIntelligenceService>();
+        customerService
+            .Setup(x => x.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), default))
+            .ReturnsAsync(new CustomerIdentity());
+
+        var handler = new DraftOrderStateHandler(
+            Mock.Of<IGeminiService>(),
+            new PolicyGuardService(Options.Create(new SalesBotOptions())),
+            Mock.Of<IProductMappingService>(),
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            Mock.Of<ICaseEscalationService>(),
+            new DraftOrderCoordinator(Mock.Of<IDraftOrderService>(), new MemoryCache(new MemoryCacheOptions()), NullLogger<DraftOrderCoordinator>.Instance),
+            customerService.Object,
+            null,
+            Mock.Of<MessengerWebhook.Services.Emotion.IEmotionDetectionService>(),
+            Mock.Of<MessengerWebhook.Services.Tone.IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
+            Options.Create(new SalesBotOptions()),
+            Options.Create(new RAGOptions { Enabled = false }),
+            Mock.Of<ILogger<DraftOrderStateHandler>>());
+
+        // No selectedProductCodes set → confirmation empty → fallthrough
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.DraftOrder };
+
+        var response = await handler.HandleAsync(ctx, "ok");
+
+        Assert.Equal(ConversationState.Complete, ctx.CurrentState);
+        Assert.Contains("lên đơn nháp", response, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // C. DraftOrder handler: when draft coordinator returns a draft → state transitions to Complete with confirmation
+    [Fact]
+    public async Task HandleAsync_WhenDraftOrderCreatedSuccessfully_ShouldReturnConfirmationAndCompleteState()
+    {
+        var customerService = new Mock<ICustomerIntelligenceService>();
+        customerService
+            .Setup(x => x.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), default))
+            .ReturnsAsync(new CustomerIdentity());
+
+        var productMappingService = new Mock<IProductMappingService>();
+        productMappingService
+            .Setup(x => x.GetActiveProductByCodeAsync("KCN"))
+            .ReturnsAsync(new Product { Code = "KCN", Name = "Kem Chong Nang", BasePrice = 320000m });
+
+        var draftOrderService = new Mock<IDraftOrderService>();
+        draftOrderService
+            .Setup(x => x.CreateFromContextAsync(It.IsAny<StateContext>(), default))
+            .ReturnsAsync(new DraftOrder
+            {
+                Id = Guid.NewGuid(),
+                DraftCode = "DR-TEST-POLICY",
+                MerchandiseTotal = 320000m,
+                ShippingFee = 30000m,
+                GrandTotal = 350000m,
+                Items = new List<DraftOrderItem>
+                {
+                    new() { ProductCode = "KCN", ProductName = "Kem Chong Nang", Quantity = 1, UnitPrice = 320000m }
+                }
+            });
+
+        var handler = new DraftOrderStateHandler(
+            Mock.Of<IGeminiService>(),
+            new PolicyGuardService(Options.Create(new SalesBotOptions())),
+            productMappingService.Object,
+            Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(),
+            Mock.Of<ICaseEscalationService>(),
+            new DraftOrderCoordinator(draftOrderService.Object, new MemoryCache(new MemoryCacheOptions()), NullLogger<DraftOrderCoordinator>.Instance),
+            customerService.Object,
+            null,
+            Mock.Of<MessengerWebhook.Services.Emotion.IEmotionDetectionService>(),
+            Mock.Of<MessengerWebhook.Services.Tone.IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(),
+            Mock.Of<IConversationMetricsService>(),
+            Mock.Of<ISubIntentClassifier>(),
+            Options.Create(new SalesBotOptions()),
+            Options.Create(new RAGOptions { Enabled = false }),
+            Mock.Of<ILogger<DraftOrderStateHandler>>());
+
+        var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.DraftOrder, SessionId = "session-1" };
+        ctx.SetData("selectedProductCodes", new List<string> { "KCN" });
+        ctx.SetData("selectedProductQuantities", new Dictionary<string, int> { ["KCN"] = 1 });
+        ctx.SetData("customerPhone", "0912345678");
+        ctx.SetData("shippingAddress", "12 Le Loi");
+
+        var response = await handler.HandleAsync(ctx, "ok lên đơn nhé");
+
+        Assert.Equal(ConversationState.Complete, ctx.CurrentState);
+        Assert.Contains("DR-TEST-POLICY", response, StringComparison.OrdinalIgnoreCase);
+    }
 }

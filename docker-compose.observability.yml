@@ -1,0 +1,33 @@
+version: '3.8'
+
+# Run standalone: docker compose -f docker-compose.observability.yml up -d
+# Or extend main: docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+
+services:
+  seq:
+    image: datalust/seq:latest
+    container_name: seq
+    environment:
+      - ACCEPT_EULA=Y
+      - SEQ_FIRSTRUN_ADMINPASSWORDHASH=${SEQ_ADMIN_PASSWORD_HASH:-}
+    ports:
+      - "5341:5341"   # ingestion (OTLP + raw log)
+      - "8090:80"     # web UI (use 8090 to avoid conflict with app)
+    volumes:
+      - seq-data:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  seq-data:
+    driver: local
