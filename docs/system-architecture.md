@@ -2,7 +2,7 @@
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
 **Last Updated**: 2026-05-09
-**Version**: R-03 service extraction (ContactConfirmationFlow) reflected
+**Version**: R-04 service extraction (SalesReplyOrchestrator) reflected
 
 ---
 
@@ -60,6 +60,7 @@ Multi-tenant conversational commerce platform for cosmetics retail via Facebook 
 - `SalesContextResolver` (implements `ISalesContextResolver`): Pure reads + in-memory `StateContext` mutations only. Handles VIP profile lookup, product resolution, history recovery, numbered suggestion detection, commercial fact snapshots, policy context sync. No DB writes, no Messenger sends.
 - `SalesPromptBuilder` (implements `ISalesPromptBuilder`): Completely pure — no async, no injected services. All methods return strings from input. Handles customer instruction building, CTA context, fact validation context, contact summaries, draft confirmation, state determination.
 - `ContactConfirmationFlow` (implements `IContactConfirmationFlow`): Encapsulates contact confirmation invariants. Detects new contact, handles remembered contact reuse explicitly, manages partial contacts (phone-only/address-only), detects generic buy continuations, returns decision object for base class delegation. 66 unit tests covering all scenarios.
+- `SalesReplyOrchestrator` (implements `ISalesReplyOrchestrator`, Phase R-04): Orchestrates 5-stage AI reply pipeline: natural reply generation (emotion→tone→smalltalk→Gemini→grounding) and direct AI response path. 558 LOC extracted from base class. Methods: `GenerateAsync(request)`, `BuildGroundedFallbackAsync()`. Handles RAG context retrieval, product grounding validation, response fallback, metrics logging. Self-instantiated in base class constructor (DI registration deferred to R-05).
 - `SalesTextHelper`: Internal static utility for Vietnamese text normalization (`NormalizeForMatching`). Used by context resolver and predicates.
 - `HistoryProductCandidate`: Public record for product candidates extracted from conversation history.
 
@@ -137,9 +138,9 @@ public class StateContext
 
 #### Production-Locked Sales Invariants
 
-`SalesStateHandlerBase` (1860 lines after R-03 refactoring, reduced from 2793 lines) acts as the invariant gate for transcript-driven ordering flows. R-02/R-03 extracted core functionality to dedicated services while preserving all invariants:
+`SalesStateHandlerBase` (1198 lines after R-04 refactoring, reduced from 1628 lines; baseline 2793 lines) acts as the invariant gate for transcript-driven ordering flows. R-02/R-03/R-04 extracted core functionality to dedicated services while preserving all invariants:
 
-**Architecture**: Delegates to `ISalesContextResolver`, `ISalesPromptBuilder`, and `IContactConfirmationFlow` via composition; still owns order-context recovery, conversation history, product grounding enforcement, and state invariant validation.
+**Architecture**: Delegates to `ISalesContextResolver`, `ISalesPromptBuilder`, `IContactConfirmationFlow`, and `ISalesReplyOrchestrator` via composition; still owns order-context recovery, conversation history, product grounding enforcement, and state invariant validation.
 
 **Invariants**:
 - Remembered contact reuse is always explicit: if prior phone/address exist, `contactNeedsConfirmation` and `pendingContactQuestion=confirm_old_contact` keep checkout in confirmation mode until the customer explicitly confirms or replaces the details. Enforced by `IContactConfirmationFlow.EvaluateAsync()`.

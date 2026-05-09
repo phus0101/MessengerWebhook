@@ -1,7 +1,7 @@
 # Production Stabilization Plan
 
 **Created**: 2026-05-08
-**Updated**: 2026-05-09 (Phase R-03 completed)
+**Updated**: 2026-05-09 (Phase R-04 completed)
 **Context**: 1000 tenant production, team 2 (1 dev + Claude Code), chưa có SLA
 **Scope**: Tier 0 + Refactor + Tier 1 (10-12 tuần)
 
@@ -42,7 +42,7 @@
 | R-01 | [Golden conversation test suite + bridge coverage gap](phase-r01-golden-test-suite.md) | 3 ngày | Complete | Phase 02 |
 | R-02 | [Extract SalesContextResolver + SalesPromptBuilder](phase-r02-extract-context-and-prompt.md) | 4 ngày | Complete | R-01 |
 | R-03 | [Extract ContactConfirmationFlow](phase-r03-extract-contact-flow.md) | 4 ngày | Complete | R-02 |
-| R-04 | [Extract SalesReplyOrchestrator](phase-r04-extract-reply-orchestrator.md) | 3 ngày | Pending | R-03 |
+| R-04 | [Extract SalesReplyOrchestrator](phase-r04-extract-reply-orchestrator.md) | 3 ngày | Complete | R-03 |
 | R-05 | [Slim base class + final cleanup](phase-r05-slim-base-class.md) | 2 ngày | Pending | R-04 |
 
 ### Stabilization (sau refactor)
