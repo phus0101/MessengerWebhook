@@ -1,8 +1,8 @@
 # Code Standards
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
-**Last Updated**: 2026-04-02
-**Version**: Phase 4 Complete (Caching Layer)
+**Last Updated**: 2026-05-09
+**Version**: R-02 Service Extraction Complete
 
 ---
 
@@ -19,10 +19,14 @@ src/MessengerWebhook/
 │   └── Migrations/      # EF Core migrations
 ├── Services/
 │   ├── AI/             # Gemini integration
+│   ├── Sales/          # Sales conversation services (R-02)
+│   │   ├── Context/    # SalesContextResolver, HistoryProductCandidate
+│   │   └── Prompt/     # SalesPromptBuilder
 │   └── Messenger/      # Facebook Messenger API
 ├── StateMachine/
 │   ├── Handlers/       # State-specific logic
 │   └── Models/         # State machine models
+├── Utilities/          # Shared utilities (SalesTextHelper)
 ├── Middleware/         # Request pipeline
 └── Program.cs          # Application entry point
 ```

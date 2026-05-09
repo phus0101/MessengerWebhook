@@ -1,8 +1,8 @@
 # System Architecture
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
-**Last Updated**: 2026-04-26
-**Version**: Phase 1 product grounding/hallucination hardening reflected
+**Last Updated**: 2026-05-09
+**Version**: R-02 service extraction (SalesContextResolver, SalesPromptBuilder) reflected
 
 ---
 
@@ -55,6 +55,12 @@ Multi-tenant conversational commerce platform for cosmetics retail via Facebook 
 - Integrated into sales conversation flow via `SalesStateHandlerBase`
 - RAG context returns detailed info (ingredients, skin types, benefits) when ProductQuestion detected
 - System prompt uses `{SUB_INTENT_CONTEXT}` placeholder for category-specific guidance injection
+
+**Sales Services** (`Services/Sales/`):
+- `SalesContextResolver` (implements `ISalesContextResolver`): Pure reads + in-memory `StateContext` mutations only. Handles VIP profile lookup, product resolution, history recovery, numbered suggestion detection, commercial fact snapshots, policy context sync. No DB writes, no Messenger sends.
+- `SalesPromptBuilder` (implements `ISalesPromptBuilder`): Completely pure — no async, no injected services. All methods return strings from input. Handles customer instruction building, CTA context, fact validation context, contact summaries, draft confirmation, state determination.
+- `SalesTextHelper`: Internal static utility for Vietnamese text normalization (`NormalizeForMatching`). Used by context resolver and predicates.
+- `HistoryProductCandidate`: Public record for product candidates extracted from conversation history.
 
 **Messenger Services** (`Services/Messenger/`):
 - `MessengerService`: Send API integration (text messages, quick replies, comment hiding)
@@ -130,14 +136,17 @@ public class StateContext
 
 #### Production-Locked Sales Invariants
 
-`SalesStateHandlerBase` now acts as the invariant gate for transcript-driven ordering flows:
+`SalesStateHandlerBase` (1955 lines after R-02 refactoring, reduced from 2793 lines) acts as the invariant gate for transcript-driven ordering flows. R-02 extracted core functionality to dedicated services while preserving all invariants:
 
+**Architecture**: Delegates to `ISalesContextResolver` and `ISalesPromptBuilder` via composition; still owns order-context recovery, conversation history, customer-contact memory, product grounding enforcement, and state invariant validation.
+
+**Invariants**:
 - Remembered contact reuse is always explicit: if prior phone/address exist, `contactNeedsConfirmation` and `pendingContactQuestion=confirm_old_contact` keep checkout in confirmation mode until the customer explicitly confirms or replaces the details.
-- Partial remembered contact is handled gracefully: `BuildPendingContactClarificationReply()` branches on available data (phone-only, address-only, or both) to ask for the missing piece instead of assuming completeness.
+- Partial remembered contact is handled gracefully: `BuildPendingContactClarificationReply()` (now in `ISalesPromptBuilder`) branches on available data (phone-only, address-only, or both) to ask for the missing piece instead of assuming completeness.
 - Generic buy continuations such as `ok`, `ok e`, `lên đơn`, `chốt nhé`, and `đặt luôn` only trigger a full contact-summary reminder while confirmation is pending; they must not create a draft order.
 - Active product lock is sticky via `selectedProductCodes`; shipping, policy, gift, and order-estimate responses refresh policy context for that same product and only switch when the message contains an explicit replacement signal.
 - Product-fact replies are gated by `ProductGroundingService`: Gemini receives an allowed-product list built from active selected products plus DB-confirmed RAG products, and the handler returns either deterministic DB-backed related suggestions or the safe catalog fallback when exact grounding is required but unavailable.
-- If checkout loses product context, the handler reverse-scans recent conversation history, prefers user messages over assistant mentions, and uses Gemini only to break ambiguous ties before continuing.
+- If checkout loses product context, the handler reverse-scans recent conversation history (via `ISalesContextResolver`), prefers user messages over assistant mentions, and uses Gemini only to break ambiguous ties before continuing.
 
 #### State Diagram
 

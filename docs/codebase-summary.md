@@ -1,8 +1,8 @@
 # Codebase Summary
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
-**Last Updated**: 2026-04-26
-**Phase**: Product grounding and hallucination hardening reflected
+**Last Updated**: 2026-05-09
+**Phase**: R-02 service extraction (SalesContextResolver, SalesPromptBuilder) reflected
 
 ---
 
@@ -166,6 +166,30 @@ MessengerWebhook/
 - Cost optimization: $0.075/month vs $3/month pure AI (97.5% reduction)
 - Test coverage: 23/23 tests passing (20 unit + 3 integration)
 
+#### Sales Services (`Services/Sales/`)
+
+**SalesContextResolver** (`Services/Sales/Context/SalesContextResolver.cs`):
+- Implements `ISalesContextResolver` interface
+- Pure reads + in-memory `StateContext` mutations only — no DB writes, no Messenger sends
+- Handles: VIP profile lookup, product resolution, history recovery, numbered suggestion detection, commercial fact snapshots, policy context sync
+- Constructor deps: `ICustomerIntelligenceService`, `IProductMappingService`, `IGiftSelectionService`, `IFreeshipCalculator`, `IProductGroundingService`, `IGeminiService`, `ILogger`
+- Methods: GetVipProfileAsync, GetActiveSelectedProductsAsync, ResolveCurrentProductAsync, ApplyResolvedProductAsync, TryExtractProductFromHistoryAsync, BuildCommercialFactSnapshotAsync, RefreshSelectedProductPolicyContextAsync, and more
+
+**SalesPromptBuilder** (`Services/Sales/Prompt/SalesPromptBuilder.cs`):
+- Implements `ISalesPromptBuilder` interface
+- Completely pure: no async, no injected services, all methods return strings from input
+- Handles: customer instruction building, CTA context, fact validation context, contact summaries, draft confirmation, state determination
+- Methods: BuildCustomerInstruction, BuildCtaContext, BuildFactValidationContext, FormatAllowedProductNames, BuildPolicyGiftMessage, BuildPendingContactClarificationReply, BuildDraftConfirmation, GetContactSummary, DetermineNextState, and more
+
+**SalesTextHelper** (`Utilities/SalesTextHelper.cs`):
+- Internal static class for Vietnamese text normalization
+- Method: `NormalizeForMatching(text)` - removes diacritics and normalizes spacing for product name matching
+- Used by `SalesContextResolver` and remaining base-class predicates
+
+**HistoryProductCandidate** (`Services/Sales/Context/HistoryProductCandidate.cs`):
+- Public record for product candidates extracted from conversation history
+- Properties: ProductName, ProductCode, Confidence, FoundInMessageIndex, Context
+
 #### Messenger Services
 
 **MessengerService** (`MessengerService.cs`):
@@ -198,10 +222,16 @@ MessengerWebhook/
 **State Handlers**:
 - Classic commerce handlers remain for catalog/cart flows (`IdleStateHandler`, `GreetingStateHandler`, `MainMenuStateHandler`, `BrowsingProductsStateHandler`, `ProductDetailStateHandler`, `VariantSelectionStateHandler`, `AddToCartStateHandler`, `CartReviewStateHandler`, `ShippingAddressStateHandler`, `PaymentMethodStateHandler`, `OrderConfirmationStateHandler`, `OrderPlacedStateHandler`, `OrderTrackingStateHandler`, `HelpStateHandler`, `ErrorStateHandler`).
 - Sales-conversation handlers now also drive the Messenger order-closing flow (`ConsultingStateHandler`, `CollectingInfoStateHandler`, `DraftOrderStateHandler`, `CompleteStateHandler`, `QuickReplySalesStateHandler`, `HumanHandoffStateHandler`) on top of `SalesStateHandlerBase`.
+
+**SalesStateHandlerBase** (1955 lines after R-02 refactoring, reduced from 2793 lines):
+- Refactored to delegate core tasks to extracted services via composition
+- Still owns: order-context recovery, conversation history, customer-contact memory, product grounding before Gemini product-fact replies, and state invariant enforcement
+- Delegates to `ISalesContextResolver`: product resolution, history recovery, policy context sync
+- Delegates to `ISalesPromptBuilder`: prompt/response text building
+- Self-instantiates extracted services as fallback in constructor (proper DI registration deferred to Phase R-05)
 - Transcript production-readiness logic verified in code:
   - `DraftOrderStateHandler` first returns `TryCreateDraftConfirmationAsync(...)` output, then falls back to a generic local-draft acknowledgement.
   - `CompleteStateHandler` preserves completed-order context for greeting-prefixed order follow-ups, resets stale completed sessions after 24 hours, and answers `thông tin nào` with the concrete fields being rechecked plus any selected gift.
-  - `SalesStateHandlerBase` still owns shared order-context recovery, conversation history, customer-contact memory behavior, and product grounding before Gemini product-fact replies.
 
 **State Context** (`Models/StateContext.cs`):
 - Session data carrier
@@ -431,8 +461,13 @@ Any state → Help (30) → (return to previous state)
 - State machine (ConversationStateMachine, handlers)
 - Repositories (mocked database)
 - Validators (signature validation)
+- Sales services (SalesContextResolverTests: 43 tests, SalesPromptBuilderTests: 54 tests)
 
 **Framework**: xUnit with Moq
+
+**Test Metrics**:
+- Total: 783 unit tests + 246 integration tests = 1029 tests
+- R-02 additions: 97 new tests (54 SalesPromptBuilder + 43 SalesContextResolver)
 
 ### Integration Tests
 
@@ -445,6 +480,7 @@ Any state → Help (30) → (return to previous state)
 - VectorSearchRepository (semantic search)
 - Database migrations
 - End-to-end state transitions
+- R-02 services integration with state handlers
 
 ---
 

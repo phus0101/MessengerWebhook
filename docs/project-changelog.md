@@ -1,7 +1,7 @@
 # Project Changelog
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
-**Last Updated**: 2026-05-06
+**Last Updated**: 2026-05-09
 
 All notable changes to this project are documented in this file.
 
@@ -11,6 +11,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## [Unreleased]
+
+### Added - Production Stabilization R-02: Service Extraction (2026-05-09)
+
+**SalesContextResolver Service** (`Services/Sales/Context/SalesContextResolver.cs`):
+- Extracted core context resolution logic from `SalesStateHandlerBase` (1955 lines, reduced from 2793)
+- Implements `ISalesContextResolver` interface
+- Pure reads + in-memory `StateContext` mutations only — no DB writes, no Messenger sends
+- Handles: VIP profile lookup, product resolution, history recovery, numbered suggestion detection, commercial fact snapshots, policy context sync
+- Constructor dependencies: `ICustomerIntelligenceService`, `IProductMappingService`, `IGiftSelectionService`, `IFreeshipCalculator`, `IProductGroundingService`, `IGeminiService`, `ILogger`
+- Methods: GetVipProfileAsync, GetActiveSelectedProductsAsync, ResolveCurrentProductAsync, ApplyResolvedProductAsync, TryExtractProductFromHistoryAsync, BuildCommercialFactSnapshotAsync, RefreshSelectedProductPolicyContextAsync, etc.
+
+**SalesPromptBuilder Service** (`Services/Sales/Prompt/SalesPromptBuilder.cs`):
+- Extracted prompt/response building logic from `SalesStateHandlerBase`
+- Implements `ISalesPromptBuilder` interface
+- Completely pure: no async, no injected services, all methods return strings from input
+- Handles: customer instruction building, CTA context, fact validation context, contact summaries, draft confirmation, state determination
+- Methods: BuildCustomerInstruction, BuildCtaContext, BuildFactValidationContext, FormatAllowedProductNames, BuildPolicyGiftMessage, BuildPendingContactClarificationReply, BuildDraftConfirmation, GetContactSummary, DetermineNextState, etc.
+
+**SalesTextHelper Utility** (`Utilities/SalesTextHelper.cs`):
+- Internal static class for Vietnamese text normalization
+- Method: `NormalizeForMatching(text)` — removes diacritics and normalizes spacing for product name matching
+- Used by `SalesContextResolver` and remaining base-class predicates
+
+**HistoryProductCandidate Model** (`Services/Sales/Context/HistoryProductCandidate.cs`):
+- Public record for product candidates extracted from conversation history
+- Properties: ProductName, ProductCode, Confidence, FoundInMessageIndex, Context
+
+**SalesStateHandlerBase Refactoring**:
+- Now delegates product/prompt logic to extracted services via composition
+- Still owns: order-context recovery, conversation history, customer-contact memory, product grounding enforcement, state invariant validation
+- Self-instantiates extracted services as fallback in constructor (proper DI registration deferred to Phase R-05)
+- All production invariants preserved and verified via 97 new tests
+
+**Test Coverage** (97 new tests added):
+- `SalesPromptBuilderTests`: 54 unit tests
+- `SalesContextResolverTests`: 43 unit tests
+- Total test metrics: 783 unit tests + 246 integration tests = 1029 tests (was 783 + 246 before R-02)
+
+**DI Registration** (temporary self-instantiation):
+- Services instantiate within `SalesStateHandlerBase` constructor as fallback
+- Proper DI registration in `Program.cs` deferred to Phase R-05
+- No breaking changes to existing callers
 
 ### Added - SubIntent Classification System (2026-05-03)
 
