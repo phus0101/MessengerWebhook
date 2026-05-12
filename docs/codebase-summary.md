@@ -1,8 +1,8 @@
 # Codebase Summary
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
-**Last Updated**: 2026-05-09
-**Phase**: R-04 service extraction (SalesReplyOrchestrator) reflected
+**Last Updated**: 2026-05-12
+**Phase**: R-05 final cleanup (SalesConsultationReplies + ConversationHistoryHelper) reflected
 
 ---
 
@@ -203,8 +203,22 @@ MessengerWebhook/
 - Encapsulates 5-stage pipeline for AI-driven natural reply generation
 - Methods: `BuildNaturalReplyAsync` (emotion→tone→smalltalk→Gemini→grounding), `GenerateDirectAIResponseAsync`, `BuildGroundedRelatedSuggestionOrFallbackAsync`, `RetrieveRagContextAsync`, `LogMetricsAsync`
 - 558 LOC extracted from SalesStateHandlerBase (−430 line reduction in base class)
-- Self-instantiation fallback in base class constructor (no DI registration this phase)
+- Self-instantiation fallback in base class constructor (DI registered in Phase R-05)
 - Handles: pipeline orchestration, RAG context retrieval, product grounding validation, response fallback, metrics logging
+- Integrated with ConversationHistoryHelper (Phase R-05)
+
+**SalesConsultationReplies** (`Services/Sales/Reply/SalesConsultationReplies.cs`, Phase R-05):
+- Implements `ISalesConsultationReplies` interface
+- Extracted 9 consultation reply builder methods from SalesStateHandlerBase (333 lines)
+- Methods: BuildProductAskReply, BuildProductDetailReply, BuildNeedCheckReply, BuildSizeGuideReply, BuildIngredientReply, BuildConcernReply, BuildGiftWithProductReply, BuildGiftWithoutProductReply, BuildPolicyAskReply
+- Constructor deps: `ISalesPromptBuilder`, `IProductGroundingService`, `ILogger`
+- Pure orchestration: delegates text building to prompt builder, grounding validation to product service
+
+**ConversationHistoryHelper** (`Services/Sales/ConversationHistoryHelper.cs`, Phase R-05):
+- Static utility class to deduplicate history-related operations
+- Methods: GetFormattedConversationHistory, AppendToConversationHistory
+- Used by SalesStateHandlerBase, SalesReplyOrchestrator, CompleteStateHandler
+- Eliminates code duplication in history building and formatting across services
 
 #### Messenger Services
 
@@ -239,14 +253,17 @@ MessengerWebhook/
 - Classic commerce handlers remain for catalog/cart flows (`IdleStateHandler`, `GreetingStateHandler`, `MainMenuStateHandler`, `BrowsingProductsStateHandler`, `ProductDetailStateHandler`, `VariantSelectionStateHandler`, `AddToCartStateHandler`, `CartReviewStateHandler`, `ShippingAddressStateHandler`, `PaymentMethodStateHandler`, `OrderConfirmationStateHandler`, `OrderPlacedStateHandler`, `OrderTrackingStateHandler`, `HelpStateHandler`, `ErrorStateHandler`).
 - Sales-conversation handlers now also drive the Messenger order-closing flow (`ConsultingStateHandler`, `CollectingInfoStateHandler`, `DraftOrderStateHandler`, `CompleteStateHandler`, `QuickReplySalesStateHandler`, `HumanHandoffStateHandler`) on top of `SalesStateHandlerBase`.
 
-**SalesStateHandlerBase** (1198 lines after R-04 refactoring, reduced from 1628 lines):
-- Refactored to delegate core tasks to extracted services via composition (Phase R-04: SalesReplyOrchestrator extracted)
-- Still owns: order-context recovery, conversation history, customer-contact memory, product grounding before Gemini product-fact replies, and state invariant enforcement
+**SalesStateHandlerBase** (840 lines after R-05 refactoring, reduced from 2425 lines):
+- Fully refactored to delegate core tasks to extracted services via composition across 5 phases (R-01 through R-05)
+- Owns: conversation state orchestration, order-context recovery, customer-contact memory, and state invariant enforcement only
 - Delegates to `ISalesContextResolver`: product resolution, history recovery, policy context sync
 - Delegates to `ISalesPromptBuilder`: prompt/response text building
 - Delegates to `IContactConfirmationFlow`: contact confirmation decision logic
-- Delegates to `ISalesReplyOrchestrator`: AI reply generation pipeline (Phase R-04)
-- Self-instantiates extracted services as fallback in constructor (proper DI registration deferred to Phase R-05)
+- Delegates to `ISalesReplyOrchestrator`: AI reply generation pipeline (5-stage: emotion→tone→smalltalk→Gemini→grounding)
+- Delegates to `ISalesConsultationReplies`: consultation-specific reply building (Phase R-05)
+- Delegates to `SalesMessageParser`: predicate logic for message classification (Phase R-05)
+- Uses `ConversationHistoryHelper`: history operations (Phase R-05)
+- DI registration for all services completed in Phase R-05 (`Program.cs`)
 - Transcript production-readiness logic verified in code:
   - `DraftOrderStateHandler` first returns `TryCreateDraftConfirmationAsync(...)` output, then falls back to a generic local-draft acknowledgement.
   - `CompleteStateHandler` preserves completed-order context for greeting-prefixed order follow-ups, resets stale completed sessions after 24 hours, and answers `thông tin nào` with the concrete fields being rechecked plus any selected gift.

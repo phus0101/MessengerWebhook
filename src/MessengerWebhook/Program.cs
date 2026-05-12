@@ -339,6 +339,13 @@ builder.Services.AddHttpClient<MessengerWebhook.Services.SubIntent.GeminiSubInte
     .AddStandardResilienceHandler();
 builder.Services.AddScoped<MessengerWebhook.Services.SubIntent.ISubIntentClassifier, MessengerWebhook.Services.SubIntent.HybridSubIntentClassifier>();
 
+// Register sales services
+builder.Services.AddScoped<MessengerWebhook.Services.Sales.Context.ISalesContextResolver, MessengerWebhook.Services.Sales.Context.SalesContextResolver>();
+builder.Services.AddSingleton<MessengerWebhook.Services.Sales.Prompt.ISalesPromptBuilder, MessengerWebhook.Services.Sales.Prompt.SalesPromptBuilder>();
+builder.Services.AddScoped<MessengerWebhook.Services.Sales.Contact.IContactConfirmationFlow, MessengerWebhook.Services.Sales.Contact.ContactConfirmationFlow>();
+builder.Services.AddScoped<MessengerWebhook.Services.Sales.Reply.ISalesReplyOrchestrator, MessengerWebhook.Services.Sales.Reply.SalesReplyOrchestrator>();
+builder.Services.AddScoped<MessengerWebhook.Services.Sales.Reply.ISalesConsultationReplies, MessengerWebhook.Services.Sales.Reply.SalesConsultationReplies>();
+
 // Register state machine
 builder.Services.AddScoped<IStateMachine, ConversationStateMachine>();
 

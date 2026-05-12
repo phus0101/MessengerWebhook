@@ -12,6 +12,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Production Stabilization R-05: Sales Handler Final Cleanup (2026-05-12)
+
+**SalesConsultationReplies Service** (`Services/Sales/Reply/SalesConsultationReplies.cs`):
+- Extracted 9 consultation reply builder methods from `SalesStateHandlerBase` (333 lines)
+- Implements `ISalesConsultationReplies` interface
+- Methods: BuildProductAskReply, BuildProductDetailReply, BuildNeedCheckReply, BuildSizeGuideReply, BuildIngredientReply, BuildConcernReply, BuildGiftWithProductReply, BuildGiftWithoutProductReply, BuildPolicyAskReply
+- Constructor dependencies: `ISalesPromptBuilder`, `IProductGroundingService`, `ILogger`
+
+**SalesMessageParser Predicates** (`StateMachine/Handlers/SalesMessageParser.cs`):
+- Added 11 predicate methods extracted from base class
+- Methods: IsProductQuestion, IsDetailQuestion, IsSizeGuideQuestion, IsIngredientQuestion, IsConcernQuestion, IsNeedCheckQuestion, IsQualifyingPurchaseIntent, IsFollowUpOnDraftOrder, IsShippingPolicyAsk, IsGiftPolicyAsk, IsGenericBuyPhrase
+- Located in dedicated predicate parser for reusability and clarity
+
+**ConversationHistoryHelper Utility** (`Services/Sales/ConversationHistoryHelper.cs`):
+- Static utility class to deduplicate history-related operations
+- Methods: GetFormattedConversationHistory, AppendToConversationHistory
+- Used by SalesStateHandlerBase, SalesReplyOrchestrator, CompleteStateHandler
+- Eliminates code duplication in history building and formatting
+
+**SalesStateHandlerBase Refactoring**:
+- Reduced from 1365 → 840 LOC (38% reduction in this phase)
+- Total end-to-end reduction: 2425 → 840 LOC (65% reduction across all R phases)
+- Now delegates consultation reply building to ISalesConsultationReplies
+- Delegates predicate logic to SalesMessageParser
+- Delegates history operations to ConversationHistoryHelper
+- Retains core responsibilities: order-context recovery, conversation flow orchestration, state invariant validation
+- All production invariants preserved via 849 unit tests
+
+**DI Registration** (5 new registrations in `Program.cs`):
+- ISalesConsultationReplies → SalesConsultationReplies
+- ISalesContextResolver → SalesContextResolver
+- ISalesPromptBuilder → SalesPromptBuilder
+- IContactConfirmationFlow → ContactConfirmationFlow
+- ISalesReplyOrchestrator → SalesReplyOrchestrator
+- Plus ConversationHistoryHelper (static, no registration needed)
+
+**Test Coverage**:
+- Unit tests: 849/849 passing (100%)
+- Build status: 0 errors, 0 warnings
+- Regression coverage: Golden test suite from R-01
+
+**Files Modified Summary**:
+- `StateMachine/Handlers/SalesStateHandlerBase.cs` - refactored, 38% reduction
+- `StateMachine/Handlers/SalesMessageParser.cs` - added 11 predicate methods
+- `StateMachine/Handlers/CompleteStateHandler.cs` - integrated ConversationHistoryHelper
+- `Services/Sales/Reply/SalesReplyOrchestrator.cs` - integrated ConversationHistoryHelper
+- `Program.cs` - added 5 DI registrations
+
+**Documentation Updates**:
+- `docs/development-roadmap.md` - R-05 completion documented
+- `docs/codebase-summary.md` - LOC counts and service list updated
+
 ### Added - Production Stabilization R-02: Service Extraction (2026-05-09)
 
 **SalesContextResolver Service** (`Services/Sales/Context/SalesContextResolver.cs`):

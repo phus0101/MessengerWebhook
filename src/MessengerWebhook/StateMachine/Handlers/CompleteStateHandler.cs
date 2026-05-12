@@ -21,6 +21,7 @@ using MessengerWebhook.Services.Metrics;
 using MessengerWebhook.Services.Survey;
 using MessengerWebhook.Services.SubIntent;
 using MessengerWebhook.BackgroundServices;
+using MessengerWebhook.Services.Sales;
 using Microsoft.Extensions.Options;
 
 namespace MessengerWebhook.StateMachine.Handlers;
@@ -136,8 +137,8 @@ public class CompleteStateHandler : SalesStateHandlerBase
         }
 
         // Policy guard check before any draft order follow-up reply
-        AddToHistory(ctx, "user", message);
-        var history = GetHistory(ctx);
+        ConversationHistoryHelper.AddToHistory(ctx, "user", message, SalesBotOptions.ConversationHistoryLimit);
+        var history = ConversationHistoryHelper.GetHistory(ctx);
         var policyRequest = new PolicyGuardRequest(
             message,
             ctx.GetData<Guid?>("supportCaseId").HasValue,
@@ -156,7 +157,7 @@ public class CompleteStateHandler : SalesStateHandlerBase
         if (decision.Action == PolicyAction.SafeReply)
         {
             var safeReply = PolicyGuardOptions.SafeReplyMessage;
-            AddToHistory(ctx, "assistant", safeReply);
+            ConversationHistoryHelper.AddToHistory(ctx, "assistant", safeReply, SalesBotOptions.ConversationHistoryLimit);
             return safeReply;
         }
 
@@ -171,7 +172,7 @@ public class CompleteStateHandler : SalesStateHandlerBase
             ctx.SetData("supportCaseId", supportCase.Id);
             ctx.CurrentState = ConversationState.HumanHandoff;
             var handoffResponse = SalesBotOptions.UnsupportedFallbackMessage;
-            AddToHistory(ctx, "assistant", handoffResponse);
+            ConversationHistoryHelper.AddToHistory(ctx, "assistant", handoffResponse, SalesBotOptions.ConversationHistoryLimit);
             return handoffResponse;
         }
 
@@ -200,7 +201,7 @@ public class CompleteStateHandler : SalesStateHandlerBase
             var clarificationReply = string.IsNullOrWhiteSpace(draftCodeForClarification)
                 ? $"Dạ bên em sẽ kiểm tra lại giúp chị các thông tin như sản phẩm đã chốt, số lượng, SĐT, địa chỉ giao hàng, phí ship{giftSegment} trước khi xác nhận ạ."
                 : $"Dạ với đơn nháp {draftCodeForClarification}, bên em sẽ kiểm tra lại giúp chị sản phẩm đã chốt, số lượng, SĐT, địa chỉ giao hàng, phí ship{giftSegment} trước khi xác nhận ạ.";
-            AddToHistory(ctx, "assistant", clarificationReply);
+            ConversationHistoryHelper.AddToHistory(ctx, "assistant", clarificationReply, SalesBotOptions.ConversationHistoryLimit);
             return clarificationReply;
         }
 
@@ -208,7 +209,7 @@ public class CompleteStateHandler : SalesStateHandlerBase
         var response = string.IsNullOrWhiteSpace(draftCode)
             ? "Dạ em da len don nhap cho chi roi a. Ben em se kiem tra lai thong tin va lien he xac nhan nha."
             : $"Dạ don nhap {draftCode} cua chi dang cho ben em kiem tra lai thong tin nha.";
-        AddToHistory(ctx, "assistant", response);
+        ConversationHistoryHelper.AddToHistory(ctx, "assistant", response, SalesBotOptions.ConversationHistoryLimit);
         return response;
     }
 

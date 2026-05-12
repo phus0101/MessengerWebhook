@@ -23,6 +23,7 @@ using MessengerWebhook.Services.ResponseValidation.Models;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.Metrics;
 using MessengerWebhook.Services.Metrics.Models;
+using MessengerWebhook.Services.Sales;
 using MessengerWebhook.Services.Sales.Contact;
 using MessengerWebhook.Services.Sales.Context;
 using MessengerWebhook.Services.Sales.Prompt;
@@ -30,6 +31,7 @@ using MessengerWebhook.Services.Sales.Reply;
 using MessengerWebhook.Services.SubIntent;
 using MessengerWebhook.StateMachine.Models;
 using MessengerWebhook.Utilities;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using AiConversationMessage = MessengerWebhook.Services.AI.Models.ConversationMessage;
 
@@ -64,6 +66,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
     private readonly ISalesPromptBuilder _promptBuilder;
     private readonly IContactConfirmationFlow _contactFlow;
     private readonly ISalesReplyOrchestrator _replyOrchestrator;
+    private readonly ISalesConsultationReplies _consultationReplies;
 
     public abstract ConversationState HandledState { get; }
 
@@ -141,7 +144,8 @@ public abstract class SalesStateHandlerBase : IStateHandler
         ISalesContextResolver? contextResolver = null,
         ISalesPromptBuilder? promptBuilder = null,
         IContactConfirmationFlow? contactFlow = null,
-        ISalesReplyOrchestrator? replyOrchestrator = null)
+        ISalesReplyOrchestrator? replyOrchestrator = null,
+        ISalesConsultationReplies? consultationReplies = null)
     {
         GeminiService = geminiService;
         PolicyGuardService = policyGuardService;
@@ -187,6 +191,8 @@ public abstract class SalesStateHandlerBase : IStateHandler
             salesBotOptions,
             ragOptions,
             logger);
+        _consultationReplies = consultationReplies ?? new SalesConsultationReplies(
+            _contextResolver, _promptBuilder, productMappingService, NullLogger<SalesConsultationReplies>.Instance);
     }
 
     public async Task<string> HandleAsync(StateContext ctx, string message)
@@ -208,10 +214,10 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
     protected async Task<string> HandleSalesConversationAsync(StateContext ctx, string message)
     {
-        AddToHistory(ctx, "user", message);
+        ConversationHistoryHelper.AddToHistory(ctx, "user", message, SalesBotOptions.ConversationHistoryLimit);
 
         // Load remembered contact from previous orders on first message
-        var history = GetHistory(ctx);
+        var history = ConversationHistoryHelper.GetHistory(ctx);
         Logger.LogInformation("History count: {Count} for PSID: {PSID}", history.Count, ctx.FacebookPSID);
 
         if (history.Count <= 1) // First message in conversation
@@ -265,7 +271,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
         if (decision.Action == PolicyAction.SafeReply)
         {
             var safeReply = PolicyGuardOptions.SafeReplyMessage;
-            AddToHistory(ctx, "assistant", safeReply);
+            ConversationHistoryHelper.AddToHistory(ctx, "assistant", safeReply, SalesBotOptions.ConversationHistoryLimit);
             return safeReply;
         }
 
@@ -280,7 +286,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             ctx.SetData("supportCaseId", supportCase.Id);
             ctx.CurrentState = ConversationState.HumanHandoff;
             var handoffResponse = SalesBotOptions.UnsupportedFallbackMessage;
-            AddToHistory(ctx, "assistant", handoffResponse);
+            ConversationHistoryHelper.AddToHistory(ctx, "assistant", handoffResponse, SalesBotOptions.ConversationHistoryLimit);
             return handoffResponse;
         }
 
@@ -295,7 +301,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
         Logger.LogInformation(
             "After CaptureCustomerDetails - PSID: {PSID}, HasProduct: {HasProduct}, HasRequiredContact: {HasRequiredContact}, NeedsConfirmation: {NeedsConfirmation}",
             ctx.FacebookPSID,
-            HasSelectedProduct(ctx),
+            SalesMessageParser.HasSelectedProduct(ctx),
             SalesMessageParser.HasRequiredContact(ctx),
             ctx.GetData<bool?>("contactNeedsConfirmation") ?? false
         );
@@ -304,7 +310,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
                                             ctx.GetData<bool?>("contactNeedsConfirmation") != true;
         if (confirmedRememberedContactNow)
         {
-            if (!HasSelectedProduct(ctx))
+            if (!SalesMessageParser.HasSelectedProduct(ctx))
             {
                 Logger.LogInformation("Remembered contact confirmed without product context for PSID: {PSID}, attempting history recovery", ctx.FacebookPSID);
                 await _contextResolver.TryExtractProductFromHistoryAsync(ctx, message);
@@ -313,8 +319,8 @@ public abstract class SalesStateHandlerBase : IStateHandler
             string? contactConfirmedReply = null;
             if (SalesMessageParser.HasRequiredContact(ctx))
             {
-                contactConfirmedReply = HasSelectedProduct(ctx)
-                    ? await BuildFinalOrderConfirmationReplyAsync(ctx, message)
+                contactConfirmedReply = SalesMessageParser.HasSelectedProduct(ctx)
+                    ? await _consultationReplies.BuildFinalOrderConfirmationReplyAsync(ctx, message)
                     : "Dạ em đã dùng thông tin cũ cho đơn lần này rồi ạ, nhưng em chưa rõ chị muốn chốt sản phẩm nào. Chị nhắn lại tên hoặc mã sản phẩm giúp em nha.";
             }
             else
@@ -325,33 +331,33 @@ public abstract class SalesStateHandlerBase : IStateHandler
             if (!string.IsNullOrWhiteSpace(contactConfirmedReply))
             {
                 ctx.CurrentState = ConversationState.CollectingInfo;
-                AddToHistory(ctx, "assistant", contactConfirmedReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", contactConfirmedReply, SalesBotOptions.ConversationHistoryLimit);
                 return contactConfirmedReply;
             }
         }
 
-        if (history.Count <= 1 && IsPureGreeting(message) && !HasSelectedProduct(ctx))
+        if (history.Count <= 1 && SalesMessageParser.IsPureGreeting(message) && !SalesMessageParser.HasSelectedProduct(ctx))
         {
-            var greetingReply = await BuildFirstGreetingReplyAsync(ctx);
+            var greetingReply = await _consultationReplies.BuildFirstGreetingReplyAsync(ctx);
             ctx.CurrentState = ConversationState.Consulting;
             ctx.SetData("vipGreetingSent", true);
-            AddToHistory(ctx, "assistant", greetingReply);
+            ConversationHistoryHelper.AddToHistory(ctx, "assistant", greetingReply, SalesBotOptions.ConversationHistoryLimit);
             return greetingReply;
         }
 
         // AI Intent Detection - understand customer's true intent BEFORE building offer
-        var hasProduct = HasSelectedProduct(ctx);
+        var hasProduct = SalesMessageParser.HasSelectedProduct(ctx);
         var hasContact = SalesMessageParser.HasRequiredContact(ctx);
-        var hasBuyIntentPhrase = ContainsAnyPhrase(message,
+        var hasBuyIntentPhrase = SalesMessageParser.ContainsAnyPhrase(message,
             "lên đơn", "len don", "chốt đơn", "chot don", "chốt nhé", "chot nhe", "chốt nha", "chot nha",
             "mua luôn", "mua luon", "đặt hàng", "dat hang", "ok em", "oke em", "ok e",
             "lấy sản phẩm này", "lay san pham nay", "lấy nhé", "lay nhe", "lấy nha", "lay nha");
         var isRelatedSuggestionSelection = _contextResolver.IsRelatedSuggestionSelection(message);
-        var hasPendingFinalSummaryConfirmation = IsAwaitingFinalSummaryConfirmation(ctx);
+        var hasPendingFinalSummaryConfirmation = SalesMessageParser.IsAwaitingFinalSummaryConfirmation(ctx);
         var activeProductsForIntent = await _contextResolver.GetActiveSelectedProductsAsync(ctx);
         var intentGroundingContext = _productGroundingService.BuildContext(message, activeProductsForIntent, Array.Empty<GroundedProduct>());
         var recentHistory = _productGroundingService
-            .SanitizeAssistantHistory(GetHistory(ctx).TakeLast(3), intentGroundingContext.AllowedProducts)
+            .SanitizeAssistantHistory(ConversationHistoryHelper.GetHistory(ctx).TakeLast(3), intentGroundingContext.AllowedProducts)
             .ToList();
         var intentResult = await GeminiService.DetectIntentAsync(
             message,
@@ -365,7 +371,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
         if (isRelatedSuggestionSelection)
         {
             resolvedRelatedSuggestionSelection = await _contextResolver.TryResolveNumberedSuggestionSelectionAsync(ctx, message) != null;
-            hasProduct = HasSelectedProduct(ctx);
+            hasProduct = SalesMessageParser.HasSelectedProduct(ctx);
         }
 
         Logger.LogInformation(
@@ -427,16 +433,16 @@ public abstract class SalesStateHandlerBase : IStateHandler
         {
             Logger.LogInformation("Ordering flow detected without product in context for PSID: {PSID}, attempting to extract product from history", ctx.FacebookPSID);
             await _contextResolver.TryExtractProductFromHistoryAsync(ctx, message);
-            hasProduct = HasSelectedProduct(ctx);
+            hasProduct = SalesMessageParser.HasSelectedProduct(ctx);
         }
 
         if (isRelatedSuggestionSelection && hasProduct)
         {
-            var selectedSuggestionReply = await TryBuildOfferResponseAsync(ctx, message, Services.AI.Models.CustomerIntent.Browsing);
+            var selectedSuggestionReply = await _consultationReplies.TryBuildOfferResponseAsync(ctx, message, Services.AI.Models.CustomerIntent.Browsing);
             if (!string.IsNullOrWhiteSpace(selectedSuggestionReply))
             {
                 ctx.CurrentState = ConversationState.Consulting;
-                AddToHistory(ctx, "assistant", selectedSuggestionReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", selectedSuggestionReply, SalesBotOptions.ConversationHistoryLimit);
                 return selectedSuggestionReply;
             }
         }
@@ -446,27 +452,27 @@ public abstract class SalesStateHandlerBase : IStateHandler
             : (hasProduct ? ConversationState.CollectingInfo : ConversationState.Consulting);
 
         var isQuestioning = useAiIntent && intentResult.Intent == Services.AI.Models.CustomerIntent.Questioning;
-        var isProductQuestion = ContainsAnyPhrase(message,
+        var isProductQuestion = SalesMessageParser.ContainsAnyPhrase(message,
             "nói thêm", "noi them", "nói kỹ", "noi ky", "chi tiet", "thành phần", "thanh phan", "công dụng", "cong dung",
             "cách dùng", "cach dung", "phù hợp", "phu hop", "dùng sao", "dung sao");
-        var isShippingQuestion = ContainsAnyPhrase(message,
+        var isShippingQuestion = SalesMessageParser.ContainsAnyPhrase(message,
             "freeship", "free ship", "phí ship", "phi ship", "vận chuyển", "van chuyen", "ship");
-        var isPolicyQuestion = isShippingQuestion || ContainsAnyPhrase(message,
+        var isPolicyQuestion = isShippingQuestion || SalesMessageParser.ContainsAnyPhrase(message,
             "quà gì", "qua gi", "quà tặng", "qua tang", "tặng gì", "tang gi",
             "khuyến mãi", "khuyen mai", "ưu đãi", "uu dai", "giảm giá", "giam gia", "promo");
-        var isPriceQuestion = ContainsAnyPhrase(message,
+        var isPriceQuestion = SalesMessageParser.ContainsAnyPhrase(message,
             "giá bao nhiêu", "gia bao nhieu", "giá sao", "gia sao", "bao nhiêu tiền", "bao nhieu tien", "giá", "gia");
-        var isInventoryQuestion = ContainsAnyPhrase(message,
+        var isInventoryQuestion = SalesMessageParser.ContainsAnyPhrase(message,
             "còn hàng", "con hang", "hết hàng", "het hang", "còn không", "con khong", "hết chưa", "het chua",
             "sẵn hàng", "san hang", "có sẵn", "co san", "out stock", "in stock", "tồn kho", "ton kho");
         var isContactMemoryQuestion = _contactFlow.IsContactMemoryQuestion(message);
         var isPendingContactClarification = _contactFlow.IsPendingClarificationQuestion(ctx, message);
         var isGenericPendingContactBuyReply = _contactFlow.IsGenericBuyContinuationPendingConfirmation(ctx, message);
-        var isOrderEstimateQuestion = ContainsAnyPhrase(message,
+        var isOrderEstimateQuestion = SalesMessageParser.ContainsAnyPhrase(message,
             "tổng tiền", "tong tien", "tổng cộng", "tong cong", "bao nhiêu sản phẩm", "bao nhieu san pham", "bao nhiêu món", "bao nhieu mon");
-        var isAmbiguousProductReference = HasAmbiguousProductReference(message);
+        var isAmbiguousProductReference = SalesMessageParser.HasAmbiguousProductReference(message);
         var hasQuestionMarker = message.Contains('?');
-        var requiresProductGrounding = RequiresProductGrounding(
+        var requiresProductGrounding = SalesMessageParser.RequiresProductGrounding(
             message,
             isProductQuestion,
             isPriceQuestion,
@@ -481,18 +487,18 @@ public abstract class SalesStateHandlerBase : IStateHandler
             var finalSummaryReply = await HandlePendingFinalSummaryConfirmationAsync(ctx, message, useAiIntent ? intentResult.Intent : null);
             if (!string.IsNullOrWhiteSpace(finalSummaryReply))
             {
-                AddToHistory(ctx, "assistant", finalSummaryReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", finalSummaryReply, SalesBotOptions.ConversationHistoryLimit);
                 return finalSummaryReply;
             }
         }
 
         if (isAmbiguousProductReference)
         {
-            var ambiguousReferenceReply = await BuildAmbiguousProductClarificationReplyAsync(ctx);
+            var ambiguousReferenceReply = await _consultationReplies.BuildAmbiguousProductClarificationReplyAsync(ctx);
             if (!string.IsNullOrWhiteSpace(ambiguousReferenceReply))
             {
                 ctx.CurrentState = ConversationState.Consulting;
-                AddToHistory(ctx, "assistant", ambiguousReferenceReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", ambiguousReferenceReply, SalesBotOptions.ConversationHistoryLimit);
                 return ambiguousReferenceReply;
             }
         }
@@ -503,7 +509,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             if (!string.IsNullOrWhiteSpace(contactMemoryReply))
             {
                 ctx.CurrentState = ConversationState.CollectingInfo;
-                AddToHistory(ctx, "assistant", contactMemoryReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", contactMemoryReply, SalesBotOptions.ConversationHistoryLimit);
                 return contactMemoryReply;
             }
         }
@@ -514,7 +520,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             if (!string.IsNullOrWhiteSpace(contactClarificationReply))
             {
                 ctx.CurrentState = ConversationState.CollectingInfo;
-                AddToHistory(ctx, "assistant", contactClarificationReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", contactClarificationReply, SalesBotOptions.ConversationHistoryLimit);
                 return contactClarificationReply;
             }
         }
@@ -525,73 +531,73 @@ public abstract class SalesStateHandlerBase : IStateHandler
             if (!string.IsNullOrWhiteSpace(contactConfirmationReply))
             {
                 ctx.CurrentState = ConversationState.CollectingInfo;
-                AddToHistory(ctx, "assistant", contactConfirmationReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", contactConfirmationReply, SalesBotOptions.ConversationHistoryLimit);
                 return contactConfirmationReply;
             }
         }
 
         if (isOrderEstimateQuestion)
         {
-            var orderEstimateReply = await BuildOrderEstimateReplyAsync(ctx, message);
+            var orderEstimateReply = await _consultationReplies.BuildOrderEstimateReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(orderEstimateReply))
             {
                 ctx.CurrentState = ConversationState.Consulting;
-                AddToHistory(ctx, "assistant", orderEstimateReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", orderEstimateReply, SalesBotOptions.ConversationHistoryLimit);
                 return orderEstimateReply;
             }
         }
 
         if (isProductQuestion || (isQuestioning && !isPolicyQuestion && !isPriceQuestion && !isInventoryQuestion && !isContactMemoryQuestion && !isPendingContactClarification && !isOrderEstimateQuestion && (hasQuestionMarker || ctx.CurrentState == ConversationState.Consulting)))
         {
-            var consultReply = await BuildProductConsultationReplyAsync(ctx, message);
+            var consultReply = await _consultationReplies.BuildProductConsultationReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(consultReply))
             {
                 ctx.CurrentState = ConversationState.Consulting;
-                AddToHistory(ctx, "assistant", consultReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", consultReply, SalesBotOptions.ConversationHistoryLimit);
                 return consultReply;
             }
         }
 
         if (isPolicyQuestion || (isQuestioning && hasQuestionMarker && hasBuyIntentPhrase == false && !isPriceQuestion && !isInventoryQuestion && !isOrderEstimateQuestion))
         {
-            var shippingReply = await BuildShippingConsultationReplyAsync(ctx, message);
+            var shippingReply = await _consultationReplies.BuildShippingConsultationReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(shippingReply))
             {
                 ctx.CurrentState = ConversationState.Consulting;
-                AddToHistory(ctx, "assistant", shippingReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", shippingReply, SalesBotOptions.ConversationHistoryLimit);
                 return shippingReply;
             }
         }
 
         if (isInventoryQuestion)
         {
-            var inventoryReply = await BuildInventoryConsultationReplyAsync(ctx, message);
+            var inventoryReply = await _consultationReplies.BuildInventoryConsultationReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(inventoryReply))
             {
                 ctx.CurrentState = ConversationState.Consulting;
-                AddToHistory(ctx, "assistant", inventoryReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", inventoryReply, SalesBotOptions.ConversationHistoryLimit);
                 return inventoryReply;
             }
 
             var fallbackReply = _promptBuilder.BuildProductGroundingFallbackReply();
             ctx.CurrentState = ConversationState.Consulting;
-            AddToHistory(ctx, "assistant", fallbackReply);
+            ConversationHistoryHelper.AddToHistory(ctx, "assistant", fallbackReply, SalesBotOptions.ConversationHistoryLimit);
             return fallbackReply;
         }
 
         if (isPriceQuestion)
         {
-            var priceReply = await BuildPriceConsultationReplyAsync(ctx, message);
+            var priceReply = await _consultationReplies.BuildPriceConsultationReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(priceReply))
             {
                 ctx.CurrentState = ConversationState.Consulting;
-                AddToHistory(ctx, "assistant", priceReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", priceReply, SalesBotOptions.ConversationHistoryLimit);
                 return priceReply;
             }
 
             var fallbackReply = _promptBuilder.BuildProductGroundingFallbackReply();
             ctx.CurrentState = ConversationState.Consulting;
-            AddToHistory(ctx, "assistant", fallbackReply);
+            ConversationHistoryHelper.AddToHistory(ctx, "assistant", fallbackReply, SalesBotOptions.ConversationHistoryLimit);
             return fallbackReply;
         }
 
@@ -601,7 +607,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             if (!string.IsNullOrWhiteSpace(contactReply))
             {
                 ctx.CurrentState = ConversationState.CollectingInfo;
-                AddToHistory(ctx, "assistant", contactReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", contactReply, SalesBotOptions.ConversationHistoryLimit);
                 return contactReply;
             }
         }
@@ -634,11 +640,11 @@ public abstract class SalesStateHandlerBase : IStateHandler
                 "Customer has all required info and explicit order intent for PSID: {PSID}, building final confirmation summary",
                 ctx.FacebookPSID);
 
-            var finalSummaryReply = await BuildFinalOrderConfirmationReplyAsync(ctx, message);
+            var finalSummaryReply = await _consultationReplies.BuildFinalOrderConfirmationReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(finalSummaryReply))
             {
                 ctx.CurrentState = ConversationState.CollectingInfo;
-                AddToHistory(ctx, "assistant", finalSummaryReply);
+                ConversationHistoryHelper.AddToHistory(ctx, "assistant", finalSummaryReply, SalesBotOptions.ConversationHistoryLimit);
                 return finalSummaryReply;
             }
         }
@@ -664,22 +670,22 @@ public abstract class SalesStateHandlerBase : IStateHandler
                 {
                     Logger.LogInformation("No product in context before creating draft order for PSID: {PSID}, attempting to extract from history", ctx.FacebookPSID);
                     await _contextResolver.TryExtractProductFromHistoryAsync(ctx, message);
-                    hasProduct = HasSelectedProduct(ctx);
+                    hasProduct = SalesMessageParser.HasSelectedProduct(ctx);
                 }
 
                 if (!hasProduct)
                 {
                     Logger.LogWarning("Cannot create draft order without product for PSID: {PSID}", ctx.FacebookPSID);
                     var noProductReply = "Dạ em chưa rõ chị muốn đặt sản phẩm nào ạ. Chị cho em biết tên sản phẩm để em lên đơn nhé.";
-                    AddToHistory(ctx, "assistant", noProductReply);
+                    ConversationHistoryHelper.AddToHistory(ctx, "assistant", noProductReply, SalesBotOptions.ConversationHistoryLimit);
                     return noProductReply;
                 }
 
-                var finalSummaryReply = await BuildFinalOrderConfirmationReplyAsync(ctx, message);
+                var finalSummaryReply = await _consultationReplies.BuildFinalOrderConfirmationReplyAsync(ctx, message);
                 if (!string.IsNullOrWhiteSpace(finalSummaryReply))
                 {
                     ctx.CurrentState = ConversationState.CollectingInfo;
-                    AddToHistory(ctx, "assistant", finalSummaryReply);
+                    ConversationHistoryHelper.AddToHistory(ctx, "assistant", finalSummaryReply, SalesBotOptions.ConversationHistoryLimit);
                     return finalSummaryReply;
                 }
             }
@@ -689,7 +695,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             var missingInfo = _promptBuilder.GetMissingContactInfo(ctx);
             var missing = string.Join(" và ", missingInfo);
             var autoCloseReply = $"Vậy là mình chốt đơn này luôn nha chị. Chị cho em xin {missing} để em lên đơn ạ.";
-            AddToHistory(ctx, "assistant", autoCloseReply);
+            ConversationHistoryHelper.AddToHistory(ctx, "assistant", autoCloseReply, SalesBotOptions.ConversationHistoryLimit);
             return autoCloseReply;
         }
 
@@ -698,14 +704,14 @@ public abstract class SalesStateHandlerBase : IStateHandler
         if (useAiIntent && (intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy ||
                             intentResult.Intent == Services.AI.Models.CustomerIntent.Browsing))
         {
-            offerResponse = await TryBuildOfferResponseAsync(ctx, message, intentResult.Intent);
+            offerResponse = await _consultationReplies.TryBuildOfferResponseAsync(ctx, message, intentResult.Intent);
         }
 
         // Show product offer if available and intent allows it
         if (!string.IsNullOrWhiteSpace(offerResponse))
         {
             ctx.CurrentState = nextState;
-            AddToHistory(ctx, "assistant", offerResponse);
+            ConversationHistoryHelper.AddToHistory(ctx, "assistant", offerResponse, SalesBotOptions.ConversationHistoryLimit);
             return offerResponse;
         }
 
@@ -722,7 +728,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
                 : _promptBuilder.BuildProductGroundingFallbackReply();
 
             ctx.CurrentState = ConversationState.Consulting;
-            AddToHistory(ctx, "assistant", fallbackReply);
+            ConversationHistoryHelper.AddToHistory(ctx, "assistant", fallbackReply, SalesBotOptions.ConversationHistoryLimit);
             return fallbackReply;
         }
 
@@ -736,36 +742,13 @@ public abstract class SalesStateHandlerBase : IStateHandler
             Intent = useAiIntent ? intentResult.Intent : null,
             SubIntent = subIntent
         });
-        AddToHistory(ctx, "assistant", reply);
+        ConversationHistoryHelper.AddToHistory(ctx, "assistant", reply, SalesBotOptions.ConversationHistoryLimit);
         return reply;
     }
 
     protected string BuildHumanHandoffReply()
     {
         return SalesBotOptions.UnsupportedFallbackMessage;
-    }
-
-    // KEEP IN SYNC with SalesReplyOrchestrator.AddToHistory / GetHistory until R-05
-    // collapses both copies into a shared ConversationHistoryStore.
-    protected void AddToHistory(StateContext ctx, string role, string content)
-    {
-        var history = ctx.GetData<List<AiConversationMessage>>("conversationHistory") ?? new List<AiConversationMessage>();
-        history.Add(new AiConversationMessage { Role = role, Content = content, Timestamp = DateTime.UtcNow });
-
-        // Enforce conversation history limit to prevent memory leak
-        var limit = SalesBotOptions.ConversationHistoryLimit;
-        if (history.Count > limit)
-        {
-            // Keep most recent messages
-            history = history.Skip(history.Count - limit).ToList();
-        }
-
-        ctx.SetData("conversationHistory", history);
-    }
-
-    protected List<AiConversationMessage> GetHistory(StateContext ctx)
-    {
-        return ctx.GetData<List<AiConversationMessage>>("conversationHistory") ?? new List<AiConversationMessage>();
     }
 
     private PolicyGuardRequest BuildPolicyGuardRequest(
@@ -800,169 +783,6 @@ public abstract class SalesStateHandlerBase : IStateHandler
             selectedProductCodes);
     }
 
-    private async Task<string?> TryBuildOfferResponseAsync(
-        StateContext ctx,
-        string message,
-        Services.AI.Models.CustomerIntent intent)
-    {
-        Logger.LogInformation(
-            "TryBuildOfferResponseAsync called for PSID: {PSID}, Intent: {Intent}, MessageLength={MessageLength}",
-            ctx.FacebookPSID, intent, message.Length);
-
-        var product = await _contextResolver.ResolveCurrentProductAsync(ctx, message);
-        if (product == null)
-        {
-            Logger.LogWarning(
-                "No product found for PSID: {PSID}, returning null",
-                ctx.FacebookPSID);
-            return null;
-        }
-
-        await _contextResolver.RefreshSelectedProductPolicyContextAsync(ctx, message);
-
-        var productCodes = ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>();
-        if (productCodes.Count == 0)
-        {
-            productCodes = new List<string> { product.Code };
-            ctx.SetData("selectedProductCodes", productCodes);
-        }
-
-        var giftCode = ctx.GetData<string>("selectedGiftCode");
-        var giftName = ctx.GetData<string>("selectedGiftName");
-        Gift? gift = null;
-        if (!string.IsNullOrWhiteSpace(giftCode) || !string.IsNullOrWhiteSpace(giftName))
-        {
-            gift = new Gift { Code = giftCode ?? string.Empty, Name = giftName ?? string.Empty };
-        }
-
-        var snapshot = await _contextResolver.BuildCommercialFactSnapshotForPolicyAsync(ctx, product);
-        var priceMessage = snapshot?.PriceConfirmed == true && snapshot.ConfirmedPrice.HasValue
-            ? $"Dạ bên em có {product.Name}, giá {snapshot.ConfirmedPrice.Value:N0}đ ạ."
-            : $"Dạ bên em có {product.Name} ạ. Giá chính xác em cần chốt theo phiên bản hiện tại rồi báo chị chuẩn hơn nha.";
-        var readyToBuyPriceMessage = snapshot?.PriceConfirmed == true && snapshot.ConfirmedPrice.HasValue
-            ? $"Dạ em lên thông tin cho {product.Name} rồi nha, giá {snapshot.ConfirmedPrice.Value:N0}đ ạ."
-            : $"Dạ em lên thông tin cho {product.Name} rồi nha. Giá chính xác em cần chốt theo phiên bản hiện tại rồi báo chị chuẩn hơn nha.";
-        var shippingMessage = "Về phí ship, em cần kiểm tra lại theo địa chỉ cụ thể của chị để báo chính xác nha.";
-        var giftMessage = gift == null
-            ? "Hiện tại em chưa thấy quà tặng nào được xác nhận cho sản phẩm này ạ."
-            : $"Quà tặng kèm theo là {gift.Name} ạ. Nếu có ưu đãi khác, em sẽ cập nhật thêm khi chốt đơn.";
-
-        if (intent == Services.AI.Models.CustomerIntent.Browsing)
-        {
-            var lines = new List<string>
-            {
-                priceMessage,
-                string.Empty,
-                shippingMessage,
-                string.Empty,
-                giftMessage,
-                string.Empty,
-                "Chị muốn em tư vấn thêm về công dụng hay cách dùng không ạ?"
-            };
-
-            return string.Join(Environment.NewLine, lines);
-        }
-
-        var readyToBuyLines = new List<string>
-        {
-            readyToBuyPriceMessage,
-            string.Empty,
-            shippingMessage,
-            string.Empty,
-            giftMessage,
-            string.Empty,
-            SalesMessageParser.BuildMissingInfoPrompt(ctx)
-        };
-
-        return string.Join(Environment.NewLine, readyToBuyLines);
-    }
-
-
-    private async Task<string?> BuildProductConsultationReplyAsync(StateContext ctx, string message)
-    {
-        var product = await _contextResolver.GetActiveProductOrResolveAsync(ctx, message);
-        if (product == null)
-        {
-            return null;
-        }
-
-        ctx.SetData("inventory_confirmed", false);
-
-        var lines = new List<string>
-        {
-            $"Dạ {product.Name} bên em là {_promptBuilder.NormalizeSentence(product.Description)}"
-        };
-
-        if (product.Code.Equals("KCN", StringComparison.OrdinalIgnoreCase))
-        {
-            lines.Add("Sản phẩm này hợp khi chị hay đi ngoài trời vì ưu tiên bảo vệ da trước nắng và tia UV.");
-        }
-        else if (product.Code.Equals("KL", StringComparison.OrdinalIgnoreCase))
-        {
-            lines.Add("Dòng này thiên về cấp ẩm và giữ da mềm hơn, hợp khi da dễ khô hoặc thiếu ẩm do nắng gió.");
-        }
-        else if (product.Code.Equals("MN", StringComparison.OrdinalIgnoreCase))
-        {
-            lines.Add("Dòng này thiên về dưỡng ẩm và phục hồi da qua đêm, hợp khi da đang khô hoặc thiếu ẩm.");
-        }
-
-        lines.Add($"Nếu chị muốn em nói kỹ hơn về công dụng chính hoặc cách dùng của {product.Name} thì em tư vấn tiếp ạ.");
-        return string.Join(Environment.NewLine, lines);
-    }
-
-    private async Task<string?> BuildShippingConsultationReplyAsync(StateContext ctx, string message)
-    {
-        var lockedProductCode = (ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>()).FirstOrDefault();
-        var product = await _contextResolver.GetActiveProductOrResolveAsync(ctx, message);
-        var effectiveProductCode = product?.Code ?? lockedProductCode;
-        if (string.IsNullOrWhiteSpace(effectiveProductCode) || product == null)
-        {
-            return null;
-        }
-
-        var productCodes = new List<string> { effectiveProductCode };
-        ctx.SetData("selectedProductCodes", productCodes);
-        await _contextResolver.SyncActiveProductPolicyContextAsync(ctx, effectiveProductCode);
-
-        var snapshot = await _contextResolver.BuildCommercialFactSnapshotForPolicyAsync(ctx, product);
-        ctx.SetData("shipping_policy_confirmed", false);
-        ctx.SetData("promotion_confirmed", false);
-        ctx.SetData("inventory_confirmed", snapshot?.InventoryConfirmed == true);
-
-        var shippingMessage = "em chưa dám chốt freeship hay phí ship ngay lúc này, để em kiểm tra lại theo đơn cụ thể rồi báo chị chính xác ạ";
-        var giftMessage = snapshot?.GiftConfirmed == true
-            ? $"Theo dữ liệu nội bộ hiện tại thì quà tặng đang gắn với sản phẩm này là {snapshot.GiftName} ạ."
-            : "Hiện tại em chưa thấy quà tặng nào được xác nhận rõ cho sản phẩm này ạ.";
-        var productLabel = product.Name;
-
-        return $"Dạ với {productLabel}, {shippingMessage} {giftMessage} Nếu chị cần em tính lại theo đơn cụ thể hoặc hỗ trợ chốt đơn thì em làm tiếp cho mình nha.";
-    }
-
-    private async Task<string?> BuildOrderEstimateReplyAsync(StateContext ctx, string message)
-    {
-        var product = await _contextResolver.GetActiveProductOrResolveAsync(ctx, message);
-        if (product == null)
-        {
-            return null;
-        }
-
-        await _contextResolver.RefreshSelectedProductPolicyContextAsync(ctx, message);
-
-        var quantities = ctx.GetData<Dictionary<string, int>>("selectedProductQuantities")
-                         ?? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var quantity = quantities.TryGetValue(product.Code, out var selectedQuantity) && selectedQuantity > 0
-            ? selectedQuantity
-            : 1;
-
-        var giftName = ctx.GetData<string>("selectedGiftName");
-        var merchandiseTotal = product.BasePrice * quantity;
-        var totalProducts = quantity + (string.IsNullOrWhiteSpace(giftName) ? 0 : 1);
-        var unitLabel = quantity > 1 ? $"{quantity} hũ {product.Name}" : $"1 hũ {product.Name}";
-        var giftLabel = string.IsNullOrWhiteSpace(giftName) ? string.Empty : $" + 1 quà tặng {giftName}";
-
-        return $"Dạ nếu mình chốt {product.Name} thì đơn đang có tổng cộng {totalProducts} sản phẩm gồm {unitLabel}{giftLabel} ạ. Tạm tính tiền hàng hiện tại là {merchandiseTotal:N0}đ, còn phí ship và tổng đơn cuối em cần kiểm tra lại theo đơn cụ thể rồi báo chị chính xác nha.";
-    }
-
     protected async Task<string?> TryCreateDraftConfirmationAsync(StateContext ctx, string message)
     {
         await _contextResolver.RefreshSelectedProductPolicyContextAsync(ctx, message);
@@ -977,123 +797,15 @@ public abstract class SalesStateHandlerBase : IStateHandler
         return _promptBuilder.BuildDraftConfirmation(ctx, draft);
     }
 
-    private async Task<string> BuildFirstGreetingReplyAsync(StateContext ctx)
-    {
-        var isReturningCustomer = ctx.GetData<bool?>("isReturningCustomer") == true;
-        var customerName = ctx.GetData<string>("customerName") ?? ctx.GetData<string>("rememberedCustomerName");
-        var vipProfile = await _contextResolver.GetVipProfileAsync(ctx);
-
-        if (vipProfile?.IsVip == true)
-        {
-            return !string.IsNullOrWhiteSpace(customerName)
-                ? $"Dạ em chào chị {customerName} ạ, lâu rồi mới thấy chị ghé lại. Hôm nay chị đang cần em tư vấn gì để em hỗ trợ mình nhanh nha?"
-                : "Dạ em chào chị ạ, lâu rồi mới thấy chị ghé lại. Hôm nay chị đang cần em tư vấn gì để em hỗ trợ mình nhanh nha?";
-        }
-
-        if (isReturningCustomer)
-        {
-            return !string.IsNullOrWhiteSpace(customerName)
-                ? $"Dạ em chào chị {customerName} ạ, em rất vui được hỗ trợ chị lại nè. Hôm nay chị đang cần em tư vấn sản phẩm nào ạ?"
-                : "Dạ em chào chị ạ, em rất vui được hỗ trợ chị lại nè. Hôm nay chị đang cần em tư vấn sản phẩm nào ạ?";
-        }
-
-        return "Dạ em chào chị ạ. Hôm nay chị đang cần em tư vấn gì để em hỗ trợ mình nhanh nha?";
-    }
-
-    private static bool IsPureGreeting(string message)
-    {
-        var normalized = message.Trim().ToLowerInvariant();
-        return normalized is "hi"
-            or "hello"
-            or "alo"
-            or "alô"
-            or "chao"
-            or "chào"
-            or "hi shop"
-            or "hi sop"
-            or "hi sốp"
-            or "hello shop"
-            or "chao shop"
-            or "chào shop"
-            or "chao sop"
-            or "chào sốp"
-            or "chao em"
-            or "chào em";
-    }
-
-    private static bool ContainsAnyPhrase(string message, params string[] phrases)
-    {
-        return phrases.Any(phrase => message.Contains(phrase, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static bool RequiresProductGrounding(
-        string message,
-        bool isProductQuestion,
-        bool isPriceQuestion,
-        bool isInventoryQuestion,
-        bool isPolicyQuestion,
-        bool isQuestioning,
-        bool hasQuestionMarker,
-        ConversationState currentState)
-    {
-        if (isPriceQuestion || isInventoryQuestion || isProductQuestion || IsCatalogListingQuestion(message))
-        {
-            return true;
-        }
-
-        return isQuestioning &&
-               !isPolicyQuestion &&
-               (hasQuestionMarker || currentState == ConversationState.Consulting) &&
-               HasProductCategoryReference(message);
-    }
-
-    private static bool RequiresProductGrounding(string message)
-    {
-        return IsCatalogListingQuestion(message) ||
-               HasProductCategoryReference(message) && ContainsAnyPhrase(message,
-                   "giá", "gia", "công dụng", "cong dung", "tác dụng", "tac dung", "thành phần", "thanh phan",
-                   "cách dùng", "cach dung", "còn hàng", "con hang", "hết hàng", "het hang", "tồn kho", "ton kho");
-    }
-
-    private static bool IsCatalogListingQuestion(string message)
-    {
-        if (ContainsAnyPhrase(message, "catalog", "danh sách", "danh sach", "sản phẩm nào", "san pham nao"))
-        {
-            return true;
-        }
-
-        var hasListingIntent = ContainsAnyPhrase(message,
-            "các loại", "cac loai", "có loại nào", "co loai nao", "có những loại", "co nhung loai",
-            "loại nào", "loai nao", "dòng nào", "dong nao", "mẫu nào", "mau nao");
-        var asksShopHas = ContainsAnyPhrase(message, "bên em có", "ben em co", "shop có", "shop co");
-
-        return hasListingIntent && (asksShopHas || HasProductCategoryReference(message))
-            || asksShopHas && HasProductCategoryReference(message);
-    }
-
-    private static bool HasProductCategoryReference(string message)
-    {
-        return ContainsAnyPhrase(message,
-            "sản phẩm", "san pham", "mặt nạ", "mat na", "kem", "serum", "toner", "sữa rửa mặt", "sua rua mat",
-            "chống nắng", "chong nang", "dưỡng ẩm", "duong am", "mỹ phẩm", "my pham");
-    }
-
-    private static bool IsAwaitingFinalSummaryConfirmation(StateContext ctx)
-    {
-        return ctx.GetData<bool?>("awaitingFinalSummaryConfirmation") == true;
-    }
-
     private async Task<string?> HandlePendingFinalSummaryConfirmationAsync(
         StateContext ctx,
         string message,
         Services.AI.Models.CustomerIntent? intent)
     {
-        if (!IsAwaitingFinalSummaryConfirmation(ctx))
-        {
+        if (!SalesMessageParser.IsAwaitingFinalSummaryConfirmation(ctx))
             return null;
-        }
 
-        if (HasSelectedProduct(ctx) && HasExplicitFinalSummaryConfirmation(message, intent))
+        if (SalesMessageParser.HasSelectedProduct(ctx) && SalesMessageParser.HasExplicitFinalSummaryConfirmation(message, intent))
         {
             ctx.SetData("awaitingFinalSummaryConfirmation", false);
             ctx.SetData("finalSummaryShownAt", null);
@@ -1101,265 +813,11 @@ public abstract class SalesStateHandlerBase : IStateHandler
             return await TryCreateDraftConfirmationAsync(ctx, message);
         }
 
-        if (HasSelectedProduct(ctx) && LooksLikeFinalSummaryClarification(message))
-        {
-            return await BuildFinalOrderConfirmationReplyAsync(ctx, message, true);
-        }
+        if (SalesMessageParser.HasSelectedProduct(ctx) && SalesMessageParser.LooksLikeFinalSummaryClarification(message))
+            return await _consultationReplies.BuildFinalOrderConfirmationReplyAsync(ctx, message, true);
 
         ctx.SetData("final_price_summary_ready", false);
         return null;
-    }
-
-    private async Task<string?> BuildPriceConsultationReplyAsync(StateContext ctx, string message)
-    {
-        var product = await _contextResolver.GetActiveProductOrResolveAsync(ctx, message);
-        if (product == null)
-        {
-            return null;
-        }
-
-        var snapshot = await _contextResolver.BuildCommercialFactSnapshotAsync(ctx, product);
-        if (snapshot == null)
-        {
-            return null;
-        }
-
-        ctx.SetData("price_confirmed", snapshot.PriceConfirmed);
-        ctx.SetData("promotion_confirmed", false);
-        ctx.SetData("inventory_confirmed", snapshot.InventoryConfirmed);
-
-        var productLabel = snapshot.PriceLabel == null
-            ? product.Name
-            : $"{product.Name} bản {snapshot.PriceLabel}";
-        var lines = new List<string>();
-
-        if (snapshot.PriceConfirmed && snapshot.ConfirmedPrice.HasValue)
-        {
-            lines.Add($"Dạ {productLabel} hiện bên em đang để giá {snapshot.ConfirmedPrice.Value:N0}đ theo dữ liệu nội bộ ạ.");
-        }
-        else
-        {
-            lines.Add($"Dạ với {product.Name}, em chưa dám chốt giá chính xác ngay lúc này ạ. Em cần kiểm tra lại đúng phiên bản và dữ liệu runtime hiện tại rồi báo chị chuẩn hơn nha.");
-        }
-
-        if (snapshot.GiftConfirmed)
-        {
-            lines.Add($"Quà tặng đang gắn theo dữ liệu nội bộ hiện tại là {snapshot.GiftName}, còn ưu đãi khác thì em cần kiểm tra lại ở lúc chốt đơn để báo chị chính xác nha.");
-        }
-        else
-        {
-            lines.Add("Ưu đãi hiện tại em sẽ kiểm tra lại theo chính sách áp dụng ở lúc chốt đơn để báo chị chính xác nha.");
-        }
-
-        lines.Add("Nếu chị muốn em tính luôn tổng tiền tạm tính hoặc hỗ trợ chốt đơn thì chị nhắn em nha.");
-        return string.Join(" ", lines);
-    }
-
-    private async Task<string?> BuildInventoryConsultationReplyAsync(StateContext ctx, string message)
-    {
-        var product = await _contextResolver.GetActiveProductOrResolveAsync(ctx, message);
-        if (product == null)
-        {
-            return null;
-        }
-
-        var snapshot = await _contextResolver.BuildCommercialFactSnapshotAsync(ctx, product);
-        if (snapshot == null)
-        {
-            return null;
-        }
-
-        ctx.SetData("inventory_confirmed", snapshot.InventoryConfirmed);
-
-        if (!snapshot.InventoryConfirmed)
-        {
-            return $"Dạ với {product.Name}, em chưa xác nhận tồn kho chắc ngay lúc này ạ. Để em kiểm tra lại theo phiên bản cụ thể rồi báo chị chính xác nha.";
-        }
-
-        if (snapshot.IsInStock == true)
-        {
-            return $"Dạ với {product.Name} bản {snapshot.PriceLabel}, theo dữ liệu nội bộ hiện tại thì còn khoảng {snapshot.StockQuantity} sản phẩm ạ.";
-        }
-
-        return $"Dạ với {product.Name} bản {snapshot.PriceLabel}, theo dữ liệu nội bộ hiện tại thì em đang chưa thấy còn hàng ạ. Nếu chị muốn em kiểm tra phương án khác thì em hỗ trợ tiếp nha.";
-    }
-
-    private static bool HasAmbiguousProductReference(string message)
-    {
-        var normalized = SalesTextHelper.NormalizeForMatching(message);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return false;
-        }
-
-        if (!Regex.IsMatch(normalized, @"\b([2-9]|1\d|20)\s+san pham\b", RegexOptions.CultureInvariant))
-        {
-            return normalized.Contains("san pham do", StringComparison.Ordinal)
-                || normalized.Contains("mon do", StringComparison.Ordinal)
-                || normalized.Contains("cai kia", StringComparison.Ordinal)
-                || normalized.Contains("san pham kia", StringComparison.Ordinal)
-                || normalized.Contains("mon kia", StringComparison.Ordinal)
-                || normalized.Contains("cai do", StringComparison.Ordinal)
-                || normalized.Contains("ship cho cu", StringComparison.Ordinal)
-                || normalized.Contains("dia chi cu", StringComparison.Ordinal);
-        }
-
-        return true;
-    }
-
-    private async Task<string?> BuildAmbiguousProductClarificationReplyAsync(StateContext ctx)
-    {
-        var recentMessages = GetHistory(ctx).TakeLast(10).ToList();
-        var userCandidates = await _contextResolver.CollectHistoryProductCandidatesAsync(recentMessages, "user");
-        var assistantCandidates = await _contextResolver.CollectHistoryProductCandidatesAsync(recentMessages, "assistant");
-        var candidates = userCandidates
-            .Concat(assistantCandidates)
-            .GroupBy(x => x.Product.Code, StringComparer.OrdinalIgnoreCase)
-            .Select(x => x.First())
-            .Take(3)
-            .ToList();
-
-        if (candidates.Count <= 1)
-        {
-            return null;
-        }
-
-        var labels = candidates.Select(x => x.Product.Name).ToList();
-        var joinedLabels = labels.Count == 2
-            ? $"{labels[0]} hay {labels[1]}"
-            : string.Join(", ", labels.Take(labels.Count - 1)) + $" hay {labels.Last()}";
-
-        return $"Dạ để em chốt đúng ý chị thì chị giúp em xác nhận mình đang nói tới {joinedLabels} ạ?";
-    }
-
-    private async Task<string?> BuildFinalOrderConfirmationReplyAsync(StateContext ctx, string message, bool forceResend = false)
-    {
-        if (!forceResend && IsAwaitingFinalSummaryConfirmation(ctx))
-        {
-            return null;
-        }
-
-        await _contextResolver.RefreshSelectedProductPolicyContextAsync(ctx, message);
-
-        var selectedCodes = ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>();
-        if (selectedCodes.Count == 0)
-        {
-            return null;
-        }
-
-        var products = new List<Product>();
-        foreach (var productCode in selectedCodes.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            var product = await ProductMappingService.GetActiveProductByCodeAsync(productCode);
-            if (product != null)
-            {
-                products.Add(product);
-            }
-        }
-
-        if (products.Count == 0)
-        {
-            return null;
-        }
-
-        var quantities = ctx.GetData<Dictionary<string, int>>("selectedProductQuantities")
-                         ?? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var itemLabels = new List<string>();
-        decimal merchandiseTotal = 0;
-
-        foreach (var product in products)
-        {
-            var quantity = quantities.TryGetValue(product.Code, out var selectedQuantity) && selectedQuantity > 0
-                ? selectedQuantity
-                : 1;
-            merchandiseTotal += product.BasePrice * quantity;
-            itemLabels.Add(quantity > 1
-                ? $"{product.Name} x{quantity}"
-                : $"{product.Name} x1");
-        }
-
-        var giftName = ctx.GetData<string>("selectedGiftName");
-        var phone = ctx.GetData<string>("customerPhone");
-        var address = ctx.GetData<string>("shippingAddress");
-
-        ctx.SetData("awaitingFinalSummaryConfirmation", true);
-        ctx.SetData("finalSummaryShownAt", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
-        ctx.SetData("final_price_summary_ready", true);
-        ctx.SetData("price_confirmed", true);
-        ctx.SetData("promotion_confirmed", false);
-        ctx.SetData("shipping_policy_confirmed", false);
-        ctx.SetData("inventory_confirmed", false);
-
-        var lines = new List<string>
-        {
-            $"Dạ em tóm tắt đơn của chị như này ạ:",
-            $"- Sản phẩm: {string.Join(", ", itemLabels)}",
-            $"- Tiền hàng tạm tính: {merchandiseTotal:N0}đ",
-            "- Phí ship: em cần kiểm tra lại theo đơn cụ thể trước khi chốt",
-            "- Tổng đơn cuối: em sẽ báo lại sau khi kiểm tra đủ phí ship và chính sách áp dụng",
-            $"- SĐT nhận hàng: {phone}",
-            $"- Địa chỉ giao hàng: {address}"
-        };
-
-        if (!string.IsNullOrWhiteSpace(giftName))
-        {
-            lines.Insert(4, $"- Quà tặng theo dữ liệu nội bộ hiện tại: {giftName}");
-        }
-
-        lines.Add("Nếu chị đồng ý đơn này thì chị nhắn em kiểu như \"đúng rồi\" hoặc \"chốt đơn giúp chị\" để em lên đơn nháp nha.");
-        return string.Join(Environment.NewLine, lines);
-    }
-
-    private static bool HasExplicitFinalSummaryConfirmation(string message, Services.AI.Models.CustomerIntent? intent)
-    {
-        var normalized = SalesTextHelper.NormalizeForMatching(message);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return false;
-        }
-
-        if (normalized.Contains("thong tin nao", StringComparison.Ordinal)
-            || normalized.Contains("bao nhieu", StringComparison.Ordinal)
-            || normalized.Contains("gia sao", StringComparison.Ordinal)
-            || normalized.Contains("gia bao nhieu", StringComparison.Ordinal)
-            || normalized.Contains("phi ship", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        var hasExplicitPhrase = normalized.Contains("dung roi", StringComparison.Ordinal)
-            || normalized.Contains("chot don", StringComparison.Ordinal)
-            || normalized.Contains("len don", StringComparison.Ordinal)
-            || normalized.Contains("xac nhan don", StringComparison.Ordinal)
-            || normalized.Contains("dong y", StringComparison.Ordinal)
-            || normalized.Contains("ok chot", StringComparison.Ordinal)
-            || normalized.Contains("oke chot", StringComparison.Ordinal)
-            || normalized.Contains("ok em len don", StringComparison.Ordinal)
-            || normalized.Contains("oke em len don", StringComparison.Ordinal)
-            || normalized.Contains("chot giup chi", StringComparison.Ordinal);
-
-        return hasExplicitPhrase || intent == Services.AI.Models.CustomerIntent.Confirming;
-    }
-
-    private static bool LooksLikeFinalSummaryClarification(string message)
-    {
-        var normalized = SalesTextHelper.NormalizeForMatching(message);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return false;
-        }
-
-        return normalized.Contains("thong tin nao", StringComparison.Ordinal)
-            || normalized.Contains("bao nhieu", StringComparison.Ordinal)
-            || normalized.Contains("tong tien", StringComparison.Ordinal)
-            || normalized.Contains("phi ship", StringComparison.Ordinal)
-            || normalized.Contains("dia chi nao", StringComparison.Ordinal)
-            || normalized.Contains("so nao", StringComparison.Ordinal);
-    }
-
-    private static bool HasSelectedProduct(StateContext ctx)
-    {
-        return (ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>()).Count > 0;
     }
 
 }

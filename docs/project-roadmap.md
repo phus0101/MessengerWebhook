@@ -475,9 +475,68 @@ This roadmap tracks the development phases of the Multi-Tenant Messenger Chatbot
 - CSAT survey integrated and operational
 - Ready for production deployment
 
+### Phase R-05: Sales Handler Base Class Refactoring (Final Cleanup) ✅
+**Status**: Complete
+**Completion Date**: 2026-05-12
+**Duration**: 4 days (R-01 through R-05 cumulative: 2 weeks)
+
+**Refactoring Context**: Multi-phase refactoring of `SalesStateHandlerBase` to extract core responsibilities into focused services. Started at 2425 LOC in Feb 2026, target is modular architecture with single-responsibility classes.
+
+**Phase Breakdown**:
+- **R-01**: Golden test suite creation (phase-r01-golden-test-suite.md)
+- **R-02**: Extract SalesContextResolver + SalesPromptBuilder (phase-r02-extract-sales-context-and-prompts.md)
+- **R-03**: Extract ContactConfirmationFlow (phase-r03-extract-contact-confirmation-flow.md)
+- **R-04**: Extract SalesReplyOrchestrator (phase-r04-extract-sales-reply-orchestrator.md)
+- **R-05**: Extract SalesConsultationReplies + cleanup (THIS PHASE)
+
+**Key Deliverables**:
+
+**New Files Created**:
+1. `Services/Sales/Reply/ISalesConsultationReplies.cs` - Interface with 9 consultation reply methods
+2. `Services/Sales/Reply/SalesConsultationReplies.cs` - Implementation (333 LOC), extracted from SalesStateHandlerBase
+3. `Services/Sales/ConversationHistoryHelper.cs` - Static helper to deduplicate GetHistory/AddToHistory logic
+
+**Files Modified**:
+1. `StateMachine/Handlers/SalesStateHandlerBase.cs` - Reduced from ~1365 to ~840 LOC (38% reduction) by extracting:
+   - 9 reply builder methods → ISalesConsultationReplies
+   - 11 predicate methods → SalesMessageParser
+   - 2 history helpers → ConversationHistoryHelper
+2. `StateMachine/Handlers/SalesMessageParser.cs` - Added 11 predicate methods
+3. `StateMachine/Handlers/CompleteStateHandler.cs` - Updated to use ConversationHistoryHelper
+4. `Services/Sales/Reply/SalesReplyOrchestrator.cs` - Updated to use ConversationHistoryHelper
+5. `Program.cs` - Added 5 DI registrations for new services
+
+**Quality Metrics**:
+- **Code reduction**: 2425 → 840 LOC in base class (65% reduction end-to-end)
+- **Test pass rate**: 849/849 unit tests passing (100%)
+- **Build status**: 0 errors, 0 warnings
+- **Service count**: 4 extracted services (SalesContextResolver, SalesPromptBuilder, ContactConfirmationFlow, SalesReplyOrchestrator)
+- **Helper utilities**: 2 (SalesTextHelper, ConversationHistoryHelper)
+
+**Files Modified Summary**:
+- 5 core implementation/handler files
+- 3 new interface+implementation pairs
+- 1 new static helper class
+- Total refactoring effort: 4 phases + 1 cleanup = 2 weeks
+
+**Success Metrics**:
+- SalesStateHandlerBase reduced to 840 LOC ✅ (target: <850)
+- All 849 unit tests passing ✅
+- All extracted services integrated and callable ✅
+- No breaking changes to state handlers ✅
+- Documentation updated ✅
+
+**Production Readiness**:
+- All refactoring phases complete (R-01 through R-05)
+- Comprehensive golden test suite (R-01) provides regression coverage
+- SalesStateHandlerBase is now focused and maintainable
+- Ready for production deployment
+
 ---
 
 ## Current Phase
+
+**Phase R-05 (Refactoring) Complete**: Final cleanup of SalesStateHandlerBase and services extraction. All extracted services (ISalesConsultationReplies, ConversationHistoryHelper) are integrated and tested. Base class reduced from ~1365 to ~840 LOC. All 849 unit tests passing.
 
 **Phase 7 Complete**: All 6 sub-phases delivered (A/B Testing, Metrics Collection, Metrics API, Testing & Validation, Custom Dashboard, CSAT Survey). System is production-ready with comprehensive analytics, metrics infrastructure, visual dashboard, and customer satisfaction tracking.
 

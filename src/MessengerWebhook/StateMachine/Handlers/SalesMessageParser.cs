@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using MessengerWebhook.Models;
 using MessengerWebhook.Services.AI;
 using MessengerWebhook.Services.AI.Models;
 using MessengerWebhook.StateMachine.Models;
@@ -571,6 +572,120 @@ Message: {sanitized}";
                || lastAssistantMessage.Contains("con dung dung", StringComparison.OrdinalIgnoreCase)
                || lastAssistantMessage.Contains("sđt", StringComparison.OrdinalIgnoreCase)
                || lastAssistantMessage.Contains("SDT", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool IsPureGreeting(string message)
+    {
+        var normalized = message.Trim().ToLowerInvariant();
+        return normalized is "hi" or "hello" or "alo" or "alô" or "chao" or "chào"
+            or "hi shop" or "hi sop" or "hi sốp" or "hello shop"
+            or "chao shop" or "chào shop" or "chao sop" or "chào sốp"
+            or "chao em" or "chào em";
+    }
+
+    internal static bool ContainsAnyPhrase(string message, params string[] phrases)
+        => phrases.Any(phrase => message.Contains(phrase, StringComparison.OrdinalIgnoreCase));
+
+    internal static bool RequiresProductGrounding(
+        string message,
+        bool isProductQuestion,
+        bool isPriceQuestion,
+        bool isInventoryQuestion,
+        bool isPolicyQuestion,
+        bool isQuestioning,
+        bool hasQuestionMarker,
+        ConversationState currentState)
+    {
+        if (isPriceQuestion || isInventoryQuestion || isProductQuestion || IsCatalogListingQuestion(message))
+            return true;
+        return isQuestioning && !isPolicyQuestion &&
+               (hasQuestionMarker || currentState == ConversationState.Consulting) &&
+               HasProductCategoryReference(message);
+    }
+
+    internal static bool RequiresProductGrounding(string message)
+        => IsCatalogListingQuestion(message) ||
+           HasProductCategoryReference(message) && ContainsAnyPhrase(message,
+               "giá", "gia", "công dụng", "cong dung", "tác dụng", "tac dung", "thành phần", "thanh phan",
+               "cách dùng", "cach dung", "còn hàng", "con hang", "hết hàng", "het hang", "tồn kho", "ton kho");
+
+    internal static bool IsCatalogListingQuestion(string message)
+    {
+        if (ContainsAnyPhrase(message, "catalog", "danh sách", "danh sach", "sản phẩm nào", "san pham nao"))
+            return true;
+        var hasListingIntent = ContainsAnyPhrase(message,
+            "các loại", "cac loai", "có loại nào", "co loai nao", "có những loại", "co nhung loai",
+            "loại nào", "loai nao", "dòng nào", "dong nao", "mẫu nào", "mau nao");
+        var asksShopHas = ContainsAnyPhrase(message, "bên em có", "ben em co", "shop có", "shop co");
+        return hasListingIntent && (asksShopHas || HasProductCategoryReference(message))
+            || asksShopHas && HasProductCategoryReference(message);
+    }
+
+    internal static bool HasProductCategoryReference(string message)
+        => ContainsAnyPhrase(message,
+            "sản phẩm", "san pham", "mặt nạ", "mat na", "kem", "serum", "toner", "sữa rửa mặt", "sua rua mat",
+            "chống nắng", "chong nang", "dưỡng ẩm", "duong am", "mỹ phẩm", "my pham");
+
+    internal static bool IsAwaitingFinalSummaryConfirmation(StateContext ctx)
+        => ctx.GetData<bool?>("awaitingFinalSummaryConfirmation") == true;
+
+    internal static bool HasSelectedProduct(StateContext ctx)
+        => (ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>()).Count > 0;
+
+    internal static bool HasAmbiguousProductReference(string message)
+    {
+        var normalized = SalesTextHelper.NormalizeForMatching(message);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+        if (!Regex.IsMatch(normalized, @"\b([2-9]|1\d|20)\s+san pham\b", RegexOptions.CultureInvariant))
+        {
+            return normalized.Contains("san pham do", StringComparison.Ordinal)
+                || normalized.Contains("mon do", StringComparison.Ordinal)
+                || normalized.Contains("cai kia", StringComparison.Ordinal)
+                || normalized.Contains("san pham kia", StringComparison.Ordinal)
+                || normalized.Contains("mon kia", StringComparison.Ordinal)
+                || normalized.Contains("cai do", StringComparison.Ordinal)
+                || normalized.Contains("ship cho cu", StringComparison.Ordinal)
+                || normalized.Contains("dia chi cu", StringComparison.Ordinal);
+        }
+        return true;
+    }
+
+    internal static bool HasExplicitFinalSummaryConfirmation(string message, CustomerIntent? intent)
+    {
+        var normalized = SalesTextHelper.NormalizeForMatching(message);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+        if (normalized.Contains("thong tin nao", StringComparison.Ordinal)
+            || normalized.Contains("bao nhieu", StringComparison.Ordinal)
+            || normalized.Contains("gia sao", StringComparison.Ordinal)
+            || normalized.Contains("gia bao nhieu", StringComparison.Ordinal)
+            || normalized.Contains("phi ship", StringComparison.Ordinal))
+            return false;
+        var hasExplicitPhrase = normalized.Contains("dung roi", StringComparison.Ordinal)
+            || normalized.Contains("chot don", StringComparison.Ordinal)
+            || normalized.Contains("len don", StringComparison.Ordinal)
+            || normalized.Contains("xac nhan don", StringComparison.Ordinal)
+            || normalized.Contains("dong y", StringComparison.Ordinal)
+            || normalized.Contains("ok chot", StringComparison.Ordinal)
+            || normalized.Contains("oke chot", StringComparison.Ordinal)
+            || normalized.Contains("ok em len don", StringComparison.Ordinal)
+            || normalized.Contains("oke em len don", StringComparison.Ordinal)
+            || normalized.Contains("chot giup chi", StringComparison.Ordinal);
+        return hasExplicitPhrase || intent == CustomerIntent.Confirming;
+    }
+
+    internal static bool LooksLikeFinalSummaryClarification(string message)
+    {
+        var normalized = SalesTextHelper.NormalizeForMatching(message);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+        return normalized.Contains("thong tin nao", StringComparison.Ordinal)
+            || normalized.Contains("bao nhieu", StringComparison.Ordinal)
+            || normalized.Contains("tong tien", StringComparison.Ordinal)
+            || normalized.Contains("phi ship", StringComparison.Ordinal)
+            || normalized.Contains("dia chi nao", StringComparison.Ordinal)
+            || normalized.Contains("so nao", StringComparison.Ordinal);
     }
 
     [GeneratedRegex(@"(?<!\d)(?:\+?84|0)[\d\s\.-]{8,13}(?!\d)", RegexOptions.Compiled)]

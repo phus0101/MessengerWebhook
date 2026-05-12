@@ -11,6 +11,7 @@ using MessengerWebhook.Services.ProductGrounding;
 using MessengerWebhook.Services.RAG;
 using MessengerWebhook.Services.ResponseValidation;
 using MessengerWebhook.Services.ResponseValidation.Models;
+using MessengerWebhook.Services.Sales;
 using MessengerWebhook.Services.Sales.Context;
 using MessengerWebhook.Services.Sales.Prompt;
 using MessengerWebhook.Services.SmallTalk;
@@ -121,7 +122,7 @@ public sealed class SalesReplyOrchestrator : ISalesReplyOrchestrator
 
         var pipelineStartTime = DateTime.UtcNow;
 
-        var history = GetHistory(ctx);
+        var history = ConversationHistoryHelper.GetHistory(ctx);
         var activeProducts = await _contextResolver.GetActiveSelectedProductsAsync(ctx);
         var productCodes = activeProducts.Select(product => product.Code).ToList();
         var contactSummary = _promptBuilder.GetContactSummary(ctx);
@@ -280,7 +281,6 @@ Xung ho: {toneProfile.PronounText}
                         return _promptBuilder.BuildProductGroundingFallbackReply();
                     }
 
-                    AddToHistory(ctx, "assistant", smallTalkResponse.SuggestedResponse);
                     return smallTalkResponse.SuggestedResponse;
                 }
             }
@@ -468,7 +468,7 @@ Quy tac:
     /// </summary>
     private async Task<string> GenerateDirectAIResponseAsync(StateContext ctx, string message, Services.AI.Models.CustomerIntent? intent = null)
     {
-        var history = GetHistory(ctx);
+        var history = ConversationHistoryHelper.GetHistory(ctx);
         var activeProducts = await _contextResolver.GetActiveSelectedProductsAsync(ctx);
         var productCodes = activeProducts.Select(product => product.Code).ToList();
         var contactSummary = _promptBuilder.GetContactSummary(ctx);
@@ -582,7 +582,7 @@ Quy tac:
         try
         {
             var totalResponseTime = (int)(DateTime.UtcNow - startTime).TotalMilliseconds;
-            var history = GetHistory(ctx);
+            var history = ConversationHistoryHelper.GetHistory(ctx);
             var variant = ctx.GetData<string>("abTestVariant") ?? "control";
 
             var metricData = new ConversationMetricData
@@ -620,24 +620,4 @@ Quy tac:
         }
     }
 
-    // ── History helpers (mirror SalesStateHandlerBase semantics) ──────────────
-    // KEEP IN SYNC with SalesStateHandlerBase.GetHistory / AddToHistory until R-05
-    // collapses both copies into a shared ConversationHistoryStore.
-
-    private List<AiConversationMessage> GetHistory(StateContext ctx)
-        => ctx.GetData<List<AiConversationMessage>>("conversationHistory") ?? new List<AiConversationMessage>();
-
-    private void AddToHistory(StateContext ctx, string role, string content)
-    {
-        var history = ctx.GetData<List<AiConversationMessage>>("conversationHistory") ?? new List<AiConversationMessage>();
-        history.Add(new AiConversationMessage { Role = role, Content = content, Timestamp = DateTime.UtcNow });
-
-        var limit = _salesBotOptions.ConversationHistoryLimit;
-        if (history.Count > limit)
-        {
-            history = history.Skip(history.Count - limit).ToList();
-        }
-
-        ctx.SetData("conversationHistory", history);
-    }
 }
