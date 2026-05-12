@@ -11,6 +11,7 @@ using MessengerWebhook.Models;
 using MessengerWebhook.Services.Admin;
 using MessengerWebhook.Services;
 using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.Notifications;
 using MessengerWebhook.Services.AI.Embeddings;
 using MessengerWebhook.Services.AI.Handlers;
 using MessengerWebhook.Services.AI.Strategies;
@@ -42,14 +43,11 @@ using Microsoft.Extensions.Options;
 using Pinecone;
 using Serilog;
 
-// Configure Serilog
+// Configure Serilog — bootstrap logger (before config is loaded)
+// Full Serilog config (with Seq) is applied after builder.Build() via UseSerilog(readerFrom: config)
 Log.Logger = new LoggerConfiguration()
+    .Enrich.FromLogContext()
     .WriteTo.Console()
-    .WriteTo.File(
-        path: "logs/app-.log",
-        rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: 7,
-        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
@@ -67,8 +65,38 @@ if (builder.Environment.IsDevelopment())
     }
 }
 
-// Use Serilog for logging
-builder.Host.UseSerilog();
+// Use Serilog — configure fully from IConfiguration so Seq, enrichers, etc. are applied
+builder.Host.UseSerilog((ctx, services, config) => config
+    .ReadFrom.Configuration(ctx.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext()
+    .Enrich.WithMachineName()
+    .Enrich.WithThreadId()
+    .Enrich.WithProperty("Application", "MessengerWebhook")
+    .Enrich.WithProperty("Environment", ctx.HostingEnvironment.EnvironmentName)
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: "logs/app-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 14,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {CorrelationId} {TenantId} {Message:lj}{NewLine}{Exception}")
+    .WriteTo.Conditional(
+        _ => ctx.Configuration.GetValue<bool>("Seq:Enabled"),
+        wt => wt.Seq(
+            serverUrl: ctx.Configuration["Seq:ServerUrl"] ?? "http://localhost:5341",
+            apiKey: ctx.Configuration["Seq:ApiKey"],
+            batchPostingLimit: 100,
+            period: TimeSpan.FromSeconds(2))));
+
+// Register Seq configuration options
+builder.Services.Configure<MessengerWebhook.Configuration.SeqOptions>(
+    builder.Configuration.GetSection(MessengerWebhook.Configuration.SeqOptions.SectionName));
+
+// Register Telegram notification options + services
+builder.Services.Configure<MessengerWebhook.Configuration.TelegramOptions>(
+    builder.Configuration.GetSection(MessengerWebhook.Configuration.TelegramOptions.SectionName));
+builder.Services.AddHttpClient<TelegramNotifier>();
+builder.Services.AddSingleton<AlertDeduplicator>();
 
 // Configure strongly-typed options
 builder.Services.Configure<FacebookOptions>(
@@ -532,6 +560,7 @@ if (string.IsNullOrWhiteSpace(geminiOpts.ApiKey))
 // Add signature validation middleware
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseMiddleware<CorrelationIdMiddleware>();   // must be first — stamps every log entry
 app.UseMiddleware<SignatureValidationMiddleware>();
 app.UseMiddleware<MetricsRateLimitMiddleware>();
 app.UseResponseCaching();
@@ -690,6 +719,7 @@ app.MapGet("/", () => Results.Ok(new {
 }));
 
 app.MapInternalOperationsEndpoints();
+app.MapAlertWebhookEndpoints();
 app.MapAdminAuthEndpoints();
 app.MapAdminOperationsEndpoints();
 app.MapMetricsEndpoints();

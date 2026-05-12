@@ -4,10 +4,12 @@ using MessengerWebhook.Data;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Models;
 using MessengerWebhook.Services;
+using MessengerWebhook.Services.Observability;
 using MessengerWebhook.Services.Tenants;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Serilog.Context;
 
 namespace MessengerWebhook.Middleware;
 
@@ -61,6 +63,16 @@ public class TenantResolutionMiddleware
             catch (JsonException ex)
             {
                 _logger.LogWarning(ex, "Unable to resolve tenant context from webhook payload");
+            }
+
+            // Push TenantId to Serilog LogContext so every downstream log entry carries it
+            if (tenantContext.TenantId.HasValue)
+            {
+                using (LogContext.PushProperty("TenantId", tenantContext.TenantId.Value))
+                {
+                    await _next(context);
+                    return;
+                }
             }
         }
 

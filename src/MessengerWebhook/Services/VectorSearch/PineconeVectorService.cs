@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Services.Tenants;
 using Microsoft.Extensions.Options;
@@ -167,6 +168,7 @@ public class PineconeVectorService : IVectorSearchService
             request.Filter = ConvertToMetadata(filters);
         }
 
+        var sw = Stopwatch.StartNew();
         try
         {
             var response = await _retryPolicy.ExecuteAsync(async () =>
@@ -174,11 +176,13 @@ public class PineconeVectorService : IVectorSearchService
                     request,
                     cancellationToken: cancellationToken));
 
-            if (response.Matches == null || response.Matches.Count() == 0)
+            sw.Stop();
+
+            if (response.Matches == null || !response.Matches.Any())
             {
                 _logger.LogInformation(
-                    "No similar products found for query in namespace {Namespace}",
-                    tenantId);
+                    "VectorSearchCompleted Service={Service} ElapsedMs={ElapsedMs} ResultCount={ResultCount}",
+                    "Pinecone", sw.ElapsedMilliseconds, 0);
                 return new List<ProductSearchResult>();
             }
 
@@ -194,15 +198,17 @@ public class PineconeVectorService : IVectorSearchService
                 }).ToList();
 
             _logger.LogInformation(
-                "Found {Count} similar products for query in namespace {Namespace}",
-                results.Count, tenantId);
+                "VectorSearchCompleted Service={Service} ElapsedMs={ElapsedMs} ResultCount={ResultCount}",
+                "Pinecone", sw.ElapsedMilliseconds, results.Count);
 
             return results;
         }
         catch (Exception ex)
         {
+            sw.Stop();
             _logger.LogError(ex,
-                "Failed to search similar products in Pinecone");
+                "VectorSearchFailed Service={Service} ElapsedMs={ElapsedMs}",
+                "Pinecone", sw.ElapsedMilliseconds);
             throw;
         }
     }

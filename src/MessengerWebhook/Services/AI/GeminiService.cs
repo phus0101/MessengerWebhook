@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using MessengerWebhook.Configuration;
@@ -82,10 +83,6 @@ public class GeminiService : IGeminiService
             ? _options.ProModel
             : _options.FlashLiteModel;
 
-        _logger.LogInformation(
-            "Sending message to Gemini {Model} for user {UserId}. Message length: {Length}",
-            modelName, userId, message.Length);
-
         // Build request
         var request = new
         {
@@ -98,7 +95,10 @@ public class GeminiService : IGeminiService
         };
 
         var url = $"https://generativelanguage.googleapis.com/v1/models/{modelName}:generateContent";
+        var sw = Stopwatch.StartNew();
+
         var response = await _httpClient.PostAsJsonAsync(url, request, cancellationToken);
+        sw.Stop();
 
         if (!response.IsSuccessStatusCode)
         {
@@ -131,9 +131,10 @@ public class GeminiService : IGeminiService
             throw new InvalidOperationException("Gemini returned empty response text");
         }
 
+        var tokenCount = result.UsageMetadata?.TotalTokenCount ?? 0;
         _logger.LogInformation(
-            "Received response from Gemini. Tokens: {Tokens}",
-            result.UsageMetadata?.TotalTokenCount ?? 0);
+            "AICallCompleted Service={Service} Model={Model} ElapsedMs={ElapsedMs} TokenCount={TokenCount} PromptLength={PromptLength}",
+            "Gemini", modelName, sw.ElapsedMilliseconds, tokenCount, message.Length);
 
         return responseText;
     }

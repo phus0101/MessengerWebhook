@@ -39,11 +39,11 @@ public class EmbeddingCacheService : IEmbeddingService
         var cached = await _cache.GetStringAsync(key, cancellationToken);
         if (cached != null)
         {
-            _logger.LogDebug("Embedding cache HIT: {Key}", key);
+            _logger.LogDebug("CacheLookup Layer={Layer} Hit={Hit}", "Embedding", true);
             return JsonSerializer.Deserialize<float[]>(cached)!;
         }
 
-        _logger.LogDebug("Embedding cache MISS: {Key}", key);
+        _logger.LogDebug("CacheLookup Layer={Layer} Hit={Hit}", "Embedding", false);
 
         // Generate embedding
         var embedding = await _innerService.EmbedAsync(

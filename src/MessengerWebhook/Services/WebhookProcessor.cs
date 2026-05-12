@@ -2,6 +2,7 @@ using MessengerWebhook.Data;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Models;
+using MessengerWebhook.Services.Observability;
 using MessengerWebhook.Services.QuickReply;
 using MessengerWebhook.Services.Support;
 using MessengerWebhook.Services.Tenants;
@@ -10,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Serilog.Context;
 
 namespace MessengerWebhook.Services;
 
@@ -79,21 +81,46 @@ public class WebhookProcessor
 
     public async Task ProcessAsync(MessagingEvent messagingEvent)
     {
+        var tracker = new RequestTimingTracker();
         await InitializeTenantContextAsync(messagingEvent.Recipient.Id);
+        tracker.Mark("tenant_resolved");
 
-        if (messagingEvent.Message != null)
+        var senderId = messagingEvent.Sender.Id;
+        using var psidScope = LogContext.PushProperty("PsidHash", PiiRedactor.HashPsid(senderId));
+
+        string path = "unknown";
+        string status = "ok";
+        try
         {
-            await ProcessMessageAsync(messagingEvent);
-            return;
+            if (messagingEvent.Message != null)
+            {
+                path = messagingEvent.Message.QuickReply != null ? "quick_reply" : "message";
+                await ProcessMessageAsync(messagingEvent);
+                tracker.Mark("handler_complete");
+            }
+            else if (messagingEvent.Postback != null)
+            {
+                path = "postback";
+                await ProcessPostbackAsync(messagingEvent);
+                tracker.Mark("handler_complete");
+            }
+            else
+            {
+                path = "unknown";
+                _logger.LogWarning("Unknown event type received");
+            }
         }
-
-        if (messagingEvent.Postback != null)
+        catch
         {
-            await ProcessPostbackAsync(messagingEvent);
-            return;
+            status = "error";
+            throw;
         }
-
-        _logger.LogWarning("Unknown event type received");
+        finally
+        {
+            _logger.LogInformation(
+                "WebhookCompleted Path={Path} ElapsedMs={ElapsedMs} Status={Status} {@Checkpoints}",
+                path, tracker.ElapsedMs, status, tracker.Checkpoints);
+        }
     }
 
     private async Task ProcessMessageAsync(MessagingEvent evt)
@@ -166,6 +193,7 @@ public class WebhookProcessor
                     "Dạ em đang gặp sự cố kỹ thuật. Chị nhắn lại giúp em sau ít phút nha.");
             }
         }
+
 
         MarkProcessed(cacheKey);
     }
