@@ -1,8 +1,8 @@
 # Project Roadmap
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
-**Last Updated**: 2026-04-12
-**Status**: Phase 7 Complete + transcript-driven sales flow hardening verified
+**Last Updated**: 2026-05-12
+**Status**: Phase 7 Complete + Phase R-05 (Program.cs Modularization) Complete
 
 ---
 
@@ -504,7 +504,22 @@ This roadmap tracks the development phases of the Multi-Tenant Messenger Chatbot
 2. `StateMachine/Handlers/SalesMessageParser.cs` - Added 11 predicate methods
 3. `StateMachine/Handlers/CompleteStateHandler.cs` - Updated to use ConversationHistoryHelper
 4. `Services/Sales/Reply/SalesReplyOrchestrator.cs` - Updated to use ConversationHistoryHelper
-5. `Program.cs` - Added 5 DI registrations for new services
+5. `Program.cs` - Refactored from 763 → 56 lines with modular service registration
+
+**Program.cs Modularization**:
+- Extracted DI service registrations into 10 focused extension method files under `Configuration/ServiceRegistration/`:
+  - `ObservabilityRegistration.cs` - Logging and health checks
+  - `PersistenceRegistration.cs` - Database and repositories
+  - `AiServicesRegistration.cs` - Gemini, embeddings, SubIntent classification
+  - `CacheServicesRegistration.cs` - Redis caching layers
+  - `MessengerServicesRegistration.cs` - Facebook integration
+  - `SalesPipelineRegistration.cs` - Sales services + R-02 through R-05 extracted services
+  - `BackgroundServicesRegistration.cs` - Cleanup, metrics, CSAT services
+  - `AdminModuleRegistration.cs` - Admin APIs and auth
+  - `ApplicationInitializationExtensions.cs` - Database setup
+  - `WebhookEndpointExtensions.cs` (in Endpoints/) - Endpoint mappings
+- Benefits: Maintainability, discoverability, testability, reusability
+- Each extension method remains under 50 lines
 
 **Quality Metrics**:
 - **Code reduction**: 2425 → 840 LOC in base class (65% reduction end-to-end)

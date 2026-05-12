@@ -1,8 +1,8 @@
 # System Architecture
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
-**Last Updated**: 2026-05-09
-**Version**: R-04 service extraction (SalesReplyOrchestrator) reflected
+**Last Updated**: 2026-05-12
+**Version**: R-05 service extraction complete (Program.cs modularization)
 
 ---
 
@@ -208,6 +208,136 @@ Facebook → WebhookController → WebhookProcessor → StateMachine → StateHa
 - Resolves tenant context from Facebook Page ID
 - Initializes ITenantContext for request scope
 - Enables multi-tenant data isolation
+
+### 6. Application Startup & Dependency Injection (Phase R-05)
+
+**Location**: `src/MessengerWebhook/Configuration/ServiceRegistration/`
+
+**Modular Registration Architecture** (Phase R-05 refactoring):
+- `Program.cs` reduced from 763 → 56 lines through extension methods
+- DI registrations split into 10 focused extension files for maintainability
+- Each extension method handles a specific service domain
+
+**Extension Method Files**:
+
+1. **ObservabilityRegistration.cs** (`AddObservability()`)
+   - Serilog structured logging configuration
+   - Correlation ID middleware setup
+   - Health check registration
+
+2. **PersistenceRegistration.cs** (`AddPersistence()`)
+   - Entity Framework Core with PostgreSQL
+   - Database context configuration
+   - Repository registration (IProductRepository, ISessionRepository, etc.)
+   - Global query filters for multi-tenant isolation
+
+3. **AiServicesRegistration.cs** (`AddAiServices()`)
+   - GeminiService for text generation
+   - GeminiEmbeddingService for vector embeddings
+   - SubIntent classification services (Hybrid, Keyword, AI fallback)
+   - Emotion, tone, and conversation analysis services
+
+4. **CacheServicesRegistration.cs** (`AddCacheServices()`)
+   - Redis distributed cache setup
+   - EmbeddingCacheService (1hr TTL, 90% hit rate)
+   - ResultCacheService (15min TTL, 70% hit rate)
+   - CacheKeyGenerator and invalidation services
+
+5. **MessengerServicesRegistration.cs** (`AddMessengerServices()`)
+   - MessengerService for Facebook API integration
+   - WebhookProcessor for message routing
+   - SignatureValidator for webhook security
+   - TenantContext service
+
+6. **SalesPipelineRegistration.cs** (`AddSalesPipeline()`)
+   - Sales conversation flow services (R-02 through R-05 refactoring):
+     - `ISalesContextResolver` → `SalesContextResolver`
+     - `ISalesPromptBuilder` → `SalesPromptBuilder`
+     - `IContactConfirmationFlow` → `ContactConfirmationFlow`
+     - `ISalesReplyOrchestrator` → `SalesReplyOrchestrator`
+     - `ISalesConsultationReplies` → `SalesConsultationReplies` (R-05)
+   - Quick reply handlers (ProductMapping, GiftSelection, Freeship)
+   - Product grounding services
+
+7. **BackgroundServicesRegistration.cs** (`AddBotBackgroundServices()`)
+   - SessionCleanupService (runs every 10min)
+   - MessageCleanupService (runs daily at 2 AM)
+   - WebhookProcessingService (async message queue)
+   - MetricsBackgroundService (batch flush, 100 metrics or 60s)
+   - CSATSurveyService (scheduled surveys)
+
+8. **AdminModuleRegistration.cs** (`AddAdminModule()`)
+   - Admin API controllers (metrics, operations, auth)
+   - Authorization and role-based access control
+   - Survey and A/B testing endpoints
+
+9. **ApplicationInitializationExtensions.cs** (`InitializeAsync()`)
+   - Database migrations execution
+   - Schema validation
+   - Default data seeding
+
+10. **WebhookEndpointExtensions.cs** (in Endpoints/)
+    - Webhook endpoint registration
+    - Internal operations endpoints
+    - Health check endpoints
+    - Test RAG endpoints (development only)
+
+**Program.cs Startup Flow** (56 lines):
+```csharp
+// 1. Configure logging
+Log.Logger = new LoggerConfiguration()
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .CreateLogger();
+
+// 2. Create builder
+var builder = WebApplication.CreateBuilder(args);
+
+// 3. Load environment variables (dev only)
+if (builder.Environment.IsDevelopment())
+    Env.Load();
+
+// 4. Register all services via extensions
+builder.AddObservability();
+builder.Services
+    .AddPersistence(builder.Configuration)
+    .AddAiServices(builder.Configuration)
+    .AddCacheServices(builder.Configuration)
+    .AddMessengerServices(builder.Configuration)
+    .AddSalesPipeline(builder.Configuration)
+    .AddAdminModule(builder.Configuration)
+    .AddBotBackgroundServices();
+
+// 5. Build app and initialize
+var app = builder.Build();
+await app.InitializeAsync();
+
+// 6. Configure middleware
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<SignatureValidationMiddleware>();
+// ... other middleware
+
+// 7. Map endpoints
+app.MapHealthCheckEndpoint();
+app.MapWebhookEndpoints();
+app.MapAdminOperationsEndpoints();
+// ... other endpoint maps
+
+app.Run();
+```
+
+**Benefits of Modularization**:
+- **Maintainability**: Each extension method is focused and under 50 lines
+- **Discoverability**: File names clearly indicate purpose (`SalesServiceRegistration.cs`)
+- **Testing**: Service registration can be tested in isolation
+- **Reusability**: Extensions can be applied to other projects
+- **Readability**: Program.cs remains a high-level overview
+
+**Key Registrations**:
+- 8 DI service extension methods (Platform, Persistence, AI, Cache, Messenger, Sales, Admin, Background)
+- 3 endpoint mapping extension methods (Webhooks, Internal, Admin)
+- 1 initialization extension method (database setup)
+- Total DI registrations: 50+ service interfaces and implementations
 
 ## Caching Layer Architecture (Phase 4)
 

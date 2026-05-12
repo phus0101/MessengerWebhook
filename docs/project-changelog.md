@@ -40,29 +40,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retains core responsibilities: order-context recovery, conversation flow orchestration, state invariant validation
 - All production invariants preserved via 849 unit tests
 
-**DI Registration** (5 new registrations in `Program.cs`):
+**Program.cs Modularization** (Phase R-05 structural refactoring):
+- Refactored from 763 → 56 lines (93% reduction) through extension method pattern
+- Extracted all DI service registrations into 10 focused extension files under `Configuration/ServiceRegistration/`:
+  - `ObservabilityRegistration.cs` (`AddObservability()`) - Serilog, correlation IDs, health checks
+  - `PersistenceRegistration.cs` (`AddPersistence()`) - EF Core, repositories, global query filters
+  - `AiServicesRegistration.cs` (`AddAiServices()`) - Gemini, embeddings, SubIntent classification
+  - `CacheServicesRegistration.cs` (`AddCacheServices()`) - Redis, caching layers, key generation
+  - `MessengerServicesRegistration.cs` (`AddMessengerServices()`) - Facebook API, webhook processor
+  - `SalesPipelineRegistration.cs` (`AddSalesPipeline()`) - All sales services (R-02 through R-05)
+  - `BackgroundServicesRegistration.cs` (`AddBotBackgroundServices()`) - Cleanup, metrics, CSAT
+  - `AdminModuleRegistration.cs` (`AddAdminModule()`) - Admin APIs, auth, operations
+  - `ApplicationInitializationExtensions.cs` (`InitializeAsync()`) - Database migrations and setup
+  - `WebhookEndpointExtensions.cs` (in Endpoints/) - All endpoint mappings
+- Each extension method maintains single responsibility and stays under 50 lines
+- Benefits: Code maintainability, discoverability, testability, reusability
+
+**DI Registration** (Complete Service Graph):
 - ISalesConsultationReplies → SalesConsultationReplies
 - ISalesContextResolver → SalesContextResolver
 - ISalesPromptBuilder → SalesPromptBuilder
 - IContactConfirmationFlow → ContactConfirmationFlow
 - ISalesReplyOrchestrator → SalesReplyOrchestrator
 - Plus ConversationHistoryHelper (static, no registration needed)
+- 50+ total service registrations across all extension methods
 
 **Test Coverage**:
 - Unit tests: 849/849 passing (100%)
 - Build status: 0 errors, 0 warnings
 - Regression coverage: Golden test suite from R-01
+- All service registrations validated at startup
+
+**Files Created Summary**:
+- `Configuration/ServiceRegistration/ObservabilityRegistration.cs`
+- `Configuration/ServiceRegistration/PersistenceRegistration.cs`
+- `Configuration/ServiceRegistration/AiServicesRegistration.cs`
+- `Configuration/ServiceRegistration/CacheServicesRegistration.cs`
+- `Configuration/ServiceRegistration/MessengerServicesRegistration.cs`
+- `Configuration/ServiceRegistration/SalesPipelineRegistration.cs`
+- `Configuration/ServiceRegistration/BackgroundServicesRegistration.cs`
+- `Configuration/ServiceRegistration/AdminModuleRegistration.cs`
+- `Configuration/ServiceRegistration/ApplicationInitializationExtensions.cs`
+- `Endpoints/WebhookEndpointExtensions.cs` (enhanced with all endpoint maps)
 
 **Files Modified Summary**:
+- `Program.cs` - Refactored from 763 → 56 lines, now calls extension methods only
 - `StateMachine/Handlers/SalesStateHandlerBase.cs` - refactored, 38% reduction
 - `StateMachine/Handlers/SalesMessageParser.cs` - added 11 predicate methods
 - `StateMachine/Handlers/CompleteStateHandler.cs` - integrated ConversationHistoryHelper
 - `Services/Sales/Reply/SalesReplyOrchestrator.cs` - integrated ConversationHistoryHelper
-- `Program.cs` - added 5 DI registrations
 
 **Documentation Updates**:
-- `docs/development-roadmap.md` - R-05 completion documented
-- `docs/codebase-summary.md` - LOC counts and service list updated
+- `docs/system-architecture.md` - Added new section "Application Startup & Dependency Injection (Phase R-05)"
+- `docs/project-roadmap.md` - Updated Phase R-05 with modularization details
+- `docs/codebase-summary.md` - Updated phase version to R-05 complete
 
 ### Added - Production Stabilization R-02: Service Extraction (2026-05-09)
 
