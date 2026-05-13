@@ -212,6 +212,7 @@ public class MessengerService : IMessengerService
         if (!string.IsNullOrWhiteSpace(_tenantContext.FacebookPageId))
         {
             var overrideToken = await _dbContext.FacebookPageConfigs
+                // ALLOW: ConfigResolver needs to find configs by FacebookPageId (not TenantId) during initialization
                 .IgnoreQueryFilters()
                 .Where(x => x.FacebookPageId == _tenantContext.FacebookPageId && x.IsActive)
                 .Select(x => x.PageAccessToken)

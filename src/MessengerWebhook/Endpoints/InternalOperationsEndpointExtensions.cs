@@ -13,8 +13,14 @@ public static class InternalOperationsEndpointExtensions
     {
         var group = endpoints.MapGroup("/internal");
 
-        group.MapGet("/draft-orders", async (MessengerBotDbContext dbContext, CancellationToken cancellationToken) =>
+        group.MapGet("/draft-orders", async (HttpContext ctx, IConfiguration config, ILogger<Program> logger, MessengerBotDbContext dbContext, CancellationToken cancellationToken) =>
         {
+            if (!ValidateInternalApiKey(ctx, config))
+            {
+                logger.LogWarning("Rejected /internal/draft-orders: invalid API key from {RemoteIp}", ctx.Connection.RemoteIpAddress);
+                return Results.Unauthorized();
+            }
+
             var drafts = await dbContext.DraftOrders
                 .AsNoTracking()
                 .Include(x => x.Items)
@@ -39,8 +45,14 @@ public static class InternalOperationsEndpointExtensions
             return Results.Ok(drafts);
         });
 
-        group.MapGet("/support-cases", async (MessengerBotDbContext dbContext, CancellationToken cancellationToken) =>
+        group.MapGet("/support-cases", async (HttpContext ctx, IConfiguration config, ILogger<Program> logger, MessengerBotDbContext dbContext, CancellationToken cancellationToken) =>
         {
+            if (!ValidateInternalApiKey(ctx, config))
+            {
+                logger.LogWarning("Rejected /internal/support-cases: invalid API key from {RemoteIp}", ctx.Connection.RemoteIpAddress);
+                return Results.Unauthorized();
+            }
+
             var cases = await dbContext.HumanSupportCases
                 .AsNoTracking()
                 .OrderByDescending(x => x.CreatedAt)
@@ -107,10 +119,19 @@ public static class InternalOperationsEndpointExtensions
         group.MapPost("/support-cases/{id:guid}/complete", async (
             Guid id,
             CompleteSupportCaseRequest request,
+            HttpContext ctx,
+            IConfiguration config,
+            ILogger<Program> logger,
             MessengerBotDbContext dbContext,
             IBotLockService botLockService,
             CancellationToken cancellationToken) =>
         {
+            if (!ValidateInternalApiKey(ctx, config))
+            {
+                logger.LogWarning("Rejected POST /internal/support-cases/{CaseId}/complete: invalid API key from {RemoteIp}", id, ctx.Connection.RemoteIpAddress);
+                return Results.Unauthorized();
+            }
+
             var supportCase = await dbContext.HumanSupportCases.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
             if (supportCase == null)
             {
@@ -128,9 +149,18 @@ public static class InternalOperationsEndpointExtensions
 
         group.MapPost("/knowledge/import", async (
             KnowledgeImportRequest request,
+            HttpContext ctx,
+            IConfiguration config,
+            ILogger<Program> logger,
             IKnowledgeImportService knowledgeImportService,
             CancellationToken cancellationToken) =>
         {
+            if (!ValidateInternalApiKey(ctx, config))
+            {
+                logger.LogWarning("Rejected /internal/knowledge/import: invalid API key from {RemoteIp}", ctx.Connection.RemoteIpAddress);
+                return Results.Unauthorized();
+            }
+
             var snapshot = await knowledgeImportService.ImportTextAsync(
                 request.Category,
                 request.SourceName,
@@ -151,6 +181,15 @@ public static class InternalOperationsEndpointExtensions
         });
 
         return endpoints;
+    }
+
+    // ALLOW: no InternalApiKey required — secured by time-limited support token from ISupportCaseTokenService
+    private static bool ValidateInternalApiKey(HttpContext ctx, IConfiguration config)
+    {
+        var expectedKey = config["Alerts:InternalApiKey"];
+        if (string.IsNullOrWhiteSpace(expectedKey)) return true;
+        var providedKey = ctx.Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+        return providedKey == expectedKey;
     }
 
     private static string GenerateSuccessHtml(HumanSupportCase supportCase)

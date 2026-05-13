@@ -201,13 +201,30 @@ public class CacheKeyGeneratorTests
     {
         // Arrange
         var query = "test query";
-        var context = "test context";
+        var tenantId = Guid.NewGuid().ToString();
         var productIds = new List<string> { "prod1" };
 
         // Act
-        var key = _generator.GenerateResponseKey(query, context, productIds);
+        var key = _generator.GenerateResponseKey(query, tenantId, productIds);
 
         // Assert
         Assert.StartsWith("response:", key);
+    }
+
+    [Fact]
+    public void GenerateResponseKey_DifferentTenantId_ReturnsDifferentKeys()
+    {
+        // Arrange — same query, different tenant → must NOT share cache
+        var query = "Kem chống nắng nào tốt?";
+        var tenantId1 = Guid.NewGuid().ToString();
+        var tenantId2 = Guid.NewGuid().ToString();
+        var productIds = new List<string> { "prod1" };
+
+        // Act
+        var key1 = _generator.GenerateResponseKey(query, tenantId1, productIds);
+        var key2 = _generator.GenerateResponseKey(query, tenantId2, productIds);
+
+        // Assert
+        Assert.NotEqual(key1, key2);
     }
 }

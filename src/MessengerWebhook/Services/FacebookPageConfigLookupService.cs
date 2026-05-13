@@ -63,7 +63,7 @@ public class FacebookPageConfigLookupService
         }
 
         var bootstrapPageConfig = await _dbContext.FacebookPageConfigs
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: system-level lookup — method guarded by IsDevelopment() + AllowTenantWideVisibilityInDevelopment
             .FirstOrDefaultAsync(x => x.DefaultManagerEmail == _adminOptions.BootstrapEmail && x.IsActive, cancellationToken);
 
         if (bootstrapPageConfig?.TenantId == null)
@@ -73,7 +73,7 @@ public class FacebookPageConfigLookupService
 
         // Check if another concurrent request already created it
         var existing = await _dbContext.FacebookPageConfigs
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: race condition check must search across all tenants for the page
             .FirstOrDefaultAsync(x => x.FacebookPageId == pageId && x.IsActive, cancellationToken);
 
         if (existing != null)
@@ -111,7 +111,7 @@ public class FacebookPageConfigLookupService
                 pageId);
 
             return await _dbContext.FacebookPageConfigs
-                .IgnoreQueryFilters()
+                .IgnoreQueryFilters() // ALLOW: fetching the winner of a concurrent creation race
                 .FirstOrDefaultAsync(x => x.FacebookPageId == pageId && x.IsActive, cancellationToken);
         }
     }

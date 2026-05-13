@@ -565,11 +565,29 @@ public class TenantResolutionMiddleware
 ```
 
 **Bypassing Filters** (admin operations only):
+
+**IMPORTANT**: Every call to `IgnoreQueryFilters()` MUST include a `// ALLOW: <reason>` comment on the same line or the preceding line. This is enforced by the CI guardrail test `TenantIsolationGuardrailTests`.
+
+Valid patterns:
+```csharp
+// ALLOW: bootstrap must find manager cross-tenant — tenant context not yet established
+var manager = await _context.ManagerProfiles
+    .IgnoreQueryFilters()
+    .FirstOrDefaultAsync(x => x.Email == email);
+```
+
+Or inline:
 ```csharp
 var allProducts = await _context.Products
-    .IgnoreQueryFilters()
+    .IgnoreQueryFilters() // ALLOW: admin cross-tenant product export
     .ToListAsync();
 ```
+
+Common ALLOW reasons:
+- `bootstrap must find X cross-tenant` — tenant context not yet established (login, admin init)
+- `Tenant is a root entity` — not tenant-scoped by design
+- `dev-only orphan adoption` — development-only cleanup logic
+- `cross-tenant report generation` — explicit admin reporting need
 
 **Testing Tenant Isolation**:
 ```csharp

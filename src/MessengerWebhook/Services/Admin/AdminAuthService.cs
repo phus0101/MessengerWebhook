@@ -42,14 +42,14 @@ public class AdminAuthService : IAdminAuthService
         var bootstrapPageConfig = await EnsureBootstrapWorkspaceAsync(email, cancellationToken);
         await AdoptDevelopmentOrphanDataAsync(bootstrapPageConfig, email, cancellationToken);
         var manager = await _dbContext.ManagerProfiles
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: bootstrap must find manager cross-tenant — tenant context not yet established
             .Include(x => x.FacebookPageConfig)
             .FirstOrDefaultAsync(x => x.Email == email, cancellationToken);
 
         if (manager == null)
         {
             var pageConfig = await _dbContext.FacebookPageConfigs
-                .IgnoreQueryFilters()
+                .IgnoreQueryFilters() // ALLOW: same — page config lookup during bootstrap before tenant is set
                 .FirstOrDefaultAsync(x => x.DefaultManagerEmail == email, cancellationToken);
             pageConfig ??= bootstrapPageConfig;
             var tenantId = pageConfig?.TenantId ?? await ResolveSingleTenantAsync(cancellationToken);
@@ -92,7 +92,7 @@ public class AdminAuthService : IAdminAuthService
         await EnsureBootstrapManagerAsync(cancellationToken);
         var normalizedEmail = email.Trim();
         var manager = await _dbContext.ManagerProfiles
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: login must find manager cross-tenant to determine which tenant they belong to
             .Include(x => x.FacebookPageConfig)
             .FirstOrDefaultAsync(x => x.Email == normalizedEmail && x.IsActive, cancellationToken);
 
@@ -178,7 +178,7 @@ public class AdminAuthService : IAdminAuthService
     private async Task<Guid?> ResolveSingleTenantAsync(CancellationToken cancellationToken)
     {
         var tenants = await _dbContext.Tenants
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: Tenant is a root entity (not tenant-scoped); must count all to detect single-tenant setup
             .Where(x => x.IsActive)
             .Select(x => x.Id)
             .ToListAsync(cancellationToken);
@@ -207,7 +207,7 @@ public class AdminAuthService : IAdminAuthService
             : _options.BootstrapPageName.Trim();
 
         var tenant = await _dbContext.Tenants
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: seeding bootstrap workspace on startup, cross-tenant by design
             .FirstOrDefaultAsync(x => x.Code == tenantCode, cancellationToken);
 
         if (tenant == null)
@@ -228,7 +228,7 @@ public class AdminAuthService : IAdminAuthService
         }
 
         var pageConfig = await _dbContext.FacebookPageConfigs
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: same — creating or updating page config during bootstrap workspace seed
             .FirstOrDefaultAsync(x => x.FacebookPageId == pageId, cancellationToken);
 
         if (pageConfig == null)
@@ -284,36 +284,37 @@ public class AdminAuthService : IAdminAuthService
         }
 
         var tenantId = bootstrapPageConfig.TenantId.Value;
+        // ALLOW: dev-only orphan data adoption — entire method is guarded by IsDevelopment() + AllowTenantWideVisibilityInDevelopment
         var orphanPageIds = await _dbContext.DraftOrders
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: dev orphan adoption
             .Where(x => x.TenantId == null && x.FacebookPageId != null)
             .Select(x => x.FacebookPageId!)
             .Concat(_dbContext.HumanSupportCases
-                .IgnoreQueryFilters()
+                .IgnoreQueryFilters() // ALLOW: dev orphan adoption
                 .Where(x => x.TenantId == null && x.FacebookPageId != null)
                 .Select(x => x.FacebookPageId!))
             .Concat(_dbContext.CustomerIdentities
-                .IgnoreQueryFilters()
+                .IgnoreQueryFilters() // ALLOW: dev orphan adoption
                 .Where(x => x.TenantId == null && x.FacebookPageId != null)
                 .Select(x => x.FacebookPageId!))
             .Concat(_dbContext.BotConversationLocks
-                .IgnoreQueryFilters()
+                .IgnoreQueryFilters() // ALLOW: dev orphan adoption
                 .Where(x => x.TenantId == null && x.FacebookPageId != null)
                 .Select(x => x.FacebookPageId!))
             .Distinct()
             .ToListAsync(cancellationToken);
 
         if (orphanPageIds.Count == 0 &&
-            !await _dbContext.DraftOrders.IgnoreQueryFilters().AnyAsync(x => x.TenantId == null, cancellationToken) &&
-            !await _dbContext.CustomerIdentities.IgnoreQueryFilters().AnyAsync(x => x.TenantId == null, cancellationToken) &&
-            !await _dbContext.HumanSupportCases.IgnoreQueryFilters().AnyAsync(x => x.TenantId == null, cancellationToken) &&
-            !await _dbContext.BotConversationLocks.IgnoreQueryFilters().AnyAsync(x => x.TenantId == null, cancellationToken))
+            !await _dbContext.DraftOrders.IgnoreQueryFilters().AnyAsync(x => x.TenantId == null, cancellationToken) && // ALLOW: dev orphan adoption
+            !await _dbContext.CustomerIdentities.IgnoreQueryFilters().AnyAsync(x => x.TenantId == null, cancellationToken) && // ALLOW: dev orphan adoption
+            !await _dbContext.HumanSupportCases.IgnoreQueryFilters().AnyAsync(x => x.TenantId == null, cancellationToken) && // ALLOW: dev orphan adoption
+            !await _dbContext.BotConversationLocks.IgnoreQueryFilters().AnyAsync(x => x.TenantId == null, cancellationToken)) // ALLOW: dev orphan adoption
         {
             return;
         }
 
         var existingPageIds = await _dbContext.FacebookPageConfigs
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: dev orphan adoption
             .Where(x => orphanPageIds.Contains(x.FacebookPageId))
             .Select(x => x.FacebookPageId)
             .ToListAsync(cancellationToken);
@@ -332,7 +333,7 @@ public class AdminAuthService : IAdminAuthService
         }
 
         var orphanDrafts = await _dbContext.DraftOrders
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: dev orphan adoption
             .Where(x => x.TenantId == null)
             .ToListAsync(cancellationToken);
         foreach (var draft in orphanDrafts)
@@ -343,7 +344,7 @@ public class AdminAuthService : IAdminAuthService
         }
 
         var orphanCustomers = await _dbContext.CustomerIdentities
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: dev orphan adoption
             .Where(x => x.TenantId == null)
             .ToListAsync(cancellationToken);
         foreach (var customer in orphanCustomers)
@@ -353,7 +354,7 @@ public class AdminAuthService : IAdminAuthService
         }
 
         var orphanCases = await _dbContext.HumanSupportCases
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: dev orphan adoption
             .Where(x => x.TenantId == null)
             .ToListAsync(cancellationToken);
         foreach (var supportCase in orphanCases)
@@ -363,7 +364,7 @@ public class AdminAuthService : IAdminAuthService
         }
 
         var orphanLocks = await _dbContext.BotConversationLocks
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters() // ALLOW: dev orphan adoption
             .Where(x => x.TenantId == null)
             .ToListAsync(cancellationToken);
         foreach (var botLock in orphanLocks)

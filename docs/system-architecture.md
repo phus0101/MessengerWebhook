@@ -185,17 +185,24 @@ ctx.SetData("conversationHistory", messages);
 
 ### 4. API Layer
 
-**Location**: `src/MessengerWebhook/Controllers/`
+**Location**: `src/MessengerWebhook/Controllers/` and `src/MessengerWebhook/Endpoints/`
 
 **WebhookController**:
 - Webhook verification (GET)
 - Message processing (POST)
 - Signature validation middleware
 
-**Flow**:
+**Public Flow**:
 ```
 Facebook → WebhookController → WebhookProcessor → StateMachine → StateHandler → Response
 ```
+
+**Internal Endpoints** (Phase 4):
+- `GET /internal/draft-orders` — List recent draft orders (requires X-Internal-Api-Key)
+- `GET /internal/support-cases` — List recent support cases (requires X-Internal-Api-Key)
+- `GET /internal/support-cases/{id}/complete` — Resolve via email link (requires time-limited token)
+- `POST /internal/support-cases/{id}/complete` — Resolve via API (requires X-Internal-Api-Key)
+- `POST /internal/knowledge/import` — Import knowledge base content (requires X-Internal-Api-Key)
 
 ### 5. Middleware
 
@@ -2624,10 +2631,11 @@ modelBuilder.Entity<Product>()
 - HTTPS only
 
 **Data Security**:
-- Tenant isolation via global query filters on all ITenantOwnedEntity types
+- Tenant isolation via global query filters on all ITenantOwnedEntity types (Phase 4 Audit: 19/19 multi-tenant entities confirmed)
 - No cross-tenant data leakage (verified by integration tests)
 - Audit logging for sensitive operations
 - TenantId indexed on all tenant-owned tables
+- CI guardrail test enforces `// ALLOW: <reason>` comments on all `IgnoreQueryFilters()` bypass sites (TenantIsolationGuardrailTests)
 
 **API Security**:
 - Rate limiting (10 req/min per tenant on metrics endpoints)
@@ -2635,6 +2643,12 @@ modelBuilder.Entity<Product>()
 - Input validation and SQL injection prevention via EF Core
 - Facebook Graph API rate limit handling (429 responses)
 - Tenant isolation via global query filters on all endpoints
+
+**Internal API Security** (Phase 4):
+- `/internal/*` endpoints protected by `X-Internal-Api-Key` header authentication
+- Key validated from `Alerts:InternalApiKey` configuration
+- Covered endpoints: `/draft-orders`, `/support-cases`, `/support-cases/{id}/complete` (POST), `/knowledge/import`
+- Exception: `/support-cases/{id}/complete` (GET) uses time-limited token from ISupportCaseTokenService (email link flow)
 
 ## Performance Considerations
 

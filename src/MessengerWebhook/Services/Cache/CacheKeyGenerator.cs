@@ -34,14 +34,14 @@ public class CacheKeyGenerator
     }
 
     /// <summary>
-    /// Generate cache key for LLM response by query + context + products
+    /// Generate cache key for LLM response by query + tenantId + products
     /// </summary>
     public string GenerateResponseKey(
         string query,
-        string context,
+        string tenantId,
         List<string> productIds)
     {
-        var combined = $"{query}|{context}|{string.Join(",", productIds)}";
+        var combined = $"{query}|{tenantId}|{string.Join(",", productIds)}";
         var hash = ComputeSHA256(combined);
         return $"response:{hash}";
     }

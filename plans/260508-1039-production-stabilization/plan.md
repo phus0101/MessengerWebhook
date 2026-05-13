@@ -1,7 +1,7 @@
 # Production Stabilization Plan
 
 **Created**: 2026-05-08
-**Updated**: 2026-05-13 (Phase 01, 02 completed)
+**Updated**: 2026-05-13 (Phase 01, 02, 03, 04, 05 completed)
 **Context**: 1000 tenant production, team 2 (1 dev + Claude Code), chưa có SLA
 **Scope**: Tier 0 + Refactor + Tier 1 (10-12 tuần)
 
@@ -50,7 +50,7 @@
 | # | Tên | Effort | Status | Phụ thuộc |
 |---|-----|--------|--------|-----------|
 | 03 | [Critical fixes: race + token leak + PII log](phase-03-critical-fixes.md) | 2 ngày | Complete (2026-05-13) | Phase 01 |
-| 04 | [Tenant isolation audit](phase-04-tenant-isolation-audit.md) | 2-3 ngày | Pending | Phase 01 |
+| 04 | [Tenant isolation audit](phase-04-tenant-isolation-audit.md) | 2-3 ngày | Complete (2026-05-13) | Phase 01 |
 | 05 | [Program.cs modularization](phase-05-program-cs-split.md) | 1 ngày | Complete | None |
 | 06 | [Define & publish SLA](phase-06-define-sla.md) | 0.5 ngày | Pending | Phase 02 |
 

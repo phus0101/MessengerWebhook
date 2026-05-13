@@ -250,6 +250,7 @@ public class WebhookProcessor
         }
 
         var pageConfig = await _dbContext.FacebookPageConfigs
+            // ALLOW: WebhookProcessor needs to find page config by FacebookPageId during webhook verification (pre-tenant context)
             .IgnoreQueryFilters()
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.FacebookPageId == pageId && x.IsActive);
@@ -280,6 +281,7 @@ public class WebhookProcessor
         }
 
         var bootstrapPageConfig = await _dbContext.FacebookPageConfigs
+            // ALLOW: Bootstrap initialization needs to find config by BootstrapEmail across all tenants
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(x => x.DefaultManagerEmail == _adminOptions.BootstrapEmail && x.IsActive);
         if (bootstrapPageConfig?.TenantId == null)
