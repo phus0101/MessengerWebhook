@@ -36,7 +36,7 @@ public class OrderConfirmationStateHandler : BaseStateHandler
             var orderId = $"ORD-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
             ctx.SetData("orderId", orderId);
 
-            Logger.LogInformation("Order placed: {OrderId} for PSID: {PSID}", orderId, ctx.FacebookPSID);
+            Logger.LogInformation("Order placed: {OrderId}", orderId);
 
             ctx.CurrentState = ConversationState.OrderPlaced;
 

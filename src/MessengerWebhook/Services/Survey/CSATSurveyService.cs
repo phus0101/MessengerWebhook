@@ -102,7 +102,7 @@ public class CSATSurveyService : ICSATSurveyService
         {
             if (rating < 1 || rating > 5)
             {
-                _logger.LogWarning("Invalid rating {Rating} from PSID {PSID}", rating, psid);
+                _logger.LogWarning("Invalid rating {Rating}", rating);
                 return;
             }
 
@@ -112,7 +112,7 @@ public class CSATSurveyService : ICSATSurveyService
 
             if (session == null)
             {
-                _logger.LogWarning("Session not found for PSID {PSID}", psid);
+                _logger.LogWarning("Session not found for rating");
                 return;
             }
 
@@ -147,7 +147,7 @@ public class CSATSurveyService : ICSATSurveyService
             {
                 await _messengerService.SendTextMessageAsync(psid, _options.Messages.FollowUpQuestion);
                 _awaitingFeedback.TryAdd(psid, 0);
-                _logger.LogInformation("Follow-up question sent to PSID {PSID} for low rating", psid);
+                _logger.LogInformation("Follow-up question sent for low rating");
             }
             else
             {
@@ -157,7 +157,7 @@ public class CSATSurveyService : ICSATSurveyService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling CSAT rating for PSID {PSID}", psid);
+            _logger.LogError(ex, "Error handling CSAT rating");
             throw;
         }
     }
@@ -169,7 +169,7 @@ public class CSATSurveyService : ICSATSurveyService
             // Check if user is awaiting feedback
             if (!_awaitingFeedback.ContainsKey(psid))
             {
-                _logger.LogDebug("PSID {PSID} not awaiting feedback, ignoring message", psid);
+                _logger.LogDebug("Not awaiting feedback, ignoring message");
                 return;
             }
 
@@ -179,7 +179,7 @@ public class CSATSurveyService : ICSATSurveyService
 
             if (session == null)
             {
-                _logger.LogWarning("Session not found for PSID {PSID}", psid);
+                _logger.LogWarning("Session not found for feedback");
                 _awaitingFeedback.TryRemove(psid, out _);
                 return;
             }
@@ -219,7 +219,7 @@ public class CSATSurveyService : ICSATSurveyService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling feedback for PSID {PSID}", psid);
+            _logger.LogError(ex, "Error handling feedback");
             _awaitingFeedback.TryRemove(psid, out _);
             throw;
         }

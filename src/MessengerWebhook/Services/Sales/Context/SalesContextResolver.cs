@@ -163,11 +163,11 @@ public sealed class SalesContextResolver : ISalesContextResolver
     {
         if ((ctx.GetData<List<string>>("selectedProductCodes") ?? new List<string>()).Count > 0)
         {
-            _logger.LogDebug("Skip history recovery — active product exists for PSID: {PSID}", ctx.FacebookPSID);
+            _logger.LogDebug("Skip history recovery — active product exists");
             return;
         }
 
-        _logger.LogInformation("Extracting product from conversation history for PSID: {PSID}", ctx.FacebookPSID);
+        _logger.LogInformation("Extracting product from conversation history");
 
         var recentMessages = (ctx.GetData<List<AiConversationMessage>>("conversationHistory")
             ?? new List<AiConversationMessage>()).TakeLast(10).ToList();
@@ -183,7 +183,7 @@ public sealed class SalesContextResolver : ISalesContextResolver
 
         if (preferredCandidates.Count == 0)
         {
-            _logger.LogWarning("No product found in conversation history for PSID: {PSID}", ctx.FacebookPSID);
+            _logger.LogWarning("No product found in conversation history");
             return;
         }
 

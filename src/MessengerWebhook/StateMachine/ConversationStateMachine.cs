@@ -49,7 +49,7 @@ public class ConversationStateMachine : IStateMachine
 
         if (session == null)
         {
-            _logger.LogInformation("Creating new session for PSID: {PSID}", psid);
+            _logger.LogInformation("Creating new session");
             session = new ConversationSession
             {
                 FacebookPSID = psid,
@@ -72,7 +72,7 @@ public class ConversationStateMachine : IStateMachine
         // Check for timeout
         if (context.IsTimedOut(InactivityTimeout) || IsAbsoluteTimeout(session))
         {
-            _logger.LogInformation("Session timeout detected for PSID: {PSID}, resetting to Idle", psid);
+            _logger.LogInformation("Session timeout detected, resetting to Idle");
             context.CurrentState = ConversationState.Idle;
             context.Data.Clear();
             context.LastInteractionAt = DateTime.UtcNow;
@@ -93,17 +93,16 @@ public class ConversationStateMachine : IStateMachine
     {
         if (ctx.CurrentState == newState)
         {
-            _logger.LogDebug("Already in state {State} for PSID: {PSID}", newState, ctx.FacebookPSID);
+            _logger.LogDebug("Already in state {State}", newState);
             return Task.FromResult(true);
         }
 
         if (!StateTransitionRules.IsValidTransition(ctx.CurrentState, newState, ctx))
         {
             _logger.LogWarning(
-                "Invalid state transition from {FromState} to {ToState} for PSID: {PSID}",
+                "Invalid state transition {FromState} -> {ToState}",
                 ctx.CurrentState,
-                newState,
-                ctx.FacebookPSID);
+                newState);
             return Task.FromResult(false);
         }
 
@@ -112,10 +111,9 @@ public class ConversationStateMachine : IStateMachine
         ctx.LastInteractionAt = DateTime.UtcNow;
 
         _logger.LogInformation(
-            "State transition: {FromState} -> {ToState} for PSID: {PSID}",
+            "State transition {FromState} -> {ToState}",
             oldState,
-            newState,
-            ctx.FacebookPSID);
+            newState);
 
         return Task.FromResult(true);
     }
@@ -126,7 +124,7 @@ public class ConversationStateMachine : IStateMachine
 
         if (session == null)
         {
-            _logger.LogError("Session not found for PSID: {PSID}", ctx.FacebookPSID);
+            _logger.LogError("Session not found for save");
             return;
         }
 
@@ -136,7 +134,7 @@ public class ConversationStateMachine : IStateMachine
         session.ExpiresAt = DateTime.UtcNow.Add(AbsoluteTimeout);
 
         await _sessionRepository.UpdateAsync(session);
-        _logger.LogDebug("Session saved for PSID: {PSID}", ctx.FacebookPSID);
+        _logger.LogDebug("Session saved");
     }
 
     public Task<string> ProcessMessageAsync(string psid, string message)
@@ -180,7 +178,7 @@ public class ConversationStateMachine : IStateMachine
 
         if (session == null)
         {
-            _logger.LogWarning("Cannot reset - session not found for PSID: {PSID}", psid);
+            _logger.LogWarning("Cannot reset - session not found");
             return;
         }
 
@@ -190,7 +188,7 @@ public class ConversationStateMachine : IStateMachine
         session.ExpiresAt = DateTime.UtcNow.Add(AbsoluteTimeout);
 
         await _sessionRepository.UpdateAsync(session);
-        _logger.LogInformation("Session reset to Idle for PSID: {PSID}", psid);
+        _logger.LogInformation("Session reset to Idle");
     }
 
     private StateContext MapToContext(ConversationSession session)
@@ -213,7 +211,7 @@ public class ConversationStateMachine : IStateMachine
             }
             catch (JsonException ex)
             {
-                _logger.LogError(ex, "Failed to deserialize context JSON for PSID: {PSID}", session.FacebookPSID);
+                _logger.LogError(ex, "Failed to deserialize context JSON");
                 context.Data = new Dictionary<string, object>();
             }
         }

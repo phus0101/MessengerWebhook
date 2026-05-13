@@ -58,8 +58,7 @@ public class DraftOrderCoordinator
                 return cachedUnderLock;
             }
 
-            _logger.LogInformation("Creating draft order for session {SessionId} (PSID: {PSID})",
-                sessionId, ctx.FacebookPSID);
+            _logger.LogInformation("Creating draft order for session {SessionId}", sessionId);
 
             var draft = await _draftOrderService.CreateFromContextAsync(ctx, ct);
 

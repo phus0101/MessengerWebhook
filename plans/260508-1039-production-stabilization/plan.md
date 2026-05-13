@@ -1,7 +1,7 @@
 # Production Stabilization Plan
 
 **Created**: 2026-05-08
-**Updated**: 2026-05-12 (Phase 05 completed)
+**Updated**: 2026-05-13 (Phase 01 completed)
 **Context**: 1000 tenant production, team 2 (1 dev + Claude Code), chưa có SLA
 **Scope**: Tier 0 + Refactor + Tier 1 (10-12 tuần)
 
@@ -30,7 +30,7 @@
 
 | # | Tên | Effort | Status | Phụ thuộc |
 |---|-----|--------|--------|-----------|
-| 01 | [Structured logging + Seq + correlation ID](phase-01-observability.md) | 2 ngày | Pending | None |
+| 01 | [Structured logging + Seq + correlation ID](phase-01-observability.md) | 2 ngày | Complete (2026-05-13) | None |
 | 02 | [Baseline latency measurement + alerts](phase-02-baseline-and-alerts.md) | 2 ngày | Pending | Phase 01 |
 
 **Backend chosen**: Seq (self-host Docker, ~$10/tháng VPS hoặc free local dev)

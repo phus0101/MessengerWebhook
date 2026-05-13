@@ -199,12 +199,12 @@ public abstract class SalesStateHandlerBase : IStateHandler
     {
         try
         {
-            Logger.LogInformation("Handling state {State} for PSID: {PSID}", HandledState, ctx.FacebookPSID);
+            Logger.LogInformation("Handling state {State}", HandledState);
             return await HandleInternalAsync(ctx, message);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Sales state error in {State} for PSID {PSID}", HandledState, ctx.FacebookPSID);
+            Logger.LogError(ex, "Sales state error in {State}", HandledState);
             ctx.CurrentState = ConversationState.Error;
             return "Dạ em đang bị nghẽn ở hệ thống một chút. Chị nhắn lại giúp em sau ít phút nha.";
         }
@@ -218,12 +218,12 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
         // Load remembered contact from previous orders on first message
         var history = ConversationHistoryHelper.GetHistory(ctx);
-        Logger.LogInformation("History count: {Count} for PSID: {PSID}", history.Count, ctx.FacebookPSID);
+        Logger.LogInformation("History count: {Count}", history.Count);
 
         if (history.Count <= 1) // First message in conversation
         {
             var pageId = ctx.GetData<string>("facebookPageId");
-            Logger.LogInformation("Attempting to load customer for PSID: {PSID}, PageId: {PageId}", ctx.FacebookPSID, pageId);
+            Logger.LogInformation("Attempting to load customer for PageId: {PageId}", pageId);
 
             var customer = await CustomerIntelligenceService.GetExistingAsync(
                 ctx.FacebookPSID,
@@ -245,14 +245,14 @@ public abstract class SalesStateHandlerBase : IStateHandler
                 {
                     ctx.SetData("rememberedCustomerPhone", customer.PhoneNumber);
                     ctx.SetData("customerPhone", customer.PhoneNumber);
-                    Logger.LogInformation("Loaded remembered phone for PSID: {PSID}: {Phone}", ctx.FacebookPSID, PiiRedaction.MaskPhone(customer.PhoneNumber ?? string.Empty));
+                    Logger.LogInformation("Loaded remembered phone: {Phone}", PiiRedaction.MaskPhone(customer.PhoneNumber ?? string.Empty));
                 }
 
                 if (!string.IsNullOrWhiteSpace(customer.ShippingAddress))
                 {
                     ctx.SetData("rememberedShippingAddress", customer.ShippingAddress);
                     ctx.SetData("shippingAddress", customer.ShippingAddress);
-                    Logger.LogInformation("Loaded remembered address for PSID: {PSID}: {Address}", ctx.FacebookPSID, PiiRedaction.MaskAddress(customer.ShippingAddress ?? string.Empty));
+                    Logger.LogInformation("Loaded remembered address: {Address}", PiiRedaction.MaskAddress(customer.ShippingAddress ?? string.Empty));
                 }
 
                 // Set flag to ask for confirmation
@@ -261,7 +261,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
                     ctx.SetData("contactNeedsConfirmation", true);
                     ctx.SetData("contactMemorySource", "previous-order");
                     ctx.SetData("pendingContactQuestion", "confirm_old_contact");
-                    Logger.LogInformation("Set contactNeedsConfirmation=true for PSID: {PSID}", ctx.FacebookPSID);
+                    Logger.LogInformation("Set contactNeedsConfirmation=true");
                 }
             }
         }
@@ -299,8 +299,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
         SalesMessageParser.CaptureSelectedProductQuantity(ctx, message);
 
         Logger.LogInformation(
-            "After CaptureCustomerDetails - PSID: {PSID}, HasProduct: {HasProduct}, HasRequiredContact: {HasRequiredContact}, NeedsConfirmation: {NeedsConfirmation}",
-            ctx.FacebookPSID,
+            "After CaptureCustomerDetails HasProduct={HasProduct} HasRequiredContact={HasRequiredContact} NeedsConfirmation={NeedsConfirmation}",
             SalesMessageParser.HasSelectedProduct(ctx),
             SalesMessageParser.HasRequiredContact(ctx),
             ctx.GetData<bool?>("contactNeedsConfirmation") ?? false
@@ -312,7 +311,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
         {
             if (!SalesMessageParser.HasSelectedProduct(ctx))
             {
-                Logger.LogInformation("Remembered contact confirmed without product context for PSID: {PSID}, attempting history recovery", ctx.FacebookPSID);
+                Logger.LogInformation("Remembered contact confirmed without product context, attempting history recovery");
                 await _contextResolver.TryExtractProductFromHistoryAsync(ctx, message);
             }
 
@@ -375,8 +374,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
         }
 
         Logger.LogInformation(
-            "AI Intent Detection - PSID: {PSID}, Intent: {Intent}, Confidence: {Confidence}, Method: {Method}",
-            ctx.FacebookPSID,
+            "AI Intent Detection Intent={Intent} Confidence={Confidence} Method={Method}",
             intentResult.Intent,
             intentResult.Confidence,
             intentResult.DetectionMethod
@@ -395,9 +393,8 @@ public abstract class SalesStateHandlerBase : IStateHandler
             ctx.SetData("consultationRejectionCount", currentCount + 1);
 
             Logger.LogInformation(
-                "Consultation rejection detected (count: {Count}) for PSID: {PSID}",
-                currentCount + 1,
-                ctx.FacebookPSID
+                "Consultation rejection detected (count: {Count})",
+                currentCount + 1
             );
         }
 
@@ -431,7 +428,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
               (intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy ||
                intentResult.Intent == Services.AI.Models.CustomerIntent.Confirming))))
         {
-            Logger.LogInformation("Ordering flow detected without product in context for PSID: {PSID}, attempting to extract product from history", ctx.FacebookPSID);
+            Logger.LogInformation("Ordering flow detected without product in context, attempting to extract from history");
             await _contextResolver.TryExtractProductFromHistoryAsync(ctx, message);
             hasProduct = SalesMessageParser.HasSelectedProduct(ctx);
         }
@@ -636,9 +633,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
         if (canCreateDraftNow)
         {
-            Logger.LogInformation(
-                "Customer has all required info and explicit order intent for PSID: {PSID}, building final confirmation summary",
-                ctx.FacebookPSID);
+            Logger.LogInformation("Customer has all required info and explicit order intent, building final confirmation summary");
 
             var finalSummaryReply = await _consultationReplies.BuildFinalOrderConfirmationReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(finalSummaryReply))
@@ -657,8 +652,8 @@ public abstract class SalesStateHandlerBase : IStateHandler
             hasProduct)
         {
             Logger.LogInformation(
-                "Auto-closing after {Count} consultation rejections - PSID: {PSID}",
-                rejectionCount, ctx.FacebookPSID);
+                "Auto-closing after {Count} consultation rejections",
+                rejectionCount);
 
             ctx.SetData("consultationDeclined", true);
 
@@ -668,14 +663,14 @@ public abstract class SalesStateHandlerBase : IStateHandler
                 // Extract product from history if not already in context
                 if (!hasProduct)
                 {
-                    Logger.LogInformation("No product in context before creating draft order for PSID: {PSID}, attempting to extract from history", ctx.FacebookPSID);
+                    Logger.LogInformation("No product in context before creating draft order, attempting to extract from history");
                     await _contextResolver.TryExtractProductFromHistoryAsync(ctx, message);
                     hasProduct = SalesMessageParser.HasSelectedProduct(ctx);
                 }
 
                 if (!hasProduct)
                 {
-                    Logger.LogWarning("Cannot create draft order without product for PSID: {PSID}", ctx.FacebookPSID);
+                    Logger.LogWarning("Cannot create draft order without product");
                     var noProductReply = "Dạ em chưa rõ chị muốn đặt sản phẩm nào ạ. Chị cho em biết tên sản phẩm để em lên đơn nhé.";
                     ConversationHistoryHelper.AddToHistory(ctx, "assistant", noProductReply, SalesBotOptions.ConversationHistoryLimit);
                     return noProductReply;

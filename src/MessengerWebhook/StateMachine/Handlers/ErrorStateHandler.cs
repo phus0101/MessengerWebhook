@@ -21,7 +21,7 @@ public class ErrorStateHandler : BaseStateHandler
         // Reset to Idle state on any message
         ctx.CurrentState = ConversationState.Idle;
 
-        Logger.LogInformation("Error state reset to Idle for PSID: {PSID}", ctx.FacebookPSID);
+        Logger.LogInformation("Error state reset to Idle");
 
         return "Xin lỗi, đã có lỗi xảy ra. Hãy thử lại nhé! 🌸";
     }

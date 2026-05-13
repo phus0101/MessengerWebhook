@@ -28,7 +28,7 @@ Respond with ONLY the intent name.";
         var intent = await GeminiService.SendMessageAsync(ctx.FacebookPSID, prompt, history);
         intent = intent.Trim().ToLowerInvariant();
 
-        Logger.LogInformation("Main menu intent: {Intent} for PSID: {PSID}", intent, ctx.FacebookPSID);
+        Logger.LogInformation("Main menu intent: {Intent}", intent);
 
         string response;
 

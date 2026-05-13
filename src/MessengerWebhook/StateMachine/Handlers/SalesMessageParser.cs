@@ -101,14 +101,14 @@ internal static partial class SalesMessageParser
         if (!string.IsNullOrWhiteSpace(phone))
         {
             context.SetData("customerPhone", phone);
-            logger?.LogInformation("Regex captured phone from message for PSID {PSID}", context.FacebookPSID);
+            logger?.LogInformation("Regex captured phone from message");
         }
 
         var address = TryExtractAddress(message);
         if (!string.IsNullOrWhiteSpace(address))
         {
             context.SetData("shippingAddress", address);
-            logger?.LogInformation("Regex captured address from message for PSID {PSID}", context.FacebookPSID);
+            logger?.LogInformation("Regex captured address from message");
         }
 
         if (!string.IsNullOrWhiteSpace(phone) || !string.IsNullOrWhiteSpace(address))

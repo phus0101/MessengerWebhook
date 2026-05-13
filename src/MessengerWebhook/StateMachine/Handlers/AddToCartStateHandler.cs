@@ -30,7 +30,7 @@ public class AddToCartStateHandler : BaseStateHandler
         cartItems.Add(variantId);
         ctx.SetData("cartItems", cartItems);
 
-        Logger.LogInformation("Added variant {VariantId} to cart for PSID: {PSID}", variantId, ctx.FacebookPSID);
+        Logger.LogInformation("Added variant {VariantId} to cart", variantId);
 
         ctx.CurrentState = ConversationState.CartReview;
 

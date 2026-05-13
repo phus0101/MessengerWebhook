@@ -46,7 +46,7 @@ public class SalesConsultationReplies : ISalesConsultationReplies
         var product = await _contextResolver.ResolveCurrentProductAsync(ctx, message);
         if (product == null)
         {
-            _logger.LogWarning("No product found for PSID: {PSID}, returning null", ctx.FacebookPSID);
+            _logger.LogWarning("No product found, returning null");
             return null;
         }
 

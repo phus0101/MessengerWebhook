@@ -99,7 +99,7 @@ public class CompleteStateHandler : SalesStateHandlerBase
         // Detect if this is a new conversation
         if (IsNewConversation(ctx, message))
         {
-            Logger.LogInformation("New conversation detected after Complete state for PSID: {PSID}, resetting to Consulting", ctx.FacebookPSID);
+            Logger.LogInformation("New conversation detected after Complete state, resetting to Consulting");
 
             // Reset state and clear ALL order-related data
             ctx.CurrentState = ConversationState.Consulting;
@@ -266,7 +266,7 @@ public class CompleteStateHandler : SalesStateHandlerBase
         var normalizedMessage = message.Trim().ToLowerInvariant();
         if (IsGreetingOnlyMessage(normalizedMessage))
         {
-            Logger.LogInformation("Greeting-only message detected in Complete state for PSID: {PSID}", ctx.FacebookPSID);
+            Logger.LogInformation("Greeting-only message detected in Complete state");
             return true;
         }
 
@@ -274,8 +274,8 @@ public class CompleteStateHandler : SalesStateHandlerBase
         var hoursSinceLastInteraction = (DateTime.UtcNow - ctx.LastInteractionAt).TotalHours;
         if (hoursSinceLastInteraction > 24)
         {
-            Logger.LogInformation("Last interaction was {Hours}h ago for PSID: {PSID}, treating as new conversation",
-                hoursSinceLastInteraction, ctx.FacebookPSID);
+            Logger.LogInformation("Last interaction was {Hours}h ago, treating as new conversation",
+                hoursSinceLastInteraction);
             return true;
         }
 

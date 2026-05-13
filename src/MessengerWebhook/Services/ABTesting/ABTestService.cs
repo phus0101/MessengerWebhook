@@ -43,8 +43,8 @@ public class ABTestService : IABTestService
         if (session?.ABTestVariant != null)
         {
             var cachedLatency = (DateTime.UtcNow - startTime).TotalMilliseconds;
-            _logger.LogDebug("A/B variant cached for PSID {PSID}: {Variant} (latency: {Latency}ms)",
-                psid, session.ABTestVariant, cachedLatency);
+            _logger.LogDebug("A/B variant cached Variant={Variant} Latency={Latency}ms",
+                session.ABTestVariant, cachedLatency);
             return session.ABTestVariant;
         }
 
@@ -60,8 +60,8 @@ public class ABTestService : IABTestService
         }
 
         var totalLatency = (DateTime.UtcNow - startTime).TotalMilliseconds;
-        _logger.LogInformation("A/B variant assigned for PSID {PSID}: {Variant} (latency: {Latency}ms)",
-            psid, variant, totalLatency);
+        _logger.LogInformation("A/B variant assigned Variant={Variant} Latency={Latency}ms",
+            variant, totalLatency);
 
         return variant;
     }

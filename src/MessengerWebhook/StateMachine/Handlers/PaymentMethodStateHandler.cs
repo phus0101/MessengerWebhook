@@ -37,7 +37,7 @@ Respond with ONLY the payment method name.";
         paymentMethod = paymentMethod.Trim().ToLowerInvariant();
 
         ctx.SetData("paymentMethod", paymentMethod);
-        Logger.LogInformation("Payment method selected: {PaymentMethod} for PSID: {PSID}", paymentMethod, ctx.FacebookPSID);
+        Logger.LogInformation("Payment method selected: {PaymentMethod}", paymentMethod);
 
         ctx.CurrentState = ConversationState.OrderConfirmation;
 

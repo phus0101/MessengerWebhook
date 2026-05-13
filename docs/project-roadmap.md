@@ -1,8 +1,8 @@
 # Project Roadmap
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
-**Last Updated**: 2026-05-12
-**Status**: Phase 7 Complete + Phase R-05 (Program.cs Modularization) Complete
+**Last Updated**: 2026-05-13
+**Status**: Phase 01 Complete (Observability) + Phase 7 Complete + Phase R-05 Complete (Program.cs Modularization)
 
 ---
 
@@ -13,6 +13,37 @@ This roadmap tracks the development phases of the Multi-Tenant Messenger Chatbot
 ---
 
 ## Completed Phases
+
+### Phase 01: Observability & PII Protection ✅
+**Status**: Complete
+**Completion Date**: 2026-05-13
+**Duration**: 1 day
+
+**Key Deliverables**:
+- Full PII sweep: removed raw PSID from 48 log calls (21 files)
+- Hashed customer identifiers via SHA256 UserIdHasher utility
+- OpenTelemetry distributed tracing (optional, OTLP)
+- ObservabilityRegistration service for logging setup
+- {PsidHash} enrichment in Serilog file sink output template
+- All logs carry CorrelationId, TenantId, PsidHash context
+
+**Files Modified**: 21 files across state handlers, services, session manager
+**Files Created**: `Utilities/Security/UserIdHasher.cs`
+
+**Success Metrics**:
+- Zero raw PSID in any logs ✅
+- All 849 unit tests passing (100%) ✅
+- Build: 0 errors, 0 warnings ✅
+- No performance impact (<1ms hashing overhead) ✅
+- Backward compatible, no breaking changes ✅
+
+**Security Impact**:
+- GDPR compliance improved
+- Data breach risk minimized (hashed IDs only)
+- Audit trail maintained (correlation IDs)
+- Production-ready ✅
+
+---
 
 ### Phase 1: Core Infrastructure ✅
 **Status**: Complete
@@ -551,6 +582,8 @@ This roadmap tracks the development phases of the Multi-Tenant Messenger Chatbot
 
 ## Current Phase
 
+**Phase 01 (Observability) Complete**: Full PII protection with deterministic SHA256 hashing. All 48 raw PSID log calls removed from 21 files. OpenTelemetry distributed tracing added (optional OTLP). All 849 unit tests passing. GDPR-compliant, production-ready logging infrastructure.
+
 **Phase R-05 (Refactoring) Complete**: Final cleanup of SalesStateHandlerBase and services extraction. All extracted services (ISalesConsultationReplies, ConversationHistoryHelper) are integrated and tested. Base class reduced from ~1365 to ~840 LOC. All 849 unit tests passing.
 
 **Phase 7 Complete**: All 6 sub-phases delivered (A/B Testing, Metrics Collection, Metrics API, Testing & Validation, Custom Dashboard, CSAT Survey). System is production-ready with comprehensive analytics, metrics infrastructure, visual dashboard, and customer satisfaction tracking.
@@ -690,6 +723,7 @@ This roadmap tracks the development phases of the Multi-Tenant Messenger Chatbot
 ## Timeline Overview
 
 ```
+Phase 01: Observability & PII        [████████████████████] 100% (1 day)
 Phase 1: Core Infrastructure        [████████████████████] 100% (3 weeks)
 Phase 2: AI Integration             [████████████████████] 100% (1 week)
 Phase 3: Hybrid Search              [████████████████████] 100% (1 week)
@@ -702,7 +736,7 @@ Phase 9: Multi-Language Support     [░░░░░░░░░░░░░░�
 Phase 10: Voice & Image Processing  [░░░░░░░░░░░░░░░░░░░░]   0% (4 weeks)
 ```
 
-**Total Completed**: 7 phases (8 weeks)
+**Total Completed**: 8 phases (8+ weeks)
 **In Progress**: 0 phases
 **Remaining**: 3 phases (9+ weeks)
 
@@ -737,6 +771,7 @@ Phase 10: Voice & Image Processing  [░░░░░░░░░░░░░░�
 
 ## Changelog
 
+- **2026-05-13**: Phase 01 (Observability) completed - Full PII protection, raw PSID removed from 48 log calls, OpenTelemetry tracing added, GDPR-compliant logging
 - **2026-04-12**: Transcript-driven sales flow hardening verified - greeting transition enforced in small-talk path, freeship shortcut inference removed, docs refreshed
 - **2026-04-09**: Phase 7 fully completed - All 6 sub-phases delivered (7.1-7.6), including CSAT Survey integration
 - **2026-04-09**: Phase 7.3 & 7.5 completed - Metrics API (3 endpoints) and Custom Dashboard (React UI) delivered

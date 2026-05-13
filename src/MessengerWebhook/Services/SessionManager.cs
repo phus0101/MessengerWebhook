@@ -28,12 +28,12 @@ public class SessionManager : ISessionManager
         // Try cache first
         if (_cache.TryGetValue(cacheKey, out ConversationSession? cachedSession))
         {
-            _logger.LogDebug("Session cache hit for PSID: {PSID}", psid);
+            _logger.LogDebug("Session cache hit");
             return cachedSession;
         }
 
         // Fallback to database
-        _logger.LogDebug("Session cache miss for PSID: {PSID}, fetching from database", psid);
+        _logger.LogDebug("Session cache miss, fetching from database");
         var session = await _sessionRepository.GetByPSIDAsync(psid);
 
         if (session != null)
@@ -62,7 +62,7 @@ public class SessionManager : ISessionManager
 
         _cache.Set(cacheKey, session, cacheOptions);
 
-        _logger.LogDebug("Session saved and cached for PSID: {PSID}", session.FacebookPSID);
+        _logger.LogDebug("Session saved and cached");
     }
 
     public async Task DeleteAsync(string psid)
@@ -73,7 +73,7 @@ public class SessionManager : ISessionManager
 
         // Note: Database deletion is handled by SessionCleanupService
         // This method only evicts from cache
-        _logger.LogDebug("Session cache evicted for PSID: {PSID}", psid);
+        _logger.LogDebug("Session cache evicted");
 
         await Task.CompletedTask;
     }

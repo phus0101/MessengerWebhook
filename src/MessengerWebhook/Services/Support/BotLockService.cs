@@ -87,7 +87,7 @@ public class BotLockService : IBotLockService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to log bot lock audit for PSID {PSID}", facebookPsid);
+            _logger.LogWarning(ex, "Failed to log bot lock audit");
         }
     }
 
@@ -127,7 +127,7 @@ public class BotLockService : IBotLockService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to log bot unlock audit for PSID {PSID}", facebookPsid);
+                _logger.LogWarning(ex, "Failed to log bot unlock audit");
             }
         }
     }

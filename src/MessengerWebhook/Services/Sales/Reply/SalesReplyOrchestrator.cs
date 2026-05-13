@@ -108,7 +108,7 @@ public sealed class SalesReplyOrchestrator : ISalesReplyOrchestrator
         // Control group: Skip naturalness pipeline, use direct AI response
         if (variant == "control")
         {
-            _logger.LogInformation("Control group: Skipping naturalness pipeline for PSID {PSID}", ctx.FacebookPSID);
+            _logger.LogInformation("Control group: Skipping naturalness pipeline");
             var controlResponse = await GenerateDirectAIResponseAsync(ctx, message, intent);
 
             // Log control metrics (no pipeline data)
@@ -118,7 +118,7 @@ public sealed class SalesReplyOrchestrator : ISalesReplyOrchestrator
         }
 
         // Treatment group: Run full naturalness pipeline
-        _logger.LogInformation("Treatment group: Running full naturalness pipeline for PSID {PSID}", ctx.FacebookPSID);
+        _logger.LogInformation("Treatment group: Running full naturalness pipeline");
 
         var pipelineStartTime = DateTime.UtcNow;
 
@@ -154,7 +154,7 @@ public sealed class SalesReplyOrchestrator : ISalesReplyOrchestrator
         if (shouldGreet)
         {
             ctx.SetData("vipGreetingSent", true);
-            _logger.LogInformation("First greeting sent for PSID: {PSID}", ctx.FacebookPSID);
+            _logger.LogInformation("First greeting sent");
         }
 
         // Build CTA context with intent awareness
@@ -458,7 +458,7 @@ Quy tac:
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "RAG retrieval failed for PSID: {PSID}", ctx.FacebookPSID);
+            _logger.LogWarning(ex, "RAG retrieval failed");
             return new RAGContext(string.Empty, new List<string>(), new List<GroundedProduct>(), new RAGMetrics(TimeSpan.Zero, TimeSpan.Zero, 0, false, "error"));
         }
     }
@@ -511,7 +511,7 @@ Quy tac:
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "RAG retrieval failed for control group PSID: {PSID}", ctx.FacebookPSID);
+                _logger.LogWarning(ex, "RAG retrieval failed for control group");
             }
         }
 
@@ -616,7 +616,7 @@ Quy tac:
         catch (Exception ex)
         {
             // Never fail user request due to metrics logging
-            _logger.LogError(ex, "Failed to log metrics for PSID: {PSID}", ctx.FacebookPSID);
+            _logger.LogError(ex, "Failed to log metrics");
         }
     }
 

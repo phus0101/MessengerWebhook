@@ -50,7 +50,7 @@ Respond with ONLY the skin type.";
 
         ctx.SetData("skinType", skinType);
 
-        Logger.LogInformation("Detected skin type: {SkinType} for PSID: {PSID}", skinType, ctx.FacebookPSID);
+        Logger.LogInformation("Detected skin type: {SkinType}", skinType);
 
         if (!_tenantContext.TenantId.HasValue)
         {

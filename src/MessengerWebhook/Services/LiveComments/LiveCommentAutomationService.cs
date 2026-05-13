@@ -82,7 +82,7 @@ public class LiveCommentAutomationService : ILiveCommentAutomationService
 
             if (activeSession != null)
             {
-                _logger.LogInformation("User {PSID} already has active conversation", commenterPsid);
+                _logger.LogInformation("User already has active conversation");
                 return;
             }
 
@@ -92,7 +92,7 @@ public class LiveCommentAutomationService : ILiveCommentAutomationService
 
             if (isLocked)
             {
-                _logger.LogInformation("Bot is locked for user {PSID}", commenterPsid);
+                _logger.LogInformation("Bot is locked for this user");
                 return;
             }
 

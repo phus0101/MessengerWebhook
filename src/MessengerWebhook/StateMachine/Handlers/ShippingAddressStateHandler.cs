@@ -45,7 +45,7 @@ Respond with 'valid' or 'invalid'.";
         }
 
         ctx.SetData("shippingAddress", message);
-        Logger.LogInformation("Shipping address saved for PSID: {PSID}", ctx.FacebookPSID);
+        Logger.LogInformation("Shipping address saved");
 
         ctx.CurrentState = ConversationState.PaymentMethod;
 

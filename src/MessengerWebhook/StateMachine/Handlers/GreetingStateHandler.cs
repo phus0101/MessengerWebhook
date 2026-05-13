@@ -28,7 +28,7 @@ Respond with ONLY the intent name.";
         var intent = await GeminiService.SendMessageAsync(ctx.FacebookPSID, prompt, history);
         intent = intent.Trim().ToLowerInvariant();
 
-        Logger.LogInformation("Detected intent: {Intent} for PSID: {PSID}", intent, ctx.FacebookPSID);
+        Logger.LogInformation("Detected intent: {Intent}", intent);
 
         var response = "Xin chào! Tôi ở đây để giúp bạn tìm sản phẩm mỹ phẩm hoàn hảo. ";
 
