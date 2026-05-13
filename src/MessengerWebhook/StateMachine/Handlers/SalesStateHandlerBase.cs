@@ -171,7 +171,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
         Logger = logger;
         _contextResolver = contextResolver ?? new SalesContextResolver(
             customerIntelligenceService, productMappingService, giftSelectionService,
-            freeshipCalculator, _productGroundingService, geminiService, logger);
+            freeshipCalculator, _productGroundingService, geminiService, Microsoft.Extensions.Logging.Abstractions.NullLogger<SalesContextResolver>.Instance);
         _promptBuilder = promptBuilder ?? new SalesPromptBuilder();
         _contactFlow = contactFlow ?? new ContactConfirmationFlow(_contextResolver, _promptBuilder);
         _replyOrchestrator = replyOrchestrator ?? new SalesReplyOrchestrator(
@@ -190,13 +190,14 @@ public abstract class SalesStateHandlerBase : IStateHandler
             _promptBuilder,
             salesBotOptions,
             ragOptions,
-            logger);
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SalesReplyOrchestrator>.Instance);
         _consultationReplies = consultationReplies ?? new SalesConsultationReplies(
             _contextResolver, _promptBuilder, productMappingService, NullLogger<SalesConsultationReplies>.Instance);
     }
 
     public async Task<string> HandleAsync(StateContext ctx, string message)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             Logger.LogInformation("Handling state {State}", HandledState);
@@ -207,6 +208,13 @@ public abstract class SalesStateHandlerBase : IStateHandler
             Logger.LogError(ex, "Sales state error in {State}", HandledState);
             ctx.CurrentState = ConversationState.Error;
             return "Dạ em đang bị nghẽn ở hệ thống một chút. Chị nhắn lại giúp em sau ít phút nha.";
+        }
+        finally
+        {
+            sw.Stop();
+            Logger.LogInformation(
+                "SalesHandlerCompleted State={State} ElapsedMs={ElapsedMs}",
+                HandledState, sw.ElapsedMilliseconds);
         }
     }
 

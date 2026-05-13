@@ -111,7 +111,7 @@ public class ConversationStateMachine : IStateMachine
         ctx.LastInteractionAt = DateTime.UtcNow;
 
         _logger.LogInformation(
-            "State transition {FromState} -> {ToState}",
+            "StateTransition From={FromState} To={ToState}",
             oldState,
             newState);
 

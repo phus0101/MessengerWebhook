@@ -26,7 +26,7 @@ public sealed class SalesContextResolver : ISalesContextResolver
     private readonly IFreeshipCalculator _freeshipCalculator;
     private readonly IProductGroundingService _productGrounding;
     private readonly IGeminiService _geminiService;
-    private readonly ILogger _logger;
+    private readonly ILogger<SalesContextResolver> _logger;
 
     public SalesContextResolver(
         ICustomerIntelligenceService customerIntelligence,
@@ -35,7 +35,7 @@ public sealed class SalesContextResolver : ISalesContextResolver
         IFreeshipCalculator freeshipCalculator,
         IProductGroundingService productGrounding,
         IGeminiService geminiService,
-        ILogger logger)
+        ILogger<SalesContextResolver> logger)
     {
         _customerIntelligence = customerIntelligence;
         _productMapping = productMapping;

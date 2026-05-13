@@ -110,9 +110,10 @@ public class WebhookProcessor
                 _logger.LogWarning("Unknown event type received");
             }
         }
-        catch
+        catch (Exception ex)
         {
             status = "error";
+            _logger.LogError(ex, "WebhookError ErrorType={ErrorType}", ex.GetType().Name);
             throw;
         }
         finally

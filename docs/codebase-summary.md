@@ -2,7 +2,7 @@
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
 **Last Updated**: 2026-05-13
-**Phase**: Phase 01 complete (Observability & PII Protection) | R-05 complete (Program.cs modularization + SalesConsultationReplies extraction)
+**Phase**: Phase 02 complete (Baseline Latency & Alerts) | Phase 01 complete (Observability & PII Protection) | R-05 complete (Program.cs modularization + SalesConsultationReplies extraction)
 
 ---
 
@@ -725,11 +725,60 @@ dotnet ef migrations script --project src/MessengerWebhook
 
 ## Monitoring & Observability
 
-**Logging**:
-- Structured logging via ILogger
-- State transitions logged
-- Error tracking with context
-- Log levels: Trace, Debug, Info, Warning, Error, Critical
+### Logging & Structured Events
+
+**Logging Infrastructure**:
+- Serilog structured logging with file sink
+- All logs enriched with CorrelationId, TenantId, PsidHash (Phase 01)
+- Log template: `{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}`
+- No raw PSID in logs (removed from 48 log calls across 21 files)
+- OpenTelemetry distributed tracing (optional OTLP, Phase 01)
+
+**Structured Log Events** (Phase 02):
+- `SalesHandlerCompleted`: Response latency timing (milliseconds)
+- `StateTransition`: State machine transitions (PascalCase)
+- `WebhookError`: Error type classification and context
+- All events carry enriched context (CorrelationId, TenantId, PsidHash)
+
+**ILogger<T> Integration**:
+- Dependency injection in all services (Phase 02 fixed SalesContextResolver and SalesReplyOrchestrator)
+- Consistent logging patterns across state handlers
+- Service-level logging in sales services (SalesPromptBuilder, ContactConfirmationFlow, SalesReplyOrchestrator)
+
+### Alerting Infrastructure
+
+**Telegram Notifier** (`Services/Alerts/TelegramNotifier.cs`):
+- Alert delivery via Telegram Bot API
+- Supports message formatting and context
+- Integrated with alert deduplicator
+
+**Alert Deduplicator** (`Services/Alerts/AlertDeduplicator.cs`):
+- Prevents duplicate alert storms
+- Configurable suppression windows
+- Context-aware deduplication
+
+**Alert Endpoints** (`Endpoints/AlertWebhookEndpointExtensions.cs`):
+- Webhook endpoint mapping for alert delivery
+- Integration with Telegram notifier
+- Tenant isolation for multi-tenant alerting
+
+**Request Timing Tracker** (`Services/Timing/RequestTimingTracker.cs`):
+- Baseline latency measurement for responses
+- Timing context in structured logs
+- SalesHandlerCompleted events include response_latency_ms
+
+**Seq Integration** (Phase 02):
+- Structured log aggregation and querying
+- Alert rules configured via Seq UI (not code)
+- Baseline latency queries pending 7 days production data
+- Custom dashboard ready for operational metrics
+
+### Alert Runbooks
+
+Created in `docs/runbooks/` directory (Phase 02):
+- `alert-high-latency-response.md`: >2s response time diagnosis
+- `alert-webhook-processing-failure.md`: Webhook retry and recovery
+- `alert-ai-service-timeout.md`: Fallback guidance for Gemini timeouts
 
 **Health Checks**:
 - Database connectivity
@@ -737,11 +786,12 @@ dotnet ef migrations script --project src/MessengerWebhook
 - Graph API connectivity
 - Exposed at `/health` endpoint
 
-**Metrics** (planned):
-- Message processing latency
-- State transition frequency
-- Error rates by state
-- Session timeout rates
+**Metrics** (A/B Testing + Metrics Platform, Phase 7):
+- Conversation metrics via MetricsBackgroundService
+- 8 metric types: ResponseTime, EmotionDetection, ToneMatching, ContextAnalysis, SmallTalkDetection, ValidationScore, PipelineOverhead, CacheHitRate
+- Database-side aggregation via MetricsAggregationService
+- Admin API endpoints for metrics reporting
+- Real-time dashboard with CSV export
 
 ---
 

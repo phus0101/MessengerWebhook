@@ -47,7 +47,7 @@ public class SalesReplyOrchestratorTests
             new SalesPromptBuilder(),
             Options.Create(new SalesBotOptions { ConversationHistoryLimit = 15 }),
             Options.Create(new RAGOptions { Enabled = false, TopK = 5 }),
-            NullLogger.Instance);
+            NullLogger<SalesReplyOrchestrator>.Instance);
 
         orchestrator.Should().NotBeNull();
         orchestrator.Should().BeAssignableTo<ISalesReplyOrchestrator>();
@@ -72,7 +72,7 @@ public class SalesReplyOrchestratorTests
             new SalesPromptBuilder(),
             Options.Create(new SalesBotOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
-            NullLogger.Instance);
+            NullLogger<SalesReplyOrchestrator>.Instance);
 
         orchestrator.Should().NotBeNull();
     }

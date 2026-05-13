@@ -24,7 +24,7 @@ public class SalesContextResolverTests
     private readonly Mock<IFreeshipCalculator> _mockFreeshipCalculator;
     private readonly Mock<IProductGroundingService> _mockProductGrounding;
     private readonly Mock<IGeminiService> _mockGeminiService;
-    private readonly ILogger _logger;
+    private readonly ILogger<SalesContextResolver> _logger;
     private readonly SalesContextResolver _resolver;
 
     public SalesContextResolverTests()
@@ -35,7 +35,7 @@ public class SalesContextResolverTests
         _mockFreeshipCalculator = new Mock<IFreeshipCalculator>();
         _mockProductGrounding = new Mock<IProductGroundingService>();
         _mockGeminiService = new Mock<IGeminiService>();
-        _logger = NullLogger.Instance;
+        _logger = NullLogger<SalesContextResolver>.Instance;
 
         _resolver = new SalesContextResolver(
             _mockCustomerIntelligence.Object,

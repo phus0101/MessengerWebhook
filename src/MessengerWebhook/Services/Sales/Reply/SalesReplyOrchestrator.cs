@@ -45,7 +45,7 @@ public sealed class SalesReplyOrchestrator : ISalesReplyOrchestrator
     private readonly ISalesPromptBuilder _promptBuilder;
     private readonly SalesBotOptions _salesBotOptions;
     private readonly RAGOptions _ragOptions;
-    private readonly ILogger _logger;
+    private readonly ILogger<SalesReplyOrchestrator> _logger;
 
     public SalesReplyOrchestrator(
         IGeminiService geminiService,
@@ -63,7 +63,7 @@ public sealed class SalesReplyOrchestrator : ISalesReplyOrchestrator
         ISalesPromptBuilder promptBuilder,
         IOptions<SalesBotOptions> salesBotOptions,
         IOptions<RAGOptions> ragOptions,
-        ILogger logger)
+        ILogger<SalesReplyOrchestrator> logger)
     {
         _geminiService = geminiService;
         _ragService = ragService;

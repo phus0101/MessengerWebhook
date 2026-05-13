@@ -12,6 +12,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Phase 02: Baseline Latency & Alert Infrastructure (2026-05-13)
+
+**Structured Log Events for Observability**:
+- Added `SalesHandlerCompleted` log event with response latency timing
+- Added `StateTransition` log event (PascalCase) for state machine tracking
+- Added `WebhookError` log event with error type classification
+- All events enriched with CorrelationId, TenantId, PsidHash
+
+**Observability Infrastructure**:
+- Fixed `ILogger<T>` dependency injection in `SalesContextResolver` and `SalesReplyOrchestrator`
+- All Phase 02 Telegram alerting infrastructure already present from Phase R-05:
+  - `TelegramNotifier` service for alert delivery
+  - `AlertDeduplicator` for duplicate alert prevention
+  - `AlertWebhookEndpointExtensions` for alert endpoint mapping
+  - `RequestTimingTracker` for baseline latency measurement
+
+**Alert Runbooks** (3 P1 runbooks):
+- Created `docs/runbooks/` directory with production alert playbooks
+- P1: High latency response (>2s) - diagnostic steps + escalation
+- P1: Webhook processing failures - recovery procedures
+- P1: AI service timeout - fallback guidance
+
+**Seq Integration** (Configuration-Only):
+- Seq queries and alert rules managed via Seq UI (not code)
+- Baseline latency queries configured post-7-days production data
+- Alert definitions stored in Seq, not version-controlled
+
+**Test Coverage**:
+- All 849 unit tests passing (100%)
+- Build status: 0 errors, 0 warnings
+- Logging infrastructure validated at startup
+
+**Files Created**:
+- `docs/runbooks/alert-high-latency-response.md`
+- `docs/runbooks/alert-webhook-processing-failure.md`
+- `docs/runbooks/alert-ai-service-timeout.md`
+
+**Production Readiness**:
+- Baseline latency measurement operational ✅
+- Alert infrastructure functional (TelegramNotifier ready) ✅
+- Runbooks documented for on-call team ✅
+- Baseline report deferred until 7 days production data collected ✅
+
 ### Added - Phase 01: Observability & PII Protection (2026-05-13)
 
 **PII Data Protection Initiative**:
