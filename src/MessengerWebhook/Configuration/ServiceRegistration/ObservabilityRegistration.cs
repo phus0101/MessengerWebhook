@@ -1,5 +1,6 @@
 using MessengerWebhook.HealthChecks;
 using MessengerWebhook.Services.Notifications;
+using MessengerWebhook.Services.Observability;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -19,6 +20,7 @@ internal static class ObservabilityRegistration
             .Enrich.WithThreadId()
             .Enrich.WithProperty("Application", "MessengerWebhook")
             .Enrich.WithProperty("Environment", ctx.HostingEnvironment.EnvironmentName)
+            .Enrich.With<PiiRedactingEnricher>()
             .WriteTo.Console()
             .WriteTo.File(
                 path: "logs/app-.log",

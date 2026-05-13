@@ -49,7 +49,7 @@
 
 | # | Tên | Effort | Status | Phụ thuộc |
 |---|-----|--------|--------|-----------|
-| 03 | [Critical fixes: race + token leak + PII log](phase-03-critical-fixes.md) | 2 ngày | Pending | Phase 01 |
+| 03 | [Critical fixes: race + token leak + PII log](phase-03-critical-fixes.md) | 2 ngày | Complete (2026-05-13) | Phase 01 |
 | 04 | [Tenant isolation audit](phase-04-tenant-isolation-audit.md) | 2-3 ngày | Pending | Phase 01 |
 | 05 | [Program.cs modularization](phase-05-program-cs-split.md) | 1 ngày | Complete | None |
 | 06 | [Define & publish SLA](phase-06-define-sla.md) | 0.5 ngày | Pending | Phase 02 |

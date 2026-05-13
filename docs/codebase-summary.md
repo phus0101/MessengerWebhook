@@ -2,7 +2,7 @@
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
 **Last Updated**: 2026-05-13
-**Phase**: Phase 02 complete (Baseline Latency & Alerts) | Phase 01 complete (Observability & PII Protection) | R-05 complete (Program.cs modularization + SalesConsultationReplies extraction)
+**Phase**: Phase 03 complete (Defense-in-Depth PII Redaction) | Phase 02 complete (Baseline Latency & Alerts) | Phase 01 complete (Observability & PII Protection) | R-05 complete (Program.cs modularization + SalesConsultationReplies extraction)
 
 ---
 
@@ -733,6 +733,13 @@ dotnet ef migrations script --project src/MessengerWebhook
 - Log template: `{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}`
 - No raw PSID in logs (removed from 48 log calls across 21 files)
 - OpenTelemetry distributed tracing (optional OTLP, Phase 01)
+
+**PII Redaction** (Phase 03):
+- `PiiRedactingEnricher`: Serilog enricher auto-redacts phone numbers and addresses from string log properties
+- Defense-in-depth secondary protection (after call-site redaction via PiiRedactor)
+- Zero allocation on common path (no PII matches)
+- Integrated via `ObservabilityRegistration.cs`: `.Enrich.With<PiiRedactingEnricher>()`
+- 39 unit tests covering redaction patterns and enricher behavior
 
 **Structured Log Events** (Phase 02):
 - `SalesHandlerCompleted`: Response latency timing (milliseconds)
