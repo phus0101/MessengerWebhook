@@ -1,12 +1,15 @@
+using MessengerWebhook.Configuration;
 using MessengerWebhook.Data;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Services.AI.Embeddings;
+using MessengerWebhook.Services.RAG.Reranking;
 using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.Services.VectorSearch;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
 
@@ -74,7 +77,9 @@ public class HybridSearchIntegrationTests : IDisposable
             _vectorSearchMock.Object,
             keywordSearch,
             rrfFusion,
-            Mock.Of<ILogger<HybridSearchService>>());
+            Mock.Of<ILogger<HybridSearchService>>(),
+            Mock.Of<IRerankService>(),
+            Options.Create(new CohereOptions { Enabled = false }));
 
         SeedTestData();
     }

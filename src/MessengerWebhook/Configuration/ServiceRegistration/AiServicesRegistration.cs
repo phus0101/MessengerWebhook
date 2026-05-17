@@ -6,6 +6,7 @@ using MessengerWebhook.Services.AI.Routing;
 using MessengerWebhook.Services.AI.Strategies;
 using MessengerWebhook.Services.Conversation;
 using MessengerWebhook.Services.RAG;
+using MessengerWebhook.Services.RAG.Reranking;
 using MessengerWebhook.Services.VectorSearch;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
@@ -99,15 +100,30 @@ internal static class AiServicesRegistration
             return new PineconeClient(opts.ApiKey);
         });
 
+        // Cohere Rerank — use HttpClient directly (Cohere SDK requires .NET 10)
+        services.Configure<CohereOptions>(configuration.GetSection(CohereOptions.SectionName));
+        services.AddSingleton<IValidateOptions<CohereOptions>, ValidateCohereOptions>();
+        services.AddOptions<CohereOptions>().ValidateOnStart();
+        services.AddHttpClient("cohere", (sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<CohereOptions>>().Value;
+            var apiKey = string.IsNullOrEmpty(opts.ApiKey)
+                ? Environment.GetEnvironmentVariable("COHERE_API_KEY") ?? ""
+                : opts.ApiKey;
+            client.BaseAddress = new Uri("https://api.cohere.com/");
+            client.Timeout = TimeSpan.FromMilliseconds(opts.TimeoutMs + 1000); // Polly manages inner timeout
+            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+        });
+        services.AddScoped<IRerankService, CohereRerankService>();
+
         // Vector search
         services.AddSingleton<IIndexingProgressTracker, IndexingProgressTracker>();
         services.AddScoped<IVectorSearchService, PineconeVectorService>();
         services.AddScoped<ProductEmbeddingPipeline>();
 
-        // Hybrid search — concrete type registered first so cache wrapper can resolve it
+        // Hybrid search
         services.AddScoped<KeywordSearchService>();
         services.AddScoped<RRFFusionService>();
-        services.AddScoped<HybridSearchService>();
         services.AddScoped<IHybridSearchService, HybridSearchService>();
 
         // RAG
