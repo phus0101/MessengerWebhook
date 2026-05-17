@@ -137,9 +137,10 @@ public abstract class SalesStateHandlerBase : IStateHandler
         finally
         {
             sw.Stop();
+            var historyCount = ConversationHistoryHelper.GetHistory(ctx).Count;
             Logger.LogInformation(
-                "SalesHandlerCompleted State={State} ElapsedMs={ElapsedMs}",
-                HandledState, sw.ElapsedMilliseconds);
+                "SalesHandlerCompleted State={State} ElapsedMs={ElapsedMs} HistoryCount={HistoryCount}",
+                HandledState, sw.ElapsedMilliseconds, historyCount);
         }
     }
 
