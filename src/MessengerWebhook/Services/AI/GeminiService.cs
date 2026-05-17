@@ -79,9 +79,12 @@ public class GeminiService : IGeminiService
         }
 
         var model = modelOverride ?? _modelStrategy.SelectModel(message);
-        var modelName = model == GeminiModelType.Pro
-            ? _options.ProModel
-            : _options.FlashLiteModel;
+        var modelName = model switch
+        {
+            GeminiModelType.Pro => _options.ProModel,
+            GeminiModelType.Flash => _options.FlashModel,
+            _ => _options.FlashLiteModel
+        };
 
         // Build request
         var request = new

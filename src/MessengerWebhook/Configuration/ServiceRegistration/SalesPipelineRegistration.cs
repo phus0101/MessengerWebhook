@@ -1,5 +1,6 @@
 using MessengerWebhook.Services;
 using MessengerWebhook.Services.ABTesting;
+using MessengerWebhook.Services.Consent;
 using MessengerWebhook.Services.ABTesting.Configuration;
 using MessengerWebhook.Services.AI.Handlers;
 using MessengerWebhook.Services.Conversation;
@@ -19,6 +20,7 @@ using MessengerWebhook.Services.ResponseValidation;
 using MessengerWebhook.Services.ResponseValidation.Configuration;
 using MessengerWebhook.Services.Sales.Contact;
 using MessengerWebhook.Services.Sales.Context;
+using MessengerWebhook.Services.Sales.Intent;
 using MessengerWebhook.Services.Sales.Prompt;
 using MessengerWebhook.Services.Sales.Reply;
 using MessengerWebhook.Services.SmallTalk;
@@ -39,6 +41,10 @@ internal static class SalesPipelineRegistration
 {
     internal static IServiceCollection AddSalesPipeline(this IServiceCollection services, IConfiguration configuration)
     {
+        // Consent (PDPL)
+        services.Configure<ConsentOptions>(configuration.GetSection(ConsentOptions.SectionName));
+        services.AddScoped<IConsentService, ConsentService>();
+
         // Core sales + support options
         services.Configure<SalesBotOptions>(configuration.GetSection(SalesBotOptions.SectionName));
         services.Configure<SupportOptions>(configuration.GetSection(SupportOptions.SectionName));
@@ -152,6 +158,7 @@ internal static class SalesPipelineRegistration
         services.AddScoped<IContactConfirmationFlow, ContactConfirmationFlow>();
         services.AddScoped<ISalesReplyOrchestrator, SalesReplyOrchestrator>();
         services.AddScoped<ISalesConsultationReplies, SalesConsultationReplies>();
+        services.AddScoped<ICommerceMsgIntentDetector, CommerceMsgIntentDetector>();
 
         // State machine
         services.AddScoped<IStateMachine, ConversationStateMachine>();

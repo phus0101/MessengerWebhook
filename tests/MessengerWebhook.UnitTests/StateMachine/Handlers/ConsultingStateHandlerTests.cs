@@ -14,7 +14,16 @@ using MessengerWebhook.Services.Emotion;
 using MessengerWebhook.Services.Tone;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.Metrics;
+using MessengerWebhook.Services.ProductGrounding;
+using MessengerWebhook.Services.Sales.Contact;
+using MessengerWebhook.Services.Sales.Context;
+using MessengerWebhook.Services.Sales.Intent;
+using MessengerWebhook.Services.Sales.Prompt;
+using MessengerWebhook.Services.AI.Resilience;
+using MessengerWebhook.Services.Cache;
+using MessengerWebhook.Services.Sales.Reply;
 using MessengerWebhook.Services.SubIntent;
+using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
 using Microsoft.Extensions.Caching.Memory;
@@ -76,6 +85,32 @@ public class ConsultingStateHandlerTests
             .Setup(x => x.GetProductByMessageAsync(It.IsAny<string>()))
             .ReturnsAsync((Product?)null);
 
+        var salesBotOptions = Options.Create(new SalesBotOptions());
+        var ragOptions = Options.Create(new RAGOptions { Enabled = false });
+        var groundingService = new MessengerWebhook.Services.ProductGrounding.ProductGroundingService(
+            new MessengerWebhook.Services.ProductGrounding.ProductNeedDetector(),
+            new MessengerWebhook.Services.ProductGrounding.ProductMentionDetector());
+        var contextResolver = new SalesContextResolver(
+            customerService.Object, productMappingService.Object, Mock.Of<IGiftSelectionService>(),
+            new FreeshipCalculator(), groundingService, geminiService.Object,
+            NullLogger<SalesContextResolver>.Instance);
+        var promptBuilder = new SalesPromptBuilder();
+        var contactFlow = new ContactConfirmationFlow(contextResolver, promptBuilder);
+        var replyOrchestrator = new SalesReplyOrchestrator(
+            geminiService.Object, Mock.Of<MessengerWebhook.Services.AI.Routing.ILlmRoutingService>(), null,
+            Mock.Of<IEmotionDetectionService>(), Mock.Of<IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(), Mock.Of<IConversationMetricsService>(),
+            customerService.Object, groundingService, contextResolver, promptBuilder,
+            Mock.Of<ISemanticAnswerCache>(), Mock.Of<ITenantContext>(),
+            salesBotOptions, ragOptions,
+            NullLogger<SalesReplyOrchestrator>.Instance);
+        var consultationReplies = new SalesConsultationReplies(
+            contextResolver, promptBuilder, productMappingService.Object,
+            NullLogger<SalesConsultationReplies>.Instance);
+
         var handler = new ConsultingStateHandler(
             geminiService.Object,
             new PolicyGuardService(Options.Create(new SalesBotOptions())),
@@ -94,9 +129,18 @@ public class ConsultingStateHandlerTests
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
             Mock.Of<ISubIntentClassifier>(),
-            Options.Create(new SalesBotOptions()),
-            Options.Create(new RAGOptions { Enabled = false }),
-            Mock.Of<ILogger<ConsultingStateHandler>>());
+            salesBotOptions,
+            Options.Create(new PolicyGuardOptions()),
+            ragOptions,
+            Mock.Of<ILogger<ConsultingStateHandler>>(),
+            contextResolver,
+            promptBuilder,
+            contactFlow,
+            replyOrchestrator,
+            consultationReplies,
+            Mock.Of<ILlmFallbackService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationSummarizer>(),
+            new CommerceMsgIntentDetector(Mock.Of<IContactConfirmationFlow>(), Mock.Of<ISalesContextResolver>()));
 
         var ctx = new StateContext { FacebookPSID = "psid-3", CurrentState = ConversationState.Consulting };
         ctx.SetData("selectedProductCodes", new List<string> { "KCN" });
@@ -147,8 +191,17 @@ public class ConsultingStateHandlerTests
             Mock.Of<IConversationMetricsService>(),
             Mock.Of<ISubIntentClassifier>(),
             Options.Create(new SalesBotOptions()),
+            Options.Create(new PolicyGuardOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
-            Mock.Of<ILogger<ConsultingStateHandler>>());
+            Mock.Of<ILogger<ConsultingStateHandler>>(),
+            Mock.Of<ISalesContextResolver>(),
+            Mock.Of<ISalesPromptBuilder>(),
+            Mock.Of<IContactConfirmationFlow>(),
+            Mock.Of<ISalesReplyOrchestrator>(),
+            Mock.Of<ISalesConsultationReplies>(),
+            Mock.Of<ILlmFallbackService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationSummarizer>(),
+            new CommerceMsgIntentDetector(Mock.Of<IContactConfirmationFlow>(), Mock.Of<ISalesContextResolver>()));
 
         Assert.Equal(ConversationState.Consulting, handler.HandledState);
     }
@@ -202,8 +255,17 @@ public class ConsultingStateHandlerTests
             Mock.Of<IConversationMetricsService>(),
             Mock.Of<ISubIntentClassifier>(),
             Options.Create(new SalesBotOptions()),
+            Options.Create(new PolicyGuardOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
-            Mock.Of<ILogger<ConsultingStateHandler>>());
+            Mock.Of<ILogger<ConsultingStateHandler>>(),
+            Mock.Of<ISalesContextResolver>(),
+            Mock.Of<ISalesPromptBuilder>(),
+            Mock.Of<IContactConfirmationFlow>(),
+            Mock.Of<ISalesReplyOrchestrator>(),
+            Mock.Of<ISalesConsultationReplies>(),
+            Mock.Of<ILlmFallbackService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationSummarizer>(),
+            new CommerceMsgIntentDetector(Mock.Of<IContactConfirmationFlow>(), Mock.Of<ISalesContextResolver>()));
 
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Consulting };
 
@@ -261,8 +323,17 @@ public class ConsultingStateHandlerTests
             Mock.Of<IConversationMetricsService>(),
             Mock.Of<ISubIntentClassifier>(),
             Options.Create(new SalesBotOptions()),
+            Options.Create(new PolicyGuardOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
-            Mock.Of<ILogger<ConsultingStateHandler>>());
+            Mock.Of<ILogger<ConsultingStateHandler>>(),
+            Mock.Of<ISalesContextResolver>(),
+            Mock.Of<ISalesPromptBuilder>(),
+            Mock.Of<IContactConfirmationFlow>(),
+            Mock.Of<ISalesReplyOrchestrator>(),
+            Mock.Of<ISalesConsultationReplies>(),
+            Mock.Of<ILlmFallbackService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationSummarizer>(),
+            new CommerceMsgIntentDetector(Mock.Of<IContactConfirmationFlow>(), Mock.Of<ISalesContextResolver>()));
 
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Consulting };
 

@@ -12,6 +12,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Phase 08: Sales Copilot Research Refactor (2026-05-17)
+
+**Dependency Injection (DI) Fix**:
+- `SalesStateHandlerBase` now has single constructor with all ISales* services properly injected via DI
+- Eliminates self-instantiation patterns and deferred DI registration
+
+**LLM Resilience**:
+- `LlmRoutingService`: Routes LLM calls to model tiers (FlashLite/Flash/Pro) based on intent confidence, VIP status, and ticket value
+- Polly circuit breaker: 50% failure ratio, 30s break window
+- `LlmFallbackService`: Graceful degradation per conversation state (fallback replies when LLM unavailable)
+
+**Semantic Answer Cache** (Phase 8):
+- `SemanticAnswerCache`: Redis-backed cache for PolicyQuestion/ShippingQuestion responses
+- 6-hour TTL, reduces API calls for repetitive questions (cost optimization)
+- `ISemanticAnswerCache` interface for pluggable strategies
+
+**3-Layer Context Window** (Phase 8):
+- `ConversationSummarizer`: Summarizes conversation history using FlashLite model
+- EphemeralWindowSize=6, SummarizationThreshold=10 for optimal context management
+- Prevents context bloat in long conversations
+
+**Structured Commerce Intent** (Phase 8):
+- `CommerceMsgIntentDetector`: Replaces 14 boolean intent flags with single structured output
+- `CommerceMsgIntent` model: Type, Confidence, Payload (single-pass keyword+AI merge)
+- Cleaner intent handling vs legacy boolean flags
+
+**RAG Metadata Enrichment** (Phase 8):
+- `VectorMetadataKeys`: Constants defining metadata key names (channel_visibility, content_type, policy_version)
+- `PineconeFilterBuilder`: Constructs Pinecone filters for multi-tenant RAG isolation
+- `VectorSearchOptions`: Configuration for hybrid search with metadata filtering
+
+**PDPL Consent Tracking** (Phase 8):
+- `ConsentService` (implements `IConsentService`): PDPL compliance tracking
+- `ConsentAuditRecord` entity: Records customer consent events (collected_at, consent_type, withdrawn_at)
+- Implied consent model in `CollectingInfoStateHandler`
+- Admin endpoint to withdraw consent
+
+**csproj Cleanup** (Phase 8):
+- Removed 300 _ContentIncludedByDefault entries from MessengerWebhook.csproj
+- Added `DefaultItemExcludes` for cleaner project configuration
+
+**Production Readiness**:
+- All 9 phases complete ✅
+- DI container fully registered and working ✅
+- LLM resilience operational ✅
+- Multi-tenant compliance established ✅
+
+---
+
 ### Added - Phase 06: SLA Definition & Monitoring (2026-05-17)
 
 **SLA Targets Documentation**:

@@ -14,6 +14,12 @@ using MessengerWebhook.Services.Emotion;
 using MessengerWebhook.Services.Tone;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.Metrics;
+using MessengerWebhook.Services.Sales.Contact;
+using MessengerWebhook.Services.Sales.Context;
+using MessengerWebhook.Services.Sales.Intent;
+using MessengerWebhook.Services.Sales.Prompt;
+using MessengerWebhook.Services.AI.Resilience;
+using MessengerWebhook.Services.Sales.Reply;
 using MessengerWebhook.Services.Survey;
 using MessengerWebhook.Services.SubIntent;
 using MessengerWebhook.StateMachine.Handlers;
@@ -67,9 +73,18 @@ public class CompleteStateHandlerTests
             Mock.Of<ISubIntentClassifier>(),
             Mock.Of<IServiceProvider>(),
             Options.Create(new SalesBotOptions()),
+            Options.Create(new PolicyGuardOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
             Options.Create(new CSATSurveyOptions { Enabled = false }),
-            Mock.Of<ILogger<CompleteStateHandler>>());
+            Mock.Of<ILogger<CompleteStateHandler>>(),
+            Mock.Of<ISalesContextResolver>(),
+            Mock.Of<ISalesPromptBuilder>(),
+            Mock.Of<IContactConfirmationFlow>(),
+            Mock.Of<ISalesReplyOrchestrator>(),
+            Mock.Of<ISalesConsultationReplies>(),
+            Mock.Of<ILlmFallbackService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationSummarizer>(),
+            new CommerceMsgIntentDetector(Mock.Of<IContactConfirmationFlow>(), Mock.Of<ISalesContextResolver>()));
     }
 
     [Fact]
@@ -308,9 +323,18 @@ public class CompleteStateHandlerTests
             Mock.Of<ISubIntentClassifier>(),
             Mock.Of<IServiceProvider>(),
             Options.Create(new SalesBotOptions { UnsupportedFallbackMessage = "Da em xin phep chuyen chi qua ban ho tro cua Mui Xu de xu ly ky hon nha." }),
+            Options.Create(new PolicyGuardOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
             Options.Create(new CSATSurveyOptions { Enabled = false }),
-            Mock.Of<ILogger<CompleteStateHandler>>());
+            Mock.Of<ILogger<CompleteStateHandler>>(),
+            Mock.Of<ISalesContextResolver>(),
+            Mock.Of<ISalesPromptBuilder>(),
+            Mock.Of<IContactConfirmationFlow>(),
+            Mock.Of<ISalesReplyOrchestrator>(),
+            Mock.Of<ISalesConsultationReplies>(),
+            Mock.Of<ILlmFallbackService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationSummarizer>(),
+            new CommerceMsgIntentDetector(Mock.Of<IContactConfirmationFlow>(), Mock.Of<ISalesContextResolver>()));
 
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete };
         ctx.SetData("draftOrderCode", "DR-TEST-001");
@@ -403,9 +427,18 @@ public class CompleteStateHandlerTests
             Mock.Of<ISubIntentClassifier>(),
             Mock.Of<IServiceProvider>(),
             Options.Create(new SalesBotOptions()),
+            Options.Create(new PolicyGuardOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
             Options.Create(new CSATSurveyOptions { Enabled = false }),
-            Mock.Of<ILogger<CompleteStateHandler>>());
+            Mock.Of<ILogger<CompleteStateHandler>>(),
+            Mock.Of<ISalesContextResolver>(),
+            Mock.Of<ISalesPromptBuilder>(),
+            Mock.Of<IContactConfirmationFlow>(),
+            Mock.Of<ISalesReplyOrchestrator>(),
+            Mock.Of<ISalesConsultationReplies>(),
+            Mock.Of<ILlmFallbackService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationSummarizer>(),
+            new CommerceMsgIntentDetector(Mock.Of<IContactConfirmationFlow>(), Mock.Of<ISalesContextResolver>()));
 
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete };
         ctx.SetData("draftOrderCode", "DR-TEST-001");
@@ -440,9 +473,18 @@ public class CompleteStateHandlerTests
             Mock.Of<ISubIntentClassifier>(),
             Mock.Of<IServiceProvider>(),
             Options.Create(new SalesBotOptions()),
+            Options.Create(new PolicyGuardOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
             Options.Create(new CSATSurveyOptions { Enabled = true, DelayMinutes = 5 }),
-            Mock.Of<ILogger<CompleteStateHandler>>());
+            Mock.Of<ILogger<CompleteStateHandler>>(),
+            Mock.Of<ISalesContextResolver>(),
+            Mock.Of<ISalesPromptBuilder>(),
+            Mock.Of<IContactConfirmationFlow>(),
+            Mock.Of<ISalesReplyOrchestrator>(),
+            Mock.Of<ISalesConsultationReplies>(),
+            Mock.Of<ILlmFallbackService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationSummarizer>(),
+            new CommerceMsgIntentDetector(Mock.Of<IContactConfirmationFlow>(), Mock.Of<ISalesContextResolver>()));
 
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete, SessionId = "session-csat-test" };
         ctx.SetData("draftOrderCode", "DR-TEST-001");
@@ -478,9 +520,18 @@ public class CompleteStateHandlerTests
             Mock.Of<ISubIntentClassifier>(),
             Mock.Of<IServiceProvider>(),
             Options.Create(new SalesBotOptions()),
+            Options.Create(new PolicyGuardOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
             Options.Create(new CSATSurveyOptions { Enabled = true, DelayMinutes = 5 }),
-            Mock.Of<ILogger<CompleteStateHandler>>());
+            Mock.Of<ILogger<CompleteStateHandler>>(),
+            Mock.Of<ISalesContextResolver>(),
+            Mock.Of<ISalesPromptBuilder>(),
+            Mock.Of<IContactConfirmationFlow>(),
+            Mock.Of<ISalesReplyOrchestrator>(),
+            Mock.Of<ISalesConsultationReplies>(),
+            Mock.Of<ILlmFallbackService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationSummarizer>(),
+            new CommerceMsgIntentDetector(Mock.Of<IContactConfirmationFlow>(), Mock.Of<ISalesContextResolver>()));
 
         var ctx = new StateContext { FacebookPSID = "test-psid", CurrentState = ConversationState.Complete, SessionId = "session-csat-already-sent" };
         ctx.SetData("draftOrderCode", "DR-TEST-001");

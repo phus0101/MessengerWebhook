@@ -53,6 +53,7 @@ public class MessengerBotDbContext : DbContext
     public DbSet<ProductEmbedding> ProductEmbeddings { get; set; }
     public DbSet<ConversationMetric> ConversationMetrics { get; set; }
     public DbSet<ConversationSurvey> ConversationSurveys { get; set; }
+    public DbSet<ConsentAuditRecord> ConsentAuditRecords { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -240,6 +241,13 @@ public class MessengerBotDbContext : DbContext
 
         modelBuilder.Entity<ConversationSurvey>()
             .HasIndex(s => s.CreatedAt);
+
+        // ConsentAuditRecord indexes
+        modelBuilder.Entity<ConsentAuditRecord>()
+            .HasIndex(c => new { c.TenantId, c.CustomerPsid, c.CreatedAt });
+
+        modelBuilder.Entity<ConsentAuditRecord>()
+            .HasIndex(c => new { c.TenantId, c.CustomerPsid, c.Purpose });
 
         // ConversationMetric JSONB columns
         if (Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory")
@@ -584,5 +592,9 @@ public class MessengerBotDbContext : DbContext
 
         modelBuilder.Entity<ConversationSurvey>()
             .HasQueryFilter(x => !IsTenantResolved || x.TenantId == null || x.TenantId == CurrentTenantId);
+
+        // ConsentAuditRecord uses non-nullable TenantId — filter directly
+        modelBuilder.Entity<ConsentAuditRecord>()
+            .HasQueryFilter(x => !IsTenantResolved || x.TenantId == CurrentTenantId);
     }
 }

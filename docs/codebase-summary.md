@@ -1,8 +1,8 @@
 # Codebase Summary
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
-**Last Updated**: 2026-05-13
-**Phase**: Phase 03 complete (Defense-in-Depth PII Redaction) | Phase 02 complete (Baseline Latency & Alerts) | Phase 01 complete (Observability & PII Protection) | R-05 complete (Program.cs modularization + SalesConsultationReplies extraction)
+**Last Updated**: 2026-05-17
+**Phase**: Phase 08 complete (Sales Copilot Research Refactor) | Phase 06 complete (SLA Definition) | Phase 03 complete (Defense-in-Depth PII Redaction) | Phase 02 complete (Baseline Latency & Alerts) | Phase 01 complete (Observability & PII Protection) | R-05 complete (Program.cs modularization + SalesConsultationReplies extraction)
 
 ---
 
@@ -65,13 +65,33 @@ MessengerWebhook/
 │   │   │   ├── GeminiEmbeddingService.cs
 │   │   │   ├── Handlers/        # Auth & retry handlers
 │   │   │   ├── Models/          # AI request/response models
+│   │   │   ├── Routing/         # LLM model tiering (Phase 8)
+│   │   │   ├── Resilience/      # Circuit breaker & fallback (Phase 8)
 │   │   │   └── Strategies/      # Model selection strategies
 │   │   ├── VectorSearch/        # Hybrid search (Phase 3)
 │   │   │   ├── HybridSearchService.cs
 │   │   │   ├── KeywordSearchService.cs
 │   │   │   ├── RRFFusionService.cs
-│   │   │   └── PineconeVectorService.cs
-│   │   └── Messenger/           # Facebook Messenger API
+│   │   │   ├── PineconeVectorService.cs
+│   │   │   ├── PineconeFilterBuilder.cs # Metadata filtering (Phase 8)
+│   │   │   ├── VectorMetadataKeys.cs    # Metadata constants (Phase 8)
+│   │   │   └── Models/          # VectorSearchOptions, etc. (Phase 8)
+│   │   ├── Cache/               # Caching layer (Phase 8)
+│   │   │   ├── SemanticAnswerCache.cs
+│   │   │   └── ISemanticAnswerCache.cs
+│   │   ├── Conversation/        # Conversation utilities (Phase 8)
+│   │   │   ├── ConversationSummarizer.cs
+│   │   │   └── IConversationSummarizer.cs
+│   │   ├── Sales/
+│   │   │   ├── Intent/          # Commerce intent detection (Phase 8)
+│   │   │   │   ├── CommerceMsgIntentDetector.cs
+│   │   │   │   ├── CommerceMsgIntent.cs
+│   │   │   │   └── ICommerceMsgIntentDetector.cs
+│   │   │   ├── ...
+│   │   ├── Consent/             # PDPL consent tracking (Phase 8)
+│   │   │   ├── ConsentService.cs
+│   │   │   └── IConsentService.cs
+│   │   ├── Messenger/           # Facebook Messenger API
 │   ├── StateMachine/
 │   │   ├── ConversationStateMachine.cs
 │   │   ├── StateTransitionRules.cs
@@ -146,6 +166,14 @@ MessengerWebhook/
 **Strategies**:
 - `HybridModelSelectionStrategy` - Dynamic model selection
 
+**LLM Routing Services** (`Services/AI/Routing/`, Phase 8):
+- `LlmRoutingService`: Selects model tier (FlashLite/Flash/Pro) based on intent confidence, VIP status, ticket value for cost optimization
+- `ILlmRoutingService`: Routing strategy interface
+- `LlmRoutingContext`: Context for routing decisions
+
+**LLM Resilience Services** (`Services/AI/Resilience/`, Phase 8):
+- `LlmFallbackService`: Graceful degradation when LLM unavailable, state-specific fallback replies
+
 #### Product Grounding Services (`Services/ProductGrounding/`)
 
 - `ProductGroundingService`: Builds the allowed-product set from active selected products plus DB-confirmed RAG products, returns deterministic DB-backed related suggestions or a safe catalog fallback when exact product grounding is required but unavailable, and sanitizes assistant history that mentions unallowed products.
@@ -153,18 +181,16 @@ MessengerWebhook/
 - `ProductMentionDetector`: Extracts product-like mentions from AI replies and history for grounding validation.
 - `GroundedProduct`, `GroundedProductContext`: Typed product facts passed into prompt and response validation paths.
 
-#### SubIntent Classification Services (`Services/SubIntent/`)
+#### Commerce Intent Classification Services (`Services/Sales/Intent/`, Phase 8)
 
-- `KeywordSubIntentDetector`: Rule-based detection for 70% of queries using keyword patterns (<50ms)
-- `GeminiSubIntentClassifier`: AI-powered fallback for ambiguous queries (~1s)
-- `HybridSubIntentClassifier`: Orchestrates keyword-first → AI fallback strategy
-- Supports 6 SubIntent categories: ProductQuestion, PriceQuestion, ShippingQuestion, PolicyQuestion, AvailabilityQuestion, ComparisonQuestion
+- `CommerceMsgIntentDetector`: Structured intent detection replacing 14 boolean flags. Single-pass keyword+AI merge approach.
+- `CommerceMsgIntent`: Structured intent model (Type, Confidence, Payload) with cleaner API
+- `ICommerceMsgIntentDetector`: Intent detection interface
+- Supports 6+ categories: ProductQuestion, PriceQuestion, ShippingQuestion, PolicyQuestion, AvailabilityQuestion, ComparisonQuestion
 - Integrated into sales conversation flow via `SalesStateHandlerBase`
 - RAG context can return detailed info (ingredients, skin types, benefits) when ProductQuestion detected
 - System prompt has `{SUB_INTENT_CONTEXT}` placeholder for injecting category-specific guidance
-- SubIntent logged with category, confidence, source for analytics
 - Cost optimization: $0.075/month vs $3/month pure AI (97.5% reduction)
-- Test coverage: 23/23 tests passing (20 unit + 3 integration)
 
 #### Sales Services (`Services/Sales/`)
 
@@ -219,6 +245,46 @@ MessengerWebhook/
 - Methods: GetFormattedConversationHistory, AppendToConversationHistory
 - Used by SalesStateHandlerBase, SalesReplyOrchestrator, CompleteStateHandler
 - Eliminates code duplication in history building and formatting across services
+
+#### Conversation Services (`Services/Conversation/`, Phase 8)
+
+**ConversationSummarizer** (`ConversationSummarizer.cs`):
+- Summarizes conversation history using FlashLite model
+- 3-layer context window: EphemeralWindowSize=6, SummarizationThreshold=10
+- Prevents context bloat in long conversations
+- `IConversationSummarizer` interface for pluggable strategies
+
+#### Caching Services (`Services/Cache/`, Phase 8)
+
+**SemanticAnswerCache** (`SemanticAnswerCache.cs`):
+- Redis-backed semantic answer cache for PolicyQuestion/ShippingQuestion
+- 6-hour TTL for cost optimization
+- Reduces API calls for repetitive questions
+- `ISemanticAnswerCache` interface for cache operations
+
+#### Consent Services (`Services/Consent/`, Phase 8)
+
+**ConsentService** (`ConsentService.cs`):
+- PDPL compliance tracking via `ConsentAuditRecord` entity
+- Records customer consent events (collected_at, consent_type, withdrawn_at)
+- Implied consent model in `CollectingInfoStateHandler`
+- Admin endpoint for consent withdrawal
+- `IConsentService` interface for consent operations
+
+#### Vector Search Enhancements (`Services/VectorSearch/`, Phase 8)
+
+**PineconeFilterBuilder** (`PineconeFilterBuilder.cs`):
+- Constructs Pinecone metadata filters for multi-tenant RAG isolation
+- Filters: channel_visibility, content_type, policy_version
+- Ensures tenant data isolation in vector search results
+
+**VectorMetadataKeys** (`VectorMetadataKeys.cs`):
+- Constants defining metadata key names for vector records
+- Used by PineconeFilterBuilder and vector indexing services
+
+**VectorSearchOptions** (`Models/VectorSearchOptions.cs`):
+- Configuration for hybrid search with metadata filtering
+- Supports hybrid search parameter tuning
 
 #### Messenger Services
 

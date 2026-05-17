@@ -25,6 +25,15 @@ internal static class CacheServicesRegistration
 
         services.AddResponseCaching();
 
+        // Always register a memory-backed IDistributedCache as baseline.
+        // AddStackExchangeRedisCache (below) overrides this when Redis is enabled.
+        services.AddDistributedMemoryCache();
+
+        // Always register ISemanticAnswerCache so SalesReplyOrchestrator can resolve it.
+        // When Redis is disabled the distributed cache is memory-backed and answers are
+        // still cached in-process (no cross-instance sharing, but no DI failure either).
+        services.AddScoped<ISemanticAnswerCache, SemanticAnswerCache>();
+
         var redisEnabled = configuration.GetValue<bool>("Redis:Enabled", false);
         if (!redisEnabled)
             return services;

@@ -189,6 +189,49 @@ namespace MessengerWebhook.Migrations
                     b.ToTable("Colors");
                 });
 
+            modelBuilder.Entity("MessengerWebhook.Data.Entities.ConsentAuditRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ConsentTextShown")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CustomerPsid")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Decision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("WithdrawnReason")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "CustomerPsid", "CreatedAt");
+
+                    b.HasIndex("TenantId", "CustomerPsid", "Purpose");
+
+                    b.ToTable("ConsentAuditRecords");
+                });
+
             modelBuilder.Entity("MessengerWebhook.Data.Entities.ConversationMessage", b =>
                 {
                     b.Property<string>("Id")
@@ -397,6 +440,12 @@ namespace MessengerWebhook.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("ConsentGivenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConsentPurposes")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -419,6 +468,9 @@ namespace MessengerWebhook.Migrations
                     b.Property<decimal>("LifetimeValue")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("MarketingConsentGiven")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("text");

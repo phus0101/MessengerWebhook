@@ -2,6 +2,7 @@ using MessengerWebhook.Models;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.AI.Resilience;
 using MessengerWebhook.Services.Customers;
 using MessengerWebhook.Services;
 using MessengerWebhook.Services.Freeship;
@@ -18,6 +19,11 @@ using MessengerWebhook.Services.SmallTalk;
 using MessengerWebhook.Services.ResponseValidation;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.Metrics;
+using MessengerWebhook.Services.Sales.Contact;
+using MessengerWebhook.Services.Sales.Context;
+using MessengerWebhook.Services.Sales.Intent;
+using MessengerWebhook.Services.Sales.Prompt;
+using MessengerWebhook.Services.Sales.Reply;
 using MessengerWebhook.Services.SubIntent;
 using Microsoft.Extensions.Options;
 
@@ -26,42 +32,6 @@ namespace MessengerWebhook.StateMachine.Handlers;
 public class IdleStateHandler : SalesStateHandlerBase
 {
     public override ConversationState HandledState => ConversationState.Idle;
-
-    public IdleStateHandler(
-        IGeminiService geminiService,
-        DraftOrderCoordinator draftOrderCoordinator,
-        IEmotionDetectionService emotionDetectionService,
-        IToneMatchingService toneMatchingService,
-        IConversationContextAnalyzer conversationContextAnalyzer,
-        ISmallTalkService smallTalkService,
-        IResponseValidationService responseValidationService,
-        IABTestService abTestService,
-        IConversationMetricsService conversationMetricsService,
-        ISubIntentClassifier subIntentClassifier,
-        ILogger<IdleStateHandler> logger)
-        : this(
-            geminiService,
-            SalesHandlerFallbacks.PolicyGuardService,
-            SalesHandlerFallbacks.ProductMappingService,
-            SalesHandlerFallbacks.GiftSelectionService,
-            SalesHandlerFallbacks.FreeshipCalculator,
-            SalesHandlerFallbacks.CaseEscalationService,
-            draftOrderCoordinator ?? SalesHandlerFallbacks.DraftOrderCoordinator!,
-            SalesHandlerFallbacks.CustomerIntelligenceService,
-            null,
-            emotionDetectionService,
-            toneMatchingService,
-            conversationContextAnalyzer,
-            smallTalkService,
-            responseValidationService,
-            abTestService,
-            conversationMetricsService,
-            subIntentClassifier,
-            SalesHandlerFallbacks.Options,
-            SalesHandlerFallbacks.RagOptions,
-            logger)
-    {
-    }
 
     public IdleStateHandler(
         IGeminiService geminiService,
@@ -82,8 +52,17 @@ public class IdleStateHandler : SalesStateHandlerBase
         IConversationMetricsService conversationMetricsService,
         ISubIntentClassifier subIntentClassifier,
         IOptions<SalesBotOptions> salesBotOptions,
+        IOptions<PolicyGuardOptions> policyGuardOptions,
         IOptions<RAGOptions> ragOptions,
         ILogger<IdleStateHandler> logger,
+        ISalesContextResolver contextResolver,
+        ISalesPromptBuilder promptBuilder,
+        IContactConfirmationFlow contactFlow,
+        ISalesReplyOrchestrator replyOrchestrator,
+        ISalesConsultationReplies consultationReplies,
+        ILlmFallbackService llmFallbackService,
+        IConversationSummarizer conversationSummarizer,
+        ICommerceMsgIntentDetector intentDetector,
         IProductGroundingService? productGroundingService = null)
         : base(
             geminiService,
@@ -104,9 +83,18 @@ public class IdleStateHandler : SalesStateHandlerBase
             conversationMetricsService,
             subIntentClassifier,
             salesBotOptions,
+            policyGuardOptions,
             ragOptions,
             logger,
-            productGroundingService)
+            productGroundingService,
+            contextResolver,
+            promptBuilder,
+            contactFlow,
+            replyOrchestrator,
+            consultationReplies,
+            llmFallbackService,
+            conversationSummarizer,
+            intentDetector)
     {
     }
 

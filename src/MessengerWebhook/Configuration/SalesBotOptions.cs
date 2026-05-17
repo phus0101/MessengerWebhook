@@ -14,4 +14,9 @@ public class SalesBotOptions
     public int ConversationHistoryLimit { get; set; } = 15;
     public string UnsupportedFallbackMessage { get; set; } =
         "Da em xin phep chuyen chi qua ban ho tro cua Mui Xu de xu ly ky hon nha.";
+
+    // Context-window compression settings
+    public int EphemeralWindowSize { get; set; } = 6;
+    public int SummarizationThreshold { get; set; } = 10;
+    public bool SummarizationEnabled { get; set; } = true;
 }

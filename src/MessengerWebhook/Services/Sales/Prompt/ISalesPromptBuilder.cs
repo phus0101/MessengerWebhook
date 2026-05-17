@@ -40,4 +40,10 @@ public interface ISalesPromptBuilder
     string BuildDraftConfirmation(StateContext ctx, DraftOrder draftOrder);
     string GetContactSummary(StateContext ctx);
     ConversationState DetermineNextState(CustomerIntent intent, bool hasProduct, bool hasContact);
+
+    /// <summary>
+    /// Returns a formatted [BỐI CẢNH PHIÊN] section when a summary exists, or empty string.
+    /// Inject into system prompt between brand voice and RAG context.
+    /// </summary>
+    string BuildConversationSummarySection(StateContext ctx);
 }

@@ -1,37 +1,34 @@
-﻿using System.Globalization;
-using System.Text;
-using System.Text.RegularExpressions;
-using MessengerWebhook.Models;
+﻿using System.Diagnostics;
 using MessengerWebhook.Configuration;
-using MessengerWebhook.Data.Entities;
+using MessengerWebhook.Models;
 using MessengerWebhook.Services;
+using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.AI.Models;
+using MessengerWebhook.Services.AI.Resilience;
+using MessengerWebhook.Services.Conversation;
 using MessengerWebhook.Services.Customers;
+using MessengerWebhook.Services.Emotion;
 using MessengerWebhook.Services.Freeship;
 using MessengerWebhook.Services.GiftSelection;
+using MessengerWebhook.Services.Metrics;
 using MessengerWebhook.Services.Policy;
 using MessengerWebhook.Services.ProductGrounding;
 using MessengerWebhook.Services.ProductMapping;
 using MessengerWebhook.Services.RAG;
-using MessengerWebhook.Services.Support;
-using MessengerWebhook.Services.Emotion;
-using MessengerWebhook.Services.Tone;
-using MessengerWebhook.Services.Conversation;
-using MessengerWebhook.Services.SmallTalk;
 using MessengerWebhook.Services.ResponseValidation;
-using MessengerWebhook.Services.ResponseValidation.Models;
-using MessengerWebhook.Services.ABTesting;
-using MessengerWebhook.Services.Metrics;
-using MessengerWebhook.Services.Metrics.Models;
 using MessengerWebhook.Services.Sales;
 using MessengerWebhook.Services.Sales.Contact;
 using MessengerWebhook.Services.Sales.Context;
+using MessengerWebhook.Services.Sales.Intent;
 using MessengerWebhook.Services.Sales.Prompt;
 using MessengerWebhook.Services.Sales.Reply;
+using MessengerWebhook.Services.SmallTalk;
 using MessengerWebhook.Services.SubIntent;
+using MessengerWebhook.Services.Support;
+using MessengerWebhook.Services.Tone;
 using MessengerWebhook.StateMachine.Models;
 using MessengerWebhook.Utilities;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using AiConversationMessage = MessengerWebhook.Services.AI.Models.ConversationMessage;
 
@@ -41,20 +38,10 @@ public abstract class SalesStateHandlerBase : IStateHandler
 {
     protected readonly IGeminiService GeminiService;
     protected readonly IPolicyGuardService PolicyGuardService;
-    protected readonly IProductMappingService ProductMappingService;
-    protected readonly IGiftSelectionService GiftSelectionService;
-    protected readonly IFreeshipCalculator FreeshipCalculator;
     protected readonly ICaseEscalationService CaseEscalationService;
     protected readonly ICustomerIntelligenceService CustomerIntelligenceService;
     protected readonly DraftOrderCoordinator DraftOrderCoordinator;
     protected readonly IRAGService? RagService;
-    protected readonly IEmotionDetectionService EmotionDetectionService;
-    protected readonly IToneMatchingService ToneMatchingService;
-    protected readonly IConversationContextAnalyzer ConversationContextAnalyzer;
-    protected readonly ISmallTalkService SmallTalkService;
-    protected readonly IResponseValidationService ResponseValidationService;
-    protected readonly IABTestService ABTestService;
-    protected readonly IConversationMetricsService ConversationMetricsService;
     protected readonly ISubIntentClassifier SubIntentClassifier;
     private readonly IProductGroundingService _productGroundingService;
     protected readonly SalesBotOptions SalesBotOptions;
@@ -67,56 +54,11 @@ public abstract class SalesStateHandlerBase : IStateHandler
     private readonly IContactConfirmationFlow _contactFlow;
     private readonly ISalesReplyOrchestrator _replyOrchestrator;
     private readonly ISalesConsultationReplies _consultationReplies;
+    private readonly ILlmFallbackService _fallbackService;
+    private readonly IConversationSummarizer _conversationSummarizer;
+    private readonly ICommerceMsgIntentDetector _intentDetector;
 
     public abstract ConversationState HandledState { get; }
-
-    protected SalesStateHandlerBase(
-        IGeminiService geminiService,
-        IPolicyGuardService policyGuardService,
-        IProductMappingService productMappingService,
-        IGiftSelectionService giftSelectionService,
-        IFreeshipCalculator freeshipCalculator,
-        ICaseEscalationService caseEscalationService,
-        ICustomerIntelligenceService customerIntelligenceService,
-        DraftOrderCoordinator draftOrderCoordinator,
-        IRAGService? ragService,
-        IEmotionDetectionService emotionDetectionService,
-        IToneMatchingService toneMatchingService,
-        IConversationContextAnalyzer conversationContextAnalyzer,
-        ISmallTalkService smallTalkService,
-        IResponseValidationService responseValidationService,
-        IABTestService abTestService,
-        IConversationMetricsService conversationMetricsService,
-        ISubIntentClassifier subIntentClassifier,
-        IOptions<SalesBotOptions> salesBotOptions,
-        IOptions<RAGOptions> ragOptions,
-        ILogger logger,
-        IProductGroundingService? productGroundingService = null)
-        : this(
-            geminiService,
-            policyGuardService,
-            productMappingService,
-            giftSelectionService,
-            freeshipCalculator,
-            caseEscalationService,
-            customerIntelligenceService,
-            draftOrderCoordinator,
-            ragService,
-            emotionDetectionService,
-            toneMatchingService,
-            conversationContextAnalyzer,
-            smallTalkService,
-            responseValidationService,
-            abTestService,
-            conversationMetricsService,
-            subIntentClassifier,
-            salesBotOptions,
-            Options.Create(new PolicyGuardOptions()),
-            ragOptions,
-            logger,
-            productGroundingService)
-    {
-    }
 
     protected SalesStateHandlerBase(
         IGeminiService geminiService,
@@ -140,68 +82,51 @@ public abstract class SalesStateHandlerBase : IStateHandler
         IOptions<PolicyGuardOptions> policyGuardOptions,
         IOptions<RAGOptions> ragOptions,
         ILogger logger,
-        IProductGroundingService? productGroundingService = null,
-        ISalesContextResolver? contextResolver = null,
-        ISalesPromptBuilder? promptBuilder = null,
-        IContactConfirmationFlow? contactFlow = null,
-        ISalesReplyOrchestrator? replyOrchestrator = null,
-        ISalesConsultationReplies? consultationReplies = null)
+        IProductGroundingService? productGroundingService,
+        ISalesContextResolver contextResolver,
+        ISalesPromptBuilder promptBuilder,
+        IContactConfirmationFlow contactFlow,
+        ISalesReplyOrchestrator replyOrchestrator,
+        ISalesConsultationReplies consultationReplies,
+        ILlmFallbackService llmFallbackService,
+        IConversationSummarizer conversationSummarizer,
+        ICommerceMsgIntentDetector intentDetector)
     {
         GeminiService = geminiService;
         PolicyGuardService = policyGuardService;
-        ProductMappingService = productMappingService;
-        GiftSelectionService = giftSelectionService;
-        FreeshipCalculator = freeshipCalculator;
         CaseEscalationService = caseEscalationService;
         CustomerIntelligenceService = customerIntelligenceService;
         DraftOrderCoordinator = draftOrderCoordinator;
         RagService = ragService;
-        EmotionDetectionService = emotionDetectionService;
-        ToneMatchingService = toneMatchingService;
-        ConversationContextAnalyzer = conversationContextAnalyzer;
-        SmallTalkService = smallTalkService;
-        ResponseValidationService = responseValidationService;
-        ABTestService = abTestService;
-        ConversationMetricsService = conversationMetricsService;
         SubIntentClassifier = subIntentClassifier;
         _productGroundingService = productGroundingService ?? new ProductGroundingService(new ProductNeedDetector(), new ProductMentionDetector());
         SalesBotOptions = salesBotOptions.Value;
         PolicyGuardOptions = policyGuardOptions.Value;
         RagOptions = ragOptions.Value;
         Logger = logger;
-        _contextResolver = contextResolver ?? new SalesContextResolver(
-            customerIntelligenceService, productMappingService, giftSelectionService,
-            freeshipCalculator, _productGroundingService, geminiService, Microsoft.Extensions.Logging.Abstractions.NullLogger<SalesContextResolver>.Instance);
-        _promptBuilder = promptBuilder ?? new SalesPromptBuilder();
-        _contactFlow = contactFlow ?? new ContactConfirmationFlow(_contextResolver, _promptBuilder);
-        _replyOrchestrator = replyOrchestrator ?? new SalesReplyOrchestrator(
-            geminiService,
-            ragService,
-            emotionDetectionService,
-            toneMatchingService,
-            conversationContextAnalyzer,
-            smallTalkService,
-            responseValidationService,
-            abTestService,
-            conversationMetricsService,
-            customerIntelligenceService,
-            _productGroundingService,
-            _contextResolver,
-            _promptBuilder,
-            salesBotOptions,
-            ragOptions,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<SalesReplyOrchestrator>.Instance);
-        _consultationReplies = consultationReplies ?? new SalesConsultationReplies(
-            _contextResolver, _promptBuilder, productMappingService, NullLogger<SalesConsultationReplies>.Instance);
+        _contextResolver = contextResolver;
+        _promptBuilder = promptBuilder;
+        _contactFlow = contactFlow;
+        _replyOrchestrator = replyOrchestrator;
+        _consultationReplies = consultationReplies;
+        _fallbackService = llmFallbackService;
+        _conversationSummarizer = conversationSummarizer;
+        _intentDetector = intentDetector;
     }
 
     public async Task<string> HandleAsync(StateContext ctx, string message)
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
         try
         {
             Logger.LogInformation("Handling state {State}", HandledState);
             return await HandleInternalAsync(ctx, message);
+        }
+        catch (Polly.CircuitBreaker.BrokenCircuitException)
+        {
+            // LLM circuit is open — return degraded response without changing state
+            Logger.LogWarning("LlmCircuit State=Open, returning degraded response for {State}", HandledState);
+            return _fallbackService.GetDegradedResponse(ctx.CurrentState);
         }
         catch (Exception ex)
         {
@@ -222,7 +147,19 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
     protected async Task<string> HandleSalesConversationAsync(StateContext ctx, string message)
     {
-        ConversationHistoryHelper.AddToHistory(ctx, "user", message, SalesBotOptions.ConversationHistoryLimit);
+        if (SalesBotOptions.SummarizationEnabled)
+        {
+            await ConversationHistoryHelper.AddToHistoryWithSummaryAsync(
+                ctx, "user", message,
+                SalesBotOptions.ConversationHistoryLimit,
+                SalesBotOptions.EphemeralWindowSize,
+                SalesBotOptions.SummarizationThreshold,
+                _conversationSummarizer);
+        }
+        else
+        {
+            ConversationHistoryHelper.AddToHistory(ctx, "user", message, SalesBotOptions.ConversationHistoryLimit);
+        }
 
         // Load remembered contact from previous orders on first message
         var history = ConversationHistoryHelper.GetHistory(ctx);
@@ -355,13 +292,12 @@ public abstract class SalesStateHandlerBase : IStateHandler
         // AI Intent Detection - understand customer's true intent BEFORE building offer
         var hasProduct = SalesMessageParser.HasSelectedProduct(ctx);
         var hasContact = SalesMessageParser.HasRequiredContact(ctx);
-        var hasBuyIntentPhrase = SalesMessageParser.ContainsAnyPhrase(message,
-            "lên đơn", "len don", "chốt đơn", "chot don", "chốt nhé", "chot nhe", "chốt nha", "chot nha",
-            "mua luôn", "mua luon", "đặt hàng", "dat hang", "ok em", "oke em", "ok e",
-            "lấy sản phẩm này", "lay san pham nay", "lấy nhé", "lay nhe", "lấy nha", "lay nha");
-        var isRelatedSuggestionSelection = _contextResolver.IsRelatedSuggestionSelection(message);
+
+        // Detect all keyword-based commerce intent signals in one pass
+        var keywordIntent = _intentDetector.DetectFromKeywords(message, ctx, hasProduct, hasContact);
         var hasPendingFinalSummaryConfirmation = SalesMessageParser.IsAwaitingFinalSummaryConfirmation(ctx);
         var activeProductsForIntent = await _contextResolver.GetActiveSelectedProductsAsync(ctx);
+        var isRelatedSuggestionSelection = keywordIntent.IsRelatedSuggestionSelection;
         var intentGroundingContext = _productGroundingService.BuildContext(message, activeProductsForIntent, Array.Empty<GroundedProduct>());
         var recentHistory = _productGroundingService
             .SanitizeAssistantHistory(ConversationHistoryHelper.GetHistory(ctx).TakeLast(3), intentGroundingContext.AllowedProducts)
@@ -394,7 +330,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             .Any(k => lastBotMessage.ToLower().Contains(k)) && lastBotMessage.Contains("?");
 
         if (isConsultationQuestion &&
-            intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy &&
+            intentResult.Intent == CustomerIntent.ReadyToBuy &&
             intentResult.Confidence >= SalesBotOptions.IntentConfidenceThreshold)
         {
             var currentCount = ctx.GetData<int>("consultationRejectionCount");
@@ -406,12 +342,10 @@ public abstract class SalesStateHandlerBase : IStateHandler
             );
         }
 
-        // Route based on AI-detected intent (only if confidence meets threshold)
-        var useAiIntent = intentResult.Confidence >= SalesBotOptions.IntentConfidenceThreshold;
-
         // Classify sub-intent for Consulting state (MUST run before question handlers to avoid early returns)
         SubIntentResult? subIntent = null;
-        if (useAiIntent && intentResult.Intent == Services.AI.Models.CustomerIntent.Consulting)
+        if (intentResult.Confidence >= SalesBotOptions.IntentConfidenceThreshold
+            && intentResult.Intent == CustomerIntent.Consulting)
         {
             subIntent = await SubIntentClassifier.ClassifyAsync(message);
 
@@ -426,15 +360,19 @@ public abstract class SalesStateHandlerBase : IStateHandler
             }
         }
 
+        // Merge AI intent into the keyword snapshot — single unified intent struct for the rest of the method
+        var msgIntent = await _intentDetector.MergeWithAiIntentAsync(
+            keywordIntent, intentResult, subIntent, (float)SalesBotOptions.IntentConfidenceThreshold);
+
         // Recover product from history when customer is already in ordering flow but product context was lost.
         if (!hasProduct &&
             (hasContact ||
-             hasBuyIntentPhrase ||
+             msgIntent.HasBuySignal ||
              (isRelatedSuggestionSelection && resolvedRelatedSuggestionSelection) ||
              ctx.CurrentState == ConversationState.CollectingInfo ||
-             (useAiIntent &&
-              (intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy ||
-               intentResult.Intent == Services.AI.Models.CustomerIntent.Confirming))))
+             (msgIntent.UseAiIntent &&
+              (msgIntent.Intent == CustomerIntent.ReadyToBuy ||
+               msgIntent.Intent == CustomerIntent.Confirming))))
         {
             Logger.LogInformation("Ordering flow detected without product in context, attempting to extract from history");
             await _contextResolver.TryExtractProductFromHistoryAsync(ctx, message);
@@ -443,7 +381,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
         if (isRelatedSuggestionSelection && hasProduct)
         {
-            var selectedSuggestionReply = await _consultationReplies.TryBuildOfferResponseAsync(ctx, message, Services.AI.Models.CustomerIntent.Browsing);
+            var selectedSuggestionReply = await _consultationReplies.TryBuildOfferResponseAsync(ctx, message, CustomerIntent.Browsing);
             if (!string.IsNullOrWhiteSpace(selectedSuggestionReply))
             {
                 ctx.CurrentState = ConversationState.Consulting;
@@ -452,44 +390,13 @@ public abstract class SalesStateHandlerBase : IStateHandler
             }
         }
 
-        var nextState = useAiIntent
-            ? _promptBuilder.DetermineNextState(intentResult.Intent, hasProduct, hasContact)
+        var nextState = msgIntent.UseAiIntent
+            ? _promptBuilder.DetermineNextState(msgIntent.Intent, hasProduct, hasContact)
             : (hasProduct ? ConversationState.CollectingInfo : ConversationState.Consulting);
-
-        var isQuestioning = useAiIntent && intentResult.Intent == Services.AI.Models.CustomerIntent.Questioning;
-        var isProductQuestion = SalesMessageParser.ContainsAnyPhrase(message,
-            "nói thêm", "noi them", "nói kỹ", "noi ky", "chi tiet", "thành phần", "thanh phan", "công dụng", "cong dung",
-            "cách dùng", "cach dung", "phù hợp", "phu hop", "dùng sao", "dung sao");
-        var isShippingQuestion = SalesMessageParser.ContainsAnyPhrase(message,
-            "freeship", "free ship", "phí ship", "phi ship", "vận chuyển", "van chuyen", "ship");
-        var isPolicyQuestion = isShippingQuestion || SalesMessageParser.ContainsAnyPhrase(message,
-            "quà gì", "qua gi", "quà tặng", "qua tang", "tặng gì", "tang gi",
-            "khuyến mãi", "khuyen mai", "ưu đãi", "uu dai", "giảm giá", "giam gia", "promo");
-        var isPriceQuestion = SalesMessageParser.ContainsAnyPhrase(message,
-            "giá bao nhiêu", "gia bao nhieu", "giá sao", "gia sao", "bao nhiêu tiền", "bao nhieu tien", "giá", "gia");
-        var isInventoryQuestion = SalesMessageParser.ContainsAnyPhrase(message,
-            "còn hàng", "con hang", "hết hàng", "het hang", "còn không", "con khong", "hết chưa", "het chua",
-            "sẵn hàng", "san hang", "có sẵn", "co san", "out stock", "in stock", "tồn kho", "ton kho");
-        var isContactMemoryQuestion = _contactFlow.IsContactMemoryQuestion(message);
-        var isPendingContactClarification = _contactFlow.IsPendingClarificationQuestion(ctx, message);
-        var isGenericPendingContactBuyReply = _contactFlow.IsGenericBuyContinuationPendingConfirmation(ctx, message);
-        var isOrderEstimateQuestion = SalesMessageParser.ContainsAnyPhrase(message,
-            "tổng tiền", "tong tien", "tổng cộng", "tong cong", "bao nhiêu sản phẩm", "bao nhieu san pham", "bao nhiêu món", "bao nhieu mon");
-        var isAmbiguousProductReference = SalesMessageParser.HasAmbiguousProductReference(message);
-        var hasQuestionMarker = message.Contains('?');
-        var requiresProductGrounding = SalesMessageParser.RequiresProductGrounding(
-            message,
-            isProductQuestion,
-            isPriceQuestion,
-            isInventoryQuestion,
-            isPolicyQuestion,
-            isQuestioning,
-            hasQuestionMarker,
-            ctx.CurrentState);
 
         if (hasPendingFinalSummaryConfirmation)
         {
-            var finalSummaryReply = await HandlePendingFinalSummaryConfirmationAsync(ctx, message, useAiIntent ? intentResult.Intent : null);
+            var finalSummaryReply = await HandlePendingFinalSummaryConfirmationAsync(ctx, message, msgIntent.UseAiIntent ? msgIntent.Intent : null);
             if (!string.IsNullOrWhiteSpace(finalSummaryReply))
             {
                 ConversationHistoryHelper.AddToHistory(ctx, "assistant", finalSummaryReply, SalesBotOptions.ConversationHistoryLimit);
@@ -497,7 +404,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             }
         }
 
-        if (isAmbiguousProductReference)
+        if (msgIntent.HasAmbiguousProductReference)
         {
             var ambiguousReferenceReply = await _consultationReplies.BuildAmbiguousProductClarificationReplyAsync(ctx);
             if (!string.IsNullOrWhiteSpace(ambiguousReferenceReply))
@@ -508,7 +415,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             }
         }
 
-        if (isContactMemoryQuestion)
+        if (msgIntent.IsContactMemoryQuestion)
         {
             var contactMemoryReply = await _contactFlow.BuildContactMemoryReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(contactMemoryReply))
@@ -519,7 +426,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             }
         }
 
-        if (isPendingContactClarification)
+        if (msgIntent.IsPendingContactClarification)
         {
             var contactClarificationReply = _promptBuilder.BuildPendingContactClarificationReply(ctx);
             if (!string.IsNullOrWhiteSpace(contactClarificationReply))
@@ -530,7 +437,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             }
         }
 
-        if (isGenericPendingContactBuyReply)
+        if (msgIntent.IsGenericBuyContinuation)
         {
             var contactConfirmationReply = _promptBuilder.BuildPendingContactClarificationReply(ctx);
             if (!string.IsNullOrWhiteSpace(contactConfirmationReply))
@@ -541,7 +448,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             }
         }
 
-        if (isOrderEstimateQuestion)
+        if (msgIntent.HasOrderEstimateQuestion)
         {
             var orderEstimateReply = await _consultationReplies.BuildOrderEstimateReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(orderEstimateReply))
@@ -552,7 +459,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             }
         }
 
-        if (isProductQuestion || (isQuestioning && !isPolicyQuestion && !isPriceQuestion && !isInventoryQuestion && !isContactMemoryQuestion && !isPendingContactClarification && !isOrderEstimateQuestion && (hasQuestionMarker || ctx.CurrentState == ConversationState.Consulting)))
+        if (msgIntent.HasProductQuestion || (msgIntent.IsQuestioning && !msgIntent.HasPolicyQuestion && !msgIntent.HasPriceQuestion && !msgIntent.HasInventoryQuestion && !msgIntent.IsContactMemoryQuestion && !msgIntent.IsPendingContactClarification && !msgIntent.HasOrderEstimateQuestion && (msgIntent.HasQuestionMarker || ctx.CurrentState == ConversationState.Consulting)))
         {
             var consultReply = await _consultationReplies.BuildProductConsultationReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(consultReply))
@@ -563,7 +470,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             }
         }
 
-        if (isPolicyQuestion || (isQuestioning && hasQuestionMarker && hasBuyIntentPhrase == false && !isPriceQuestion && !isInventoryQuestion && !isOrderEstimateQuestion))
+        if (msgIntent.HasPolicyQuestion || (msgIntent.IsQuestioning && msgIntent.HasQuestionMarker && !msgIntent.HasBuySignal && !msgIntent.HasPriceQuestion && !msgIntent.HasInventoryQuestion && !msgIntent.HasOrderEstimateQuestion))
         {
             var shippingReply = await _consultationReplies.BuildShippingConsultationReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(shippingReply))
@@ -574,7 +481,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             }
         }
 
-        if (isInventoryQuestion)
+        if (msgIntent.HasInventoryQuestion)
         {
             var inventoryReply = await _consultationReplies.BuildInventoryConsultationReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(inventoryReply))
@@ -590,7 +497,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             return fallbackReply;
         }
 
-        if (isPriceQuestion)
+        if (msgIntent.HasPriceQuestion)
         {
             var priceReply = await _consultationReplies.BuildPriceConsultationReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(priceReply))
@@ -606,7 +513,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             return fallbackReply;
         }
 
-        if (hasBuyIntentPhrase && hasProduct)
+        if (msgIntent.HasBuySignal && hasProduct)
         {
             var contactReply = await _contactFlow.BuildContactCollectionReplyAsync(ctx, message);
             if (!string.IsNullOrWhiteSpace(contactReply))
@@ -630,13 +537,13 @@ public abstract class SalesStateHandlerBase : IStateHandler
                                 hasProduct &&
                                 ctx.GetData<bool?>("contactNeedsConfirmation") != true &&
                                 (
-                                    (useAiIntent &&
-                                     (intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy ||
-                                      intentResult.Intent == Services.AI.Models.CustomerIntent.Confirming)) ||
+                                    (msgIntent.UseAiIntent &&
+                                     (msgIntent.Intent == CustomerIntent.ReadyToBuy ||
+                                      msgIntent.Intent == CustomerIntent.Confirming)) ||
                                     (ctx.CurrentState == ConversationState.CollectingInfo &&
-                                     (!useAiIntent ||
-                                      (intentResult.Intent != Services.AI.Models.CustomerIntent.Questioning &&
-                                       intentResult.Intent != Services.AI.Models.CustomerIntent.Consulting)))
+                                     (!msgIntent.UseAiIntent ||
+                                      (msgIntent.Intent != CustomerIntent.Questioning &&
+                                       msgIntent.Intent != CustomerIntent.Consulting)))
                                 );
 
         if (canCreateDraftNow)
@@ -655,8 +562,8 @@ public abstract class SalesStateHandlerBase : IStateHandler
         // Auto-close after repeated consultation rejections
         var rejectionCount = ctx.GetData<int>("consultationRejectionCount");
         if (rejectionCount >= SalesBotOptions.MaxConsultationAttempts &&
-            useAiIntent &&
-            intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy &&
+            msgIntent.UseAiIntent &&
+            msgIntent.Intent == CustomerIntent.ReadyToBuy &&
             hasProduct)
         {
             Logger.LogInformation(
@@ -704,10 +611,10 @@ public abstract class SalesStateHandlerBase : IStateHandler
 
         // Build product offer only when customer is browsing or explicitly wants to buy.
         string? offerResponse = null;
-        if (useAiIntent && (intentResult.Intent == Services.AI.Models.CustomerIntent.ReadyToBuy ||
-                            intentResult.Intent == Services.AI.Models.CustomerIntent.Browsing))
+        if (msgIntent.UseAiIntent && (msgIntent.Intent == CustomerIntent.ReadyToBuy ||
+                                      msgIntent.Intent == CustomerIntent.Browsing))
         {
-            offerResponse = await _consultationReplies.TryBuildOfferResponseAsync(ctx, message, intentResult.Intent);
+            offerResponse = await _consultationReplies.TryBuildOfferResponseAsync(ctx, message, msgIntent.Intent);
         }
 
         // Show product offer if available and intent allows it
@@ -718,7 +625,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
             return offerResponse;
         }
 
-        if (requiresProductGrounding && (!RagOptions.Enabled || RagService == null))
+        if (msgIntent.RequiresProductGrounding && (!RagOptions.Enabled || RagService == null))
         {
             var activeProductsForFallback = await _contextResolver.GetActiveSelectedProductsAsync(ctx);
             var groundingContext = await _productGroundingService.BuildContextWithRelatedSuggestionsAsync(
@@ -742,7 +649,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
         {
             Context = ctx,
             Message = message,
-            Intent = useAiIntent ? intentResult.Intent : null,
+            Intent = msgIntent.UseAiIntent ? msgIntent.Intent : null,
             SubIntent = subIntent
         });
         ConversationHistoryHelper.AddToHistory(ctx, "assistant", reply, SalesBotOptions.ConversationHistoryLimit);
@@ -803,7 +710,7 @@ public abstract class SalesStateHandlerBase : IStateHandler
     private async Task<string?> HandlePendingFinalSummaryConfirmationAsync(
         StateContext ctx,
         string message,
-        Services.AI.Models.CustomerIntent? intent)
+        CustomerIntent? intent)
     {
         if (!SalesMessageParser.IsAwaitingFinalSummaryConfirmation(ctx))
             return null;

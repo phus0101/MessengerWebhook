@@ -5,6 +5,7 @@ using MessengerWebhook.Models;
 using MessengerWebhook.Services;
 using MessengerWebhook.Services.AI;
 using MessengerWebhook.Services.AI.Models;
+using MessengerWebhook.Services.AI.Resilience;
 using MessengerWebhook.Services.Customers;
 using MessengerWebhook.Services.DraftOrders;
 using MessengerWebhook.Services.Freeship;
@@ -14,11 +15,17 @@ using MessengerWebhook.Services.ProductMapping;
 using MessengerWebhook.Services.ProductGrounding;
 using MessengerWebhook.Services.RAG;
 using MessengerWebhook.Services.ResponseValidation;
+using MessengerWebhook.Services.Cache;
 using MessengerWebhook.Services.ResponseValidation.Models;
 using MessengerWebhook.Services.Support;
 using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.Metrics;
+using MessengerWebhook.Services.Sales.Contact;
+using MessengerWebhook.Services.Sales.Context;
+using MessengerWebhook.Services.Sales.Intent;
+using MessengerWebhook.Services.Sales.Prompt;
+using MessengerWebhook.Services.Sales.Reply;
 using MessengerWebhook.Services.SubIntent;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
@@ -67,6 +74,8 @@ public class SalesStateHandlerBaseTests
             new MemoryCache(new MemoryCacheOptions()),
             NullLogger<DraftOrderCoordinator>.Instance);
 
+        // Use shorthand ctor so real ISales* service instances are wired from provided dependencies.
+        // This preserves test behavior that relied on ?? new ... fallbacks in the old base ctor.
         _handler = new TestSalesStateHandler(
             _geminiService.Object,
             new PolicyGuardService(Options.Create(_salesBotOptions)),
@@ -84,7 +93,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -379,7 +387,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -782,7 +789,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -873,7 +879,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -967,7 +972,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -1044,7 +1048,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -1108,7 +1111,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -1176,7 +1178,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -1243,7 +1244,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -1304,7 +1304,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -1369,7 +1368,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -1434,7 +1432,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -2152,7 +2149,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -2597,7 +2593,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -2662,7 +2657,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -2742,7 +2736,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -2806,7 +2799,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(_salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -2886,7 +2878,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -2975,7 +2966,6 @@ public class SalesStateHandlerBaseTests
             Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
-            Mock.Of<ISubIntentClassifier>(),
             Options.Create(salesBotOptions),
             Options.Create(new RAGOptions { Enabled = false }),
             Mock.Of<ILogger<TestSalesStateHandler>>());
@@ -3141,8 +3131,17 @@ public class SalesStateHandlerBaseTests
             IConversationMetricsService conversationMetricsService,
             ISubIntentClassifier subIntentClassifier,
             IOptions<SalesBotOptions> salesBotOptions,
+            IOptions<PolicyGuardOptions> policyGuardOptions,
             IOptions<RAGOptions> ragOptions,
             ILogger<TestSalesStateHandler> logger,
+            ISalesContextResolver contextResolver,
+            ISalesPromptBuilder promptBuilder,
+            IContactConfirmationFlow contactFlow,
+            ISalesReplyOrchestrator replyOrchestrator,
+            ISalesConsultationReplies consultationReplies,
+            ILlmFallbackService llmFallbackService,
+            MessengerWebhook.Services.Conversation.IConversationSummarizer? conversationSummarizer = null,
+            ICommerceMsgIntentDetector? intentDetector = null,
             IProductGroundingService? productGroundingService = null)
             : base(
                 geminiService,
@@ -3163,12 +3162,25 @@ public class SalesStateHandlerBaseTests
                 conversationMetricsService,
                 subIntentClassifier,
                 salesBotOptions,
+                policyGuardOptions,
                 ragOptions,
                 logger,
-                productGroundingService)
+                productGroundingService,
+                contextResolver,
+                promptBuilder,
+                contactFlow,
+                replyOrchestrator,
+                consultationReplies,
+                llmFallbackService,
+                conversationSummarizer ?? Mock.Of<MessengerWebhook.Services.Conversation.IConversationSummarizer>(),
+                intentDetector ?? Mock.Of<ICommerceMsgIntentDetector>())
         {
         }
 
+        // Convenience constructor that wires real ISales* service instances from provided params.
+        // Used by tests that only need to override specific dependencies (e.g. productMappingService)
+        // while keeping realistic consultation/reply behavior.
+        // Mirrors the old ?? new ... fallbacks that were in SalesStateHandlerBase ctor #2.
         public TestSalesStateHandler(
             IGeminiService geminiService,
             IPolicyGuardService policyGuardService,
@@ -3209,11 +3221,116 @@ public class SalesStateHandlerBaseTests
                 conversationMetricsService,
                 Mock.Of<ISubIntentClassifier>(),
                 salesBotOptions,
+                Options.Create(new PolicyGuardOptions()),
                 ragOptions,
                 logger,
+                BuildContextResolver(geminiService, customerIntelligenceService, productMappingService,
+                    giftSelectionService, freeshipCalculator, productGroundingService),
+                new MessengerWebhook.Services.Sales.Prompt.SalesPromptBuilder(),
+                BuildContactFlow(geminiService, customerIntelligenceService, productMappingService,
+                    giftSelectionService, freeshipCalculator, productGroundingService),
+                BuildReplyOrchestrator(geminiService, ragService, emotionDetectionService, toneMatchingService,
+                    conversationContextAnalyzer, smallTalkService, responseValidationService, abTestService,
+                    conversationMetricsService, customerIntelligenceService, productMappingService,
+                    giftSelectionService, freeshipCalculator, salesBotOptions, ragOptions, productGroundingService),
+                BuildConsultationReplies(geminiService, customerIntelligenceService, productMappingService,
+                    giftSelectionService, freeshipCalculator, productGroundingService),
+                Mock.Of<ILlmFallbackService>(),
+                Mock.Of<MessengerWebhook.Services.Conversation.IConversationSummarizer>(),
+                BuildIntentDetector(geminiService, customerIntelligenceService, productMappingService,
+                    giftSelectionService, freeshipCalculator, productGroundingService),
                 productGroundingService)
         {
         }
+
+        // --- Static factory helpers to construct real service instances for convenience ctor ---
+
+        private static MessengerWebhook.Services.ProductGrounding.IProductGroundingService BuildGrounding(
+            IProductGroundingService? provided) =>
+            provided ?? new MessengerWebhook.Services.ProductGrounding.ProductGroundingService(
+                new MessengerWebhook.Services.ProductGrounding.ProductNeedDetector(),
+                new MessengerWebhook.Services.ProductGrounding.ProductMentionDetector());
+
+        private static MessengerWebhook.Services.Sales.Context.ISalesContextResolver BuildContextResolver(
+            IGeminiService geminiService,
+            ICustomerIntelligenceService customerIntelligenceService,
+            IProductMappingService productMappingService,
+            IGiftSelectionService giftSelectionService,
+            IFreeshipCalculator freeshipCalculator,
+            IProductGroundingService? productGroundingService) =>
+            new MessengerWebhook.Services.Sales.Context.SalesContextResolver(
+                customerIntelligenceService, productMappingService, giftSelectionService,
+                freeshipCalculator, BuildGrounding(productGroundingService), geminiService,
+                NullLogger<MessengerWebhook.Services.Sales.Context.SalesContextResolver>.Instance);
+
+        private static MessengerWebhook.Services.Sales.Contact.IContactConfirmationFlow BuildContactFlow(
+            IGeminiService geminiService,
+            ICustomerIntelligenceService customerIntelligenceService,
+            IProductMappingService productMappingService,
+            IGiftSelectionService giftSelectionService,
+            IFreeshipCalculator freeshipCalculator,
+            IProductGroundingService? productGroundingService) =>
+            new MessengerWebhook.Services.Sales.Contact.ContactConfirmationFlow(
+                BuildContextResolver(geminiService, customerIntelligenceService, productMappingService,
+                    giftSelectionService, freeshipCalculator, productGroundingService),
+                new MessengerWebhook.Services.Sales.Prompt.SalesPromptBuilder());
+
+        private static ICommerceMsgIntentDetector BuildIntentDetector(
+            IGeminiService geminiService,
+            ICustomerIntelligenceService customerIntelligenceService,
+            IProductMappingService productMappingService,
+            IGiftSelectionService giftSelectionService,
+            IFreeshipCalculator freeshipCalculator,
+            IProductGroundingService? productGroundingService) =>
+            new MessengerWebhook.Services.Sales.Intent.CommerceMsgIntentDetector(
+                BuildContactFlow(geminiService, customerIntelligenceService, productMappingService,
+                    giftSelectionService, freeshipCalculator, productGroundingService),
+                BuildContextResolver(geminiService, customerIntelligenceService, productMappingService,
+                    giftSelectionService, freeshipCalculator, productGroundingService));
+
+        private static MessengerWebhook.Services.Sales.Reply.ISalesReplyOrchestrator BuildReplyOrchestrator(
+            IGeminiService geminiService,
+            MessengerWebhook.Services.RAG.IRAGService? ragService,
+            MessengerWebhook.Services.Emotion.IEmotionDetectionService emotionDetectionService,
+            MessengerWebhook.Services.Tone.IToneMatchingService toneMatchingService,
+            MessengerWebhook.Services.Conversation.IConversationContextAnalyzer conversationContextAnalyzer,
+            MessengerWebhook.Services.SmallTalk.ISmallTalkService smallTalkService,
+            MessengerWebhook.Services.ResponseValidation.IResponseValidationService responseValidationService,
+            IABTestService abTestService,
+            IConversationMetricsService conversationMetricsService,
+            ICustomerIntelligenceService customerIntelligenceService,
+            IProductMappingService productMappingService,
+            IGiftSelectionService giftSelectionService,
+            IFreeshipCalculator freeshipCalculator,
+            IOptions<SalesBotOptions> salesBotOptions,
+            IOptions<RAGOptions> ragOptions,
+            IProductGroundingService? productGroundingService) =>
+            new MessengerWebhook.Services.Sales.Reply.SalesReplyOrchestrator(
+                geminiService, Mock.Of<MessengerWebhook.Services.AI.Routing.ILlmRoutingService>(),
+                ragService, emotionDetectionService, toneMatchingService,
+                conversationContextAnalyzer, smallTalkService, responseValidationService,
+                abTestService, conversationMetricsService, customerIntelligenceService,
+                BuildGrounding(productGroundingService),
+                BuildContextResolver(geminiService, customerIntelligenceService, productMappingService,
+                    giftSelectionService, freeshipCalculator, productGroundingService),
+                new MessengerWebhook.Services.Sales.Prompt.SalesPromptBuilder(),
+                Mock.Of<ISemanticAnswerCache>(), Mock.Of<ITenantContext>(),
+                salesBotOptions, ragOptions,
+                NullLogger<MessengerWebhook.Services.Sales.Reply.SalesReplyOrchestrator>.Instance);
+
+        private static MessengerWebhook.Services.Sales.Reply.ISalesConsultationReplies BuildConsultationReplies(
+            IGeminiService geminiService,
+            ICustomerIntelligenceService customerIntelligenceService,
+            IProductMappingService productMappingService,
+            IGiftSelectionService giftSelectionService,
+            IFreeshipCalculator freeshipCalculator,
+            IProductGroundingService? productGroundingService) =>
+            new MessengerWebhook.Services.Sales.Reply.SalesConsultationReplies(
+                BuildContextResolver(geminiService, customerIntelligenceService, productMappingService,
+                    giftSelectionService, freeshipCalculator, productGroundingService),
+                new MessengerWebhook.Services.Sales.Prompt.SalesPromptBuilder(),
+                productMappingService,
+                NullLogger<MessengerWebhook.Services.Sales.Reply.SalesConsultationReplies>.Instance);
 
         protected override Task<string> HandleInternalAsync(StateContext ctx, string message)
         {

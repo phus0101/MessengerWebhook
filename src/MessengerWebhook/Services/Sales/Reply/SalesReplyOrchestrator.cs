@@ -2,6 +2,7 @@ using MessengerWebhook.Configuration;
 using MessengerWebhook.Models;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.AI.Routing;
 using MessengerWebhook.Services.Conversation;
 using MessengerWebhook.Services.Customers;
 using MessengerWebhook.Services.Emotion;
@@ -11,7 +12,9 @@ using MessengerWebhook.Services.ProductGrounding;
 using MessengerWebhook.Services.RAG;
 using MessengerWebhook.Services.ResponseValidation;
 using MessengerWebhook.Services.ResponseValidation.Models;
+using MessengerWebhook.Services.Cache;
 using MessengerWebhook.Services.Sales;
+using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.Services.Sales.Context;
 using MessengerWebhook.Services.Sales.Prompt;
 using MessengerWebhook.Services.SmallTalk;
@@ -31,6 +34,7 @@ namespace MessengerWebhook.Services.Sales.Reply;
 public sealed class SalesReplyOrchestrator : ISalesReplyOrchestrator
 {
     private readonly IGeminiService _geminiService;
+    private readonly ILlmRoutingService _router;
     private readonly IRAGService? _ragService;
     private readonly IEmotionDetectionService _emotionService;
     private readonly IToneMatchingService _toneService;
@@ -43,12 +47,25 @@ public sealed class SalesReplyOrchestrator : ISalesReplyOrchestrator
     private readonly IProductGroundingService _productGrounding;
     private readonly ISalesContextResolver _contextResolver;
     private readonly ISalesPromptBuilder _promptBuilder;
+    private readonly ISemanticAnswerCache _semanticCache;
+    private readonly ITenantContext _tenantContext;
     private readonly SalesBotOptions _salesBotOptions;
     private readonly RAGOptions _ragOptions;
     private readonly ILogger<SalesReplyOrchestrator> _logger;
 
+    // Sub-intent categories that produce cacheable policy/FAQ answers
+    private static readonly HashSet<SubIntentCategory> CacheableSubIntents =
+    [
+        SubIntentCategory.PolicyQuestion,
+        SubIntentCategory.ShippingQuestion,
+    ];
+
+    // 6-hour TTL — policy/FAQ answers change infrequently
+    private static readonly TimeSpan SemanticCacheTtl = TimeSpan.FromHours(6);
+
     public SalesReplyOrchestrator(
         IGeminiService geminiService,
+        ILlmRoutingService router,
         IRAGService? ragService,
         IEmotionDetectionService emotionService,
         IToneMatchingService toneService,
@@ -61,11 +78,14 @@ public sealed class SalesReplyOrchestrator : ISalesReplyOrchestrator
         IProductGroundingService productGrounding,
         ISalesContextResolver contextResolver,
         ISalesPromptBuilder promptBuilder,
+        ISemanticAnswerCache semanticCache,
+        ITenantContext tenantContext,
         IOptions<SalesBotOptions> salesBotOptions,
         IOptions<RAGOptions> ragOptions,
         ILogger<SalesReplyOrchestrator> logger)
     {
         _geminiService = geminiService;
+        _router = router;
         _ragService = ragService;
         _emotionService = emotionService;
         _toneService = toneService;
@@ -78,6 +98,8 @@ public sealed class SalesReplyOrchestrator : ISalesReplyOrchestrator
         _productGrounding = productGrounding;
         _contextResolver = contextResolver;
         _promptBuilder = promptBuilder;
+        _semanticCache = semanticCache;
+        _tenantContext = tenantContext;
         _salesBotOptions = salesBotOptions.Value;
         _ragOptions = ragOptions.Value;
         _logger = logger;
@@ -312,6 +334,8 @@ Xung ho: {toneProfile.PronounText}
             ? null
             : earlyRagContext.FormattedContext;
 
+        var summarySection = _promptBuilder.BuildConversationSummarySection(ctx);
+
         var prompt = $"""
 Khach vua nhan: "{message}"
 San pham dang quan tam: {(productCodes.Count == 0 ? "chua xac dinh" : string.Join(", ", productCodes))}
@@ -320,7 +344,7 @@ Thong tin da co: {contactSummary}
 {vipInstruction}
 
 {toneInstruction}
-
+{summarySection}
 Quy tac:
 - Tra loi tu nhien, ngan gon, giong nhan vien page.
 - Khong tu y them qua, freeship, giam gia, huy don, hoan tien.
@@ -329,12 +353,58 @@ Quy tac:
 {ctaContext}
 """;
 
-        var response = await _geminiService.SendMessageAsync(
-            ctx.FacebookPSID,
-            prompt,
-            history,
-            ragContext: ragContext,
-            subIntentGuidance: subIntentGuidance);
+        // ── LLM model tier routing ────────────────────────────────────────────
+        var routingCtx = new LlmRoutingContext
+        {
+            Intent = intent != null ? ctx.GetData<Services.Sales.Intent.CommerceMsgIntent>("msgIntent") : null,
+            State = ctx.CurrentState,
+            HistoryTurnCount = history.Count,
+            Purpose = "chat"
+        };
+        var modelTier = _router.SelectModel(routingCtx);
+        _logger.LogDebug("LlmRouting: selected {Model} for PSID={PSID}", modelTier, ctx.FacebookPSID);
+
+        // ── Semantic answer cache (policy/FAQ sub-intents only) ──────────────
+        // Cache key is stable per sub-intent category + tenant (not per-user),
+        // so the same policy answer can be reused across all callers for that tenant.
+        var isCacheableSubIntent = subIntent != null && CacheableSubIntents.Contains(subIntent.Category);
+        var tenantId = _tenantContext.TenantId?.ToString() ?? "default";
+        string response;
+
+        if (isCacheableSubIntent)
+        {
+            var subIntentKey = subIntent!.Category.ToString();
+            var cached = await _semanticCache.GetAsync(subIntentKey, tenantId);
+            if (cached != null)
+            {
+                // Return cached answer; skip remaining pipeline steps (validation still runs below)
+                response = cached;
+            }
+            else
+            {
+                response = await _geminiService.SendMessageAsync(
+                    ctx.FacebookPSID,
+                    prompt,
+                    history,
+                    modelOverride: modelTier,
+                    ragContext: ragContext,
+                    subIntentGuidance: subIntentGuidance);
+
+                // Cache the fresh answer for future callers on the same tenant
+                await _semanticCache.SetAsync(subIntentKey, tenantId, response, SemanticCacheTtl);
+            }
+        }
+        else
+        {
+            response = await _geminiService.SendMessageAsync(
+                ctx.FacebookPSID,
+                prompt,
+                history,
+                modelOverride: modelTier,
+                ragContext: ragContext,
+                subIntentGuidance: subIntentGuidance);
+        }
+        // ── End semantic cache ───────────────────────────────────────────────
 
         // Capture pipeline latency
         var pipelineLatency = (int)(DateTime.UtcNow - pipelineStartTime).TotalMilliseconds;

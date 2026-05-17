@@ -14,10 +14,20 @@ using MessengerWebhook.Services.Emotion;
 using MessengerWebhook.Services.Tone;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.Metrics;
+using MessengerWebhook.Services.ProductGrounding;
+using MessengerWebhook.Services.Sales.Contact;
+using MessengerWebhook.Services.Sales.Context;
+using MessengerWebhook.Services.Sales.Intent;
+using MessengerWebhook.Services.Sales.Prompt;
+using MessengerWebhook.Services.AI.Resilience;
+using MessengerWebhook.Services.Cache;
+using MessengerWebhook.Services.Sales.Reply;
 using MessengerWebhook.Services.SubIntent;
+using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.StateMachine.Handlers;
 using MessengerWebhook.StateMachine.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 
@@ -49,6 +59,30 @@ public class IdleStateHandlerTests
             new Microsoft.Extensions.Caching.Memory.MemoryCache(Options.Create(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())),
             Mock.Of<Microsoft.Extensions.Logging.ILogger<DraftOrderCoordinator>>());
 
+        var salesBotOptions = Options.Create(new SalesBotOptions());
+        var ragOptions = Options.Create(new RAGOptions { Enabled = false });
+        var groundingService = new ProductGroundingService(new ProductNeedDetector(), new ProductMentionDetector());
+        var contextResolver = new SalesContextResolver(
+            _customerIntelligenceService.Object, _productMappingService.Object, _giftSelectionService.Object,
+            new FreeshipCalculator(), groundingService, _geminiService.Object,
+            NullLogger<SalesContextResolver>.Instance);
+        var promptBuilder = new SalesPromptBuilder();
+        var contactFlow = new ContactConfirmationFlow(contextResolver, promptBuilder);
+        var replyOrchestrator = new SalesReplyOrchestrator(
+            _geminiService.Object, Mock.Of<MessengerWebhook.Services.AI.Routing.ILlmRoutingService>(), null,
+            Mock.Of<IEmotionDetectionService>(), Mock.Of<IToneMatchingService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationContextAnalyzer>(),
+            Mock.Of<MessengerWebhook.Services.SmallTalk.ISmallTalkService>(),
+            Mock.Of<MessengerWebhook.Services.ResponseValidation.IResponseValidationService>(),
+            Mock.Of<IABTestService>(), Mock.Of<IConversationMetricsService>(),
+            _customerIntelligenceService.Object, groundingService, contextResolver, promptBuilder,
+            Mock.Of<ISemanticAnswerCache>(), Mock.Of<ITenantContext>(),
+            salesBotOptions, ragOptions,
+            NullLogger<SalesReplyOrchestrator>.Instance);
+        var consultationReplies = new SalesConsultationReplies(
+            contextResolver, promptBuilder, _productMappingService.Object,
+            NullLogger<SalesConsultationReplies>.Instance);
+
         _handler = new IdleStateHandler(
             _geminiService.Object,
             new PolicyGuardService(Options.Create(new SalesBotOptions())),
@@ -67,9 +101,18 @@ public class IdleStateHandlerTests
             Mock.Of<IABTestService>(),
             Mock.Of<IConversationMetricsService>(),
             Mock.Of<ISubIntentClassifier>(),
-            Options.Create(new SalesBotOptions()),
-            Options.Create(new RAGOptions { Enabled = false }),
-            Mock.Of<ILogger<IdleStateHandler>>());
+            salesBotOptions,
+            Options.Create(new PolicyGuardOptions()),
+            ragOptions,
+            Mock.Of<ILogger<IdleStateHandler>>(),
+            contextResolver,
+            promptBuilder,
+            contactFlow,
+            replyOrchestrator,
+            consultationReplies,
+            Mock.Of<ILlmFallbackService>(),
+            Mock.Of<MessengerWebhook.Services.Conversation.IConversationSummarizer>(),
+            new CommerceMsgIntentDetector(contactFlow, contextResolver));
     }
 
     [Fact]

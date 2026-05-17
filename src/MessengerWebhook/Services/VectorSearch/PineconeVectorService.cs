@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Services.Tenants;
+using MessengerWebhook.Services.VectorSearch.Models;
 using Microsoft.Extensions.Options;
 using Pinecone;
 using Polly;
@@ -149,6 +150,19 @@ public class PineconeVectorService : IVectorSearchService
         float[] queryEmbedding,
         int topK = 10,
         Dictionary<string, object>? filters = null,
+        CancellationToken cancellationToken = default) =>
+        await SearchSimilarAsync(queryEmbedding, topK, filters, searchOptions: null, cancellationToken);
+
+    /// <summary>
+    /// Search with optional <see cref="VectorSearchOptions"/> for metadata-based filtering.
+    /// Tenant isolation is always enforced. Additional clauses from <paramref name="searchOptions"/>
+    /// are ANDed with the tenant filter and any explicit <paramref name="filters"/> dict.
+    /// </summary>
+    public async Task<List<ProductSearchResult>> SearchSimilarAsync(
+        float[] queryEmbedding,
+        int topK,
+        Dictionary<string, object>? filters,
+        VectorSearchOptions? searchOptions,
         CancellationToken cancellationToken = default)
     {
         var tenantId = GetTenantNamespace();
@@ -160,13 +174,9 @@ public class PineconeVectorService : IVectorSearchService
             Vector = queryEmbedding,
             TopK = (uint)topK,
             IncludeMetadata = true,
-            IncludeValues = false
+            IncludeValues = false,
+            Filter = BuildFilter(tenantId, filters, searchOptions)
         };
-
-        if (filters != null && filters.Count > 0)
-        {
-            request.Filter = ConvertToMetadata(filters);
-        }
 
         var sw = Stopwatch.StartNew();
         try
@@ -190,10 +200,12 @@ public class PineconeVectorService : IVectorSearchService
                 .Where(m => m.Metadata != null)
                 .Select(m => new ProductSearchResult
                 {
-                    ProductId = m.Metadata!["product_id"]?.ToString() ?? string.Empty,
-                    Name = m.Metadata["name"]?.ToString() ?? string.Empty,
-                    Category = m.Metadata["category"]?.ToString() ?? string.Empty,
-                    Price = m.Metadata["price"] != null ? Convert.ToDecimal(m.Metadata["price"]) : 0,
+                    ProductId = m.Metadata![VectorMetadataKeys.ProductId]?.ToString() ?? string.Empty,
+                    Name = m.Metadata[VectorMetadataKeys.Name]?.ToString() ?? string.Empty,
+                    Category = m.Metadata[VectorMetadataKeys.Category]?.ToString() ?? string.Empty,
+                    Price = m.Metadata.TryGetValue(VectorMetadataKeys.Price, out var priceVal) && priceVal != null
+                        ? Convert.ToDecimal(priceVal.ToString())
+                        : 0,
                     Score = m.Score ?? 0f
                 }).ToList();
 
@@ -211,6 +223,62 @@ public class PineconeVectorService : IVectorSearchService
                 "Pinecone", sw.ElapsedMilliseconds);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Builds the composite Pinecone metadata filter.
+    /// Always includes a tenant_id equality clause. Additional clauses from
+    /// <paramref name="searchOptions"/> and the legacy <paramref name="filters"/> dict are ANDed in.
+    /// </summary>
+    private static Metadata BuildFilter(
+        string tenantId,
+        Dictionary<string, object>? filters,
+        VectorSearchOptions? searchOptions)
+    {
+        var clauses = new List<Metadata>
+        {
+            // Tenant isolation is mandatory on every query
+            PineconeFilterBuilder.Eq(VectorMetadataKeys.TenantId, tenantId)
+        };
+
+        // Legacy explicit filters dict
+        if (filters != null && filters.Count > 0)
+        {
+            clauses.Add(ConvertToMetadata(filters));
+        }
+
+        if (searchOptions != null)
+        {
+            // Channel visibility: include records tagged for this channel OR records with no tag
+            if (!string.IsNullOrEmpty(searchOptions.ChannelVisibility)
+                && searchOptions.ChannelVisibility != "all")
+            {
+                clauses.Add(PineconeFilterBuilder.Or(
+                    PineconeFilterBuilder.In(VectorMetadataKeys.ChannelVisibility,
+                        [searchOptions.ChannelVisibility, "all"]),
+                    PineconeFilterBuilder.Exists(VectorMetadataKeys.ChannelVisibility, false)));
+            }
+
+            if (!string.IsNullOrEmpty(searchOptions.ContentType))
+            {
+                clauses.Add(PineconeFilterBuilder.Eq(VectorMetadataKeys.ContentType,
+                    searchOptions.ContentType));
+            }
+
+            if (!string.IsNullOrEmpty(searchOptions.PolicyVersion))
+            {
+                clauses.Add(PineconeFilterBuilder.Eq(VectorMetadataKeys.PolicyVersion,
+                    searchOptions.PolicyVersion));
+            }
+
+            if (!string.IsNullOrEmpty(searchOptions.Locale))
+            {
+                clauses.Add(PineconeFilterBuilder.Eq(VectorMetadataKeys.Locale,
+                    searchOptions.Locale));
+            }
+        }
+
+        return PineconeFilterBuilder.And([.. clauses]);
     }
 
     public async Task DeleteProductAsync(

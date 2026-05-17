@@ -1,5 +1,6 @@
 using MessengerWebhook.Data;
 using MessengerWebhook.Services.Admin;
+using MessengerWebhook.Services.Consent;
 using MessengerWebhook.Services.Support;
 using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.Services.VectorSearch;
@@ -355,9 +356,46 @@ public static class AdminOperationsEndpointExtensions
             });
         });
 
+        // PDPL consent withdrawal — admin-only, requires confirmed tenant context
+        group.MapPost("/customers/{psid}/consent/withdraw", async (
+            string psid,
+            WithdrawConsentRequest req,
+            HttpContext httpContext,
+            IAntiforgery antiforgery,
+            IConsentService consentService,
+            CancellationToken cancellationToken) =>
+        {
+            var antiForgeryError = await AdminApiEndpointHelpers.ValidateAntiforgeryAsync(httpContext, antiforgery);
+            if (antiForgeryError != null) return antiForgeryError;
+
+            var user = AdminApiEndpointHelpers.GetUser(httpContext);
+            if (user == null) return Results.Unauthorized();
+
+            if (string.IsNullOrWhiteSpace(psid))
+                return Results.BadRequest(new { error = "PSID is required." });
+
+            await consentService.WithdrawConsentAsync(user.TenantId, psid, req.Reason, cancellationToken);
+            return Results.Ok(new { success = true });
+        });
+
+        // Consent audit trail — read-only
+        group.MapGet("/customers/{psid}/consent/audit", async (
+            string psid,
+            HttpContext httpContext,
+            IConsentService consentService,
+            CancellationToken cancellationToken) =>
+        {
+            var user = AdminApiEndpointHelpers.GetUser(httpContext);
+            if (user == null) return Results.Unauthorized();
+
+            var trail = await consentService.GetAuditTrailAsync(user.TenantId, psid, cancellationToken);
+            return Results.Ok(trail);
+        });
+
         return group;
     }
 
+    public sealed record WithdrawConsentRequest(string? Reason);
     public sealed record DraftRejectRequest(string? Notes);
     public sealed record SupportCaseActionRequest(string? Notes);
     public sealed record UpdateProductMappingRequest(int NobitaProductId, decimal NobitaWeight);

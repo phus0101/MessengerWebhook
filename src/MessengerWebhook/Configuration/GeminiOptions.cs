@@ -6,6 +6,7 @@ public class GeminiOptions
 
     public string ApiKey { get; set; } = string.Empty;
     public string ProModel { get; set; } = "gemini-1.5-pro";
+    public string FlashModel { get; set; } = "gemini-2.5-flash";
     public string FlashLiteModel { get; set; } = "gemini-1.5-flash";
     public string EmbeddingModel { get; set; } = "gemini-embedding-2-preview";
     public int MaxTokens { get; set; } = 2048;

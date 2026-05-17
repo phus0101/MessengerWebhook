@@ -42,6 +42,77 @@ This roadmap tracks the development phases of the Multi-Tenant Messenger Chatbot
 
 ---
 
+### Phase 08: Sales Copilot Research Refactor ✅
+**Status**: Complete
+**Completion Date**: 2026-05-17
+**Duration**: 1 day
+
+**Key Deliverables**:
+
+**1. Dependency Injection (DI) Fix**
+- `SalesStateHandlerBase` refactored with single constructor
+- All ISales* services properly injected via DI container
+- Eliminated self-instantiation patterns
+
+**2. LLM Resilience & Model Tiering**
+- `LlmRoutingService`: Selects model tier (FlashLite/Flash/Pro) based on intent confidence, VIP status, ticket value
+- Polly circuit breaker: 50% failure ratio, 30s break window
+- `LlmFallbackService`: Graceful degradation per conversation state
+
+**3. Semantic Answer Cache**
+- `SemanticAnswerCache`: Redis-backed cache for PolicyQuestion/ShippingQuestion
+- 6-hour TTL, cost optimization for repetitive queries
+
+**4. 3-Layer Context Window**
+- `ConversationSummarizer`: Summarizes history using FlashLite
+- EphemeralWindowSize=6, SummarizationThreshold=10 for optimal context
+
+**5. Structured Commerce Intent**
+- `CommerceMsgIntentDetector`: Replaces 14 boolean flags with structured output
+- Single-pass keyword+AI merge for cleaner intent handling
+
+**6. RAG Metadata Enrichment**
+- `VectorMetadataKeys`: Constants for metadata keys (channel_visibility, content_type, policy_version)
+- `PineconeFilterBuilder`: Multi-tenant RAG isolation via metadata filters
+- `VectorSearchOptions`: Hybrid search with filtering configuration
+
+**7. PDPL Consent Tracking**
+- `ConsentService`: PDPL compliance via `ConsentAuditRecord` entity
+- Implied consent model in `CollectingInfoStateHandler`
+- Admin endpoint for consent withdrawal
+
+**8. csproj Cleanup**
+- Removed 300 _ContentIncludedByDefault entries
+- Added `DefaultItemExcludes` for cleaner project config
+
+**Files Created**: 14+
+- `Services/AI/Routing/LlmRoutingService.cs`, `ILlmRoutingService.cs`, `LlmRoutingContext.cs`
+- `Services/AI/Resilience/LlmFallbackService.cs`
+- `Services/Conversation/ConversationSummarizer.cs`, `IConversationSummarizer.cs`
+- `Services/Cache/SemanticAnswerCache.cs`, `ISemanticAnswerCache.cs`
+- `Services/Sales/Intent/CommerceMsgIntentDetector.cs`, `CommerceMsgIntent.cs`, `ICommerceMsgIntentDetector.cs`
+- `Services/VectorSearch/PineconeFilterBuilder.cs`, `VectorMetadataKeys.cs`
+- `Services/Consent/ConsentService.cs`, `IConsentService.cs`
+- `Data/Entities/ConsentAuditRecord.cs`
+- `Configuration/LlmRoutingOptions.cs`, `ConsentOptions.cs`
+- EF migration: `20260517093239_AddConsentAudit.cs`
+
+**Success Metrics**:
+- DI container fully configured ✅
+- LLM routing functional with cost optimization ✅
+- Semantic answer cache operational ✅
+- Intent detection refactored and working ✅
+- PDPL compliance established ✅
+- All tests passing ✅
+
+**Production Readiness**:
+- Sales Copilot infrastructure production-ready ✅
+- Multi-tenant RAG isolation enforced ✅
+- Consent tracking operational ✅
+- Code maintainability improved via DI standardization ✅
+
+---
+
 ### Phase 03: Defense-in-Depth PII Redaction ✅
 **Status**: Complete
 **Completion Date**: 2026-05-13
@@ -673,9 +744,9 @@ This roadmap tracks the development phases of the Multi-Tenant Messenger Chatbot
 
 ## Current Phase
 
-**Production Stabilization Plan Complete** ✅
+**Production Stabilization + Sales Copilot Refactor Complete** ✅
 
-All 10 phases of the Production Stabilization Plan are now complete (2026-05-13 through 2026-05-17):
+All phases now complete (2026-05-13 through 2026-05-17):
 
 1. **Phase 01**: Observability & PII Protection
 2. **Phase 02**: Baseline Latency & Alert Infrastructure
@@ -684,6 +755,7 @@ All 10 phases of the Production Stabilization Plan are now complete (2026-05-13 
 5. **Phase 04 (Tenant Isolation Audit)**: Security audit & fixes
 6. **Phase 05 (Security Patching)**: Additional security improvements
 7. **Phase 06 (SLA Definition)**: SLO/SLA targets, error budget, breach response procedures
+8. **Phase 08 (Sales Copilot Research Refactor)**: DI fixes, LLM resilience, semantic caching, conversation summarization, structured intent, RAG metadata enrichment, PDPL consent tracking
 
 System is production-ready with:
 - Comprehensive observability and monitoring

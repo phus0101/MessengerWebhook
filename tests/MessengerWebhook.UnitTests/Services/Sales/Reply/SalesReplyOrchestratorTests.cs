@@ -3,6 +3,7 @@ using MessengerWebhook.Configuration;
 using MessengerWebhook.Models;
 using MessengerWebhook.Services.ABTesting;
 using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.AI.Routing;
 using MessengerWebhook.Services.Conversation;
 using MessengerWebhook.Services.Customers;
 using MessengerWebhook.Services.Emotion;
@@ -12,8 +13,10 @@ using MessengerWebhook.Services.RAG;
 using MessengerWebhook.Services.ResponseValidation;
 using MessengerWebhook.Services.Sales.Context;
 using MessengerWebhook.Services.Sales.Prompt;
+using MessengerWebhook.Services.Cache;
 using MessengerWebhook.Services.Sales.Reply;
 using MessengerWebhook.Services.SmallTalk;
+using MessengerWebhook.Services.Tenants;
 using MessengerWebhook.Services.Tone;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -33,6 +36,7 @@ public class SalesReplyOrchestratorTests
     {
         var orchestrator = new SalesReplyOrchestrator(
             Mock.Of<IGeminiService>(),
+            Mock.Of<ILlmRoutingService>(),
             ragService: null,
             Mock.Of<IEmotionDetectionService>(),
             Mock.Of<IToneMatchingService>(),
@@ -45,6 +49,8 @@ public class SalesReplyOrchestratorTests
             Mock.Of<IProductGroundingService>(),
             Mock.Of<ISalesContextResolver>(),
             new SalesPromptBuilder(),
+            Mock.Of<ISemanticAnswerCache>(),
+            Mock.Of<ITenantContext>(),
             Options.Create(new SalesBotOptions { ConversationHistoryLimit = 15 }),
             Options.Create(new RAGOptions { Enabled = false, TopK = 5 }),
             NullLogger<SalesReplyOrchestrator>.Instance);
@@ -58,6 +64,7 @@ public class SalesReplyOrchestratorTests
     {
         var orchestrator = new SalesReplyOrchestrator(
             Mock.Of<IGeminiService>(),
+            Mock.Of<ILlmRoutingService>(),
             ragService: null,
             Mock.Of<IEmotionDetectionService>(),
             Mock.Of<IToneMatchingService>(),
@@ -70,6 +77,8 @@ public class SalesReplyOrchestratorTests
             Mock.Of<IProductGroundingService>(),
             Mock.Of<ISalesContextResolver>(),
             new SalesPromptBuilder(),
+            Mock.Of<ISemanticAnswerCache>(),
+            Mock.Of<ITenantContext>(),
             Options.Create(new SalesBotOptions()),
             Options.Create(new RAGOptions { Enabled = false }),
             NullLogger<SalesReplyOrchestrator>.Instance);

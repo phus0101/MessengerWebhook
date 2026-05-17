@@ -1,8 +1,8 @@
 # System Architecture
 
 **Project**: Multi-Tenant Messenger Chatbot Platform
-**Last Updated**: 2026-05-12
-**Version**: R-05 service extraction complete (Program.cs modularization)
+**Last Updated**: 2026-05-17
+**Version**: Phase 08 complete (Sales Copilot Research Refactor + LLM resilience + semantic caching)
 
 ---
 
@@ -35,23 +35,27 @@ Multi-tenant conversational commerce platform for cosmetics retail via Facebook 
 **AI Services** (`Services/AI/`):
 - `GeminiService`: Text generation, chat completion
 - `GeminiEmbeddingService`: Vector embeddings for RAG (text-embedding-004, 768 dimensions)
+- `LlmRoutingService` (Phase 8): Routes LLM calls to model tiers (FlashLite/Flash/Pro) based on intent confidence, VIP status, ticket value. Cost optimization via model tiering.
+- **Resilience** (`Services/AI/Resilience/`): Polly circuit breaker integration with 50% failure ratio, 30s break window. `LlmFallbackService` provides graceful degradation per conversation state.
 
 **Vector Search Services** (`Services/VectorSearch/`):
 - `PineconeVectorService`: Pinecone v2.0.0 integration for semantic search
 - `HybridSearchService`: Combines vector + keyword search via RRF fusion
 - `KeywordSearchService`: BM25 keyword search for exact product codes
 - `RRFFusionService`: Reciprocal Rank Fusion algorithm (k=60)
+- `PineconeFilterBuilder` (Phase 8): Constructs Pinecone metadata filters (channel_visibility, content_type, policy_version) for multi-tenant RAG isolation.
+- `VectorMetadataKeys` (Phase 8): Constants defining metadata key names for vector records.
+- `VectorSearchOptions` (Phase 8): Configuration for hybrid search with metadata filtering support.
 
 **Product Grounding Services** (`Services/ProductGrounding/`):
 - `ProductNeedDetector`: decides when a user message requires product grounding.
 - `ProductMentionDetector`: extracts product-like mentions from generated replies/history.
 - `ProductGroundingService`: allows Gemini to name only active selected products or DB-validated RAG products; otherwise returns a safe catalog fallback or deterministic DB-backed related suggestions for vague product needs, and strips assistant history that mentions unallowed products.
 
-**SubIntent Classification Services** (`Services/SubIntent/`):
-- `KeywordSubIntentDetector`: Rule-based detection for 70% of queries using keyword patterns (<50ms)
-- `GeminiSubIntentClassifier`: AI-powered fallback for ambiguous queries (~1s)
-- `HybridSubIntentClassifier`: Orchestrates keyword-first → AI fallback strategy
-- Supports 6 SubIntent categories: ProductQuestion, PriceQuestion, ShippingQuestion, PolicyQuestion, AvailabilityQuestion, ComparisonQuestion
+**SubIntent Classification Services** (`Services/SubIntent/`, Phase 8 refactored):
+- `CommerceMsgIntentDetector`: Replaces 14 boolean intent flags with single structured output. Single-pass keyword+AI merge approach.
+- `CommerceMsgIntent`: Structured intent model (Type, Confidence, Payload).
+- Supports 6+ categories: ProductQuestion, PriceQuestion, ShippingQuestion, PolicyQuestion, AvailabilityQuestion, ComparisonQuestion
 - Integrated into sales conversation flow via `SalesStateHandlerBase`
 - RAG context returns detailed info (ingredients, skin types, benefits) when ProductQuestion detected
 - System prompt uses `{SUB_INTENT_CONTEXT}` placeholder for category-specific guidance injection
@@ -63,6 +67,10 @@ Multi-tenant conversational commerce platform for cosmetics retail via Facebook 
 - `SalesReplyOrchestrator` (implements `ISalesReplyOrchestrator`, Phase R-04): Orchestrates 5-stage AI reply pipeline: natural reply generation (emotion→tone→smalltalk→Gemini→grounding) and direct AI response path. 558 LOC extracted from base class. Methods: `GenerateAsync(request)`, `BuildGroundedFallbackAsync()`. Handles RAG context retrieval, product grounding validation, response fallback, metrics logging. Self-instantiated in base class constructor (DI registration deferred to R-05).
 - `SalesTextHelper`: Internal static utility for Vietnamese text normalization (`NormalizeForMatching`). Used by context resolver and predicates.
 - `HistoryProductCandidate`: Public record for product candidates extracted from conversation history.
+
+**Consent Services** (`Services/Consent/`, Phase 8):
+- `ConsentService` (implements `IConsentService`): PDPL compliance tracking. Records customer consent for data collection in `ConsentAuditRecord` entity. Implied consent model in `CollectingInfoStateHandler`. Admin endpoint to withdraw consent.
+- `ConsentAuditRecord` Entity: Tracks consent events (collected at, consent type, withdrawn at) per customer.
 
 **Messenger Services** (`Services/Messenger/`):
 - `MessengerService`: Send API integration (text messages, quick replies, comment hiding)
@@ -76,6 +84,14 @@ Multi-tenant conversational commerce platform for cosmetics retail via Facebook 
 
 **Live Comment Services** (`Services/LiveComments/`):
 - `LiveCommentAutomationService`: Handles Facebook livestream comments with automated responses and quick reply buttons
+
+**Conversation Services** (`Services/Conversation/`, Phase 8):
+- `ConversationSummarizer`: Summarizes conversation history using FlashLite model. 3-layer context window: EphemeralWindowSize=6, SummarizationThreshold=10.
+- `IConversationSummarizer`: Interface for pluggable summarization strategies.
+
+**Caching Services** (`Services/Cache/`, Phase 8):
+- `SemanticAnswerCache`: Redis-backed semantic answer cache for PolicyQuestion/ShippingQuestion. 6-hour TTL, reduces API calls for repetitive questions.
+- `ISemanticAnswerCache`: Interface for cache operations.
 
 ### 3. State Machine Layer
 

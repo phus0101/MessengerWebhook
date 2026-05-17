@@ -202,4 +202,12 @@ public sealed class SalesPromptBuilder : ISalesPromptBuilder
             CustomerIntent.Questioning => ConversationState.Consulting,
             _ => hasProduct ? ConversationState.CollectingInfo : ConversationState.Consulting
         };
+
+    public string BuildConversationSummarySection(StateContext ctx)
+    {
+        var summary = ctx.GetData<string>("conversationSummary");
+        return string.IsNullOrWhiteSpace(summary)
+            ? string.Empty
+            : $"[BỐI CẢNH PHIÊN]\n{summary}\n";
+    }
 }

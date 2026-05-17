@@ -2,6 +2,7 @@ using MessengerWebhook.Models;
 using MessengerWebhook.Configuration;
 using MessengerWebhook.Data.Entities;
 using MessengerWebhook.Services.AI;
+using MessengerWebhook.Services.AI.Resilience;
 using MessengerWebhook.Services.Customers;
 using MessengerWebhook.Services;
 using MessengerWebhook.Services.Freeship;
@@ -22,6 +23,11 @@ using MessengerWebhook.Services.Survey;
 using MessengerWebhook.Services.SubIntent;
 using MessengerWebhook.BackgroundServices;
 using MessengerWebhook.Services.Sales;
+using MessengerWebhook.Services.Sales.Contact;
+using MessengerWebhook.Services.Sales.Context;
+using MessengerWebhook.Services.Sales.Intent;
+using MessengerWebhook.Services.Sales.Prompt;
+using MessengerWebhook.Services.Sales.Reply;
 using Microsoft.Extensions.Options;
 
 namespace MessengerWebhook.StateMachine.Handlers;
@@ -53,9 +59,18 @@ public class CompleteStateHandler : SalesStateHandlerBase
         ISubIntentClassifier subIntentClassifier,
         IServiceProvider serviceProvider,
         IOptions<SalesBotOptions> salesBotOptions,
+        IOptions<PolicyGuardOptions> policyGuardOptions,
         IOptions<RAGOptions> ragOptions,
         IOptions<CSATSurveyOptions> surveyOptions,
         ILogger<CompleteStateHandler> logger,
+        ISalesContextResolver contextResolver,
+        ISalesPromptBuilder promptBuilder,
+        IContactConfirmationFlow contactFlow,
+        ISalesReplyOrchestrator replyOrchestrator,
+        ISalesConsultationReplies consultationReplies,
+        ILlmFallbackService llmFallbackService,
+        IConversationSummarizer conversationSummarizer,
+        ICommerceMsgIntentDetector intentDetector,
         IProductGroundingService? productGroundingService = null)
         : base(
             geminiService,
@@ -76,9 +91,18 @@ public class CompleteStateHandler : SalesStateHandlerBase
             conversationMetricsService,
             subIntentClassifier,
             salesBotOptions,
+            policyGuardOptions,
             ragOptions,
             logger,
-            productGroundingService)
+            productGroundingService,
+            contextResolver,
+            promptBuilder,
+            contactFlow,
+            replyOrchestrator,
+            consultationReplies,
+            llmFallbackService,
+            conversationSummarizer,
+            intentDetector)
     {
         _serviceProvider = serviceProvider;
         _surveyOptions = surveyOptions.Value;

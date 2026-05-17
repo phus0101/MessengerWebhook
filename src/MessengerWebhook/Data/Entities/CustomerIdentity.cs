@@ -17,6 +17,11 @@ public class CustomerIdentity : ITenantOwnedEntity
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    // PDPL consent tracking
+    public DateTime? ConsentGivenAt { get; set; }
+    public string? ConsentPurposes { get; set; }
+    public bool MarketingConsentGiven { get; set; }
+
     public Tenant? Tenant { get; set; }
     public VipProfile? VipProfile { get; set; }
     public ICollection<RiskSignal> RiskSignals { get; set; } = new List<RiskSignal>();
