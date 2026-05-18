@@ -121,9 +121,10 @@ internal static class AiServicesRegistration
         services.AddScoped<IVectorSearchService, PineconeVectorService>();
         services.AddScoped<ProductEmbeddingPipeline>();
 
-        // Hybrid search
+        // Hybrid search — concrete registered separately so CacheServicesRegistration can decorate it
         services.AddScoped<KeywordSearchService>();
         services.AddScoped<RRFFusionService>();
+        services.AddScoped<HybridSearchService>();
         services.AddScoped<IHybridSearchService, HybridSearchService>();
 
         // RAG
