@@ -1,0 +1,79 @@
+Issue Type,Summary,Description,Story Points,Original Estimate,Labels,Parent
+Epic,Multi-Tenant Messenger Chatbot Platform,"Refactor MVP to production-ready multi-tenant platform for Múi Xù Cosmetics and future clients. 40 days total implementation.",,,"messenger-bot,multi-tenant,production",
+Story,Phase 1: Quick Reply Handler,"Implement Quick Reply button handler to support both Quick Reply and Postback events from Facebook Messenger.",5,3d,"phase-1,quick-reply,facebook-api",Multi-Tenant Messenger Chatbot Platform
+Sub-task,Create QuickReplyHandler service,"Implement service to handle Quick Reply payloads from webhook",2,4h,"quick-reply,handler",Phase 1: Quick Reply Handler
+Sub-task,Update WebhookProcessor for Quick Reply,"Integrate QuickReplyHandler into webhook processing flow",2,4h,"webhook,integration",Phase 1: Quick Reply Handler
+Sub-task,Add Quick Reply unit tests,"Write unit tests for QuickReplyHandler service",1,2h,"testing,unit-test",Phase 1: Quick Reply Handler
+Sub-task,Add Quick Reply integration tests,"Write integration tests for Quick Reply webhook flow",2,2h,"testing,integration-test",Phase 1: Quick Reply Handler
+Story,Phase 2A: Nobita API Integration (Basic),"Integrate with Nobita CRM API for product sync and order creation.",3,3d,"phase-2,nobita-api,integration",Multi-Tenant Messenger Chatbot Platform
+Sub-task,Create Nobita API client,"Implement HTTP client for Nobita API with authentication",2,4h,"api-client,nobita",Phase 2A: Nobita API Integration (Basic)
+Sub-task,Implement product sync from Nobita,"Sync products from Nobita API to local database",3,6h,"product-sync,nobita",Phase 2A: Nobita API Integration (Basic)
+Sub-task,Implement order creation to Nobita,"Send approved orders to Nobita CRM",2,4h,"order-creation,nobita",Phase 2A: Nobita API Integration (Basic)
+Sub-task,Add Nobita API tests,"Write unit and integration tests for Nobita client",2,2h,"testing,nobita",Phase 2A: Nobita API Integration (Basic)
+Story,Phase 2B: Draft Order + Email Notification,"Implement local draft order system with email notifications for staff review.",5,5d,"phase-2,draft-order,email",Multi-Tenant Messenger Chatbot Platform
+Sub-task,Create DraftOrder entity and repository,"Design and implement draft order database schema",2,4h,"database,draft-order",Phase 2B: Draft Order + Email Notification
+Sub-task,Implement SMTP email service,"Setup email service for sending notifications",2,4h,"email,smtp",Phase 2B: Draft Order + Email Notification
+Sub-task,Create email templates,"Design HTML email templates for draft order notifications",1,2h,"email,templates",Phase 2B: Draft Order + Email Notification
+Sub-task,Implement draft order workflow,"Bot → Draft → Email → Review → Approve → Nobita",3,8h,"workflow,draft-order",Phase 2B: Draft Order + Email Notification
+Sub-task,Add draft order tests,"Write tests for draft order creation and email sending",2,3h,"testing,draft-order",Phase 2B: Draft Order + Email Notification
+Story,Phase 2C: Customer Tracking & Risk Scoring,"Implement local customer tracking with risk scoring and tagging system.",3,2d,"phase-2,customer-tracking,risk-scoring",Multi-Tenant Messenger Chatbot Platform
+Sub-task,Create Customer entity,"Design customer tracking schema with risk score",2,3h,"database,customer",Phase 2C: Customer Tracking & Risk Scoring
+Sub-task,Implement risk scoring algorithm,"Calculate risk score based on order history and behavior",3,5h,"risk-scoring,algorithm",Phase 2C: Customer Tracking & Risk Scoring
+Sub-task,Implement customer tagging system,"Tag customers (VIP, potential scammer, etc.)",2,3h,"tagging,customer",Phase 2C: Customer Tracking & Risk Scoring
+Sub-task,Add customer tracking tests,"Write tests for risk scoring and tagging",2,2h,"testing,customer",Phase 2C: Customer Tracking & Risk Scoring
+Story,Phase 3: Simplified State Machine,"Refactor from 15 states to 6 states with sales-focused flow.",8,7d,"phase-3,state-machine,refactor",Multi-Tenant Messenger Chatbot Platform
+Sub-task,Design 6-state flow,"Design new state flow: Idle → QuickReply → Consulting → CollectingInfo → DraftOrder → Complete",3,4h,"design,state-machine",Phase 3: Simplified State Machine
+Sub-task,Implement new state handlers,"Implement 6 new state handlers",5,16h,"state-handlers,implementation",Phase 3: Simplified State Machine
+Sub-task,Implement ép chốt system prompt,"Add sales-focused AI prompts for conversion",2,4h,"ai-prompt,sales",Phase 3: Simplified State Machine
+Sub-task,Migrate existing sessions,"Create migration script for old state machine",3,6h,"migration,database",Phase 3: Simplified State Machine
+Sub-task,Add state machine tests,"Write comprehensive tests for new state flow",3,6h,"testing,state-machine",Phase 3: Simplified State Machine
+Story,Phase 4: Human Handoff System,"Implement human handoff with timeout and email notifications.",5,4d,"phase-4,human-handoff,escalation",Multi-Tenant Messenger Chatbot Platform
+Sub-task,Design handoff workflow,"Design handoff trigger conditions and timeout logic",2,3h,"design,handoff",Phase 4: Human Handoff System
+Sub-task,Implement handoff state handler,"Create state handler for human handoff",3,6h,"state-handler,handoff",Phase 4: Human Handoff System
+Sub-task,Implement timeout mechanism,"Auto-resume bot after 30min timeout",2,4h,"timeout,automation",Phase 4: Human Handoff System
+Sub-task,Add handoff email notifications,"Send email when handoff triggered",2,3h,"email,notification",Phase 4: Human Handoff System
+Sub-task,Add handoff tests,"Write tests for handoff workflow and timeout",2,4h,"testing,handoff",Phase 4: Human Handoff System
+Story,Phase 5: Multi-Tenant Architecture,"Implement multi-tenant support with tenant isolation and security.",13,12d,"phase-5,multi-tenant,architecture",Multi-Tenant Messenger Chatbot Platform
+Story,Phase 5A: Database Schema Migration,"Add tenant_id to all entities, create Tenants/Branches tables",5,3d,"database,migration,tenant",Phase 5: Multi-Tenant Architecture
+Sub-task,Create TenantEntity base class,"Create base entity with TenantId property",1,1h,"entity,base-class",Phase 5A: Database Schema Migration
+Sub-task,Create Tenant and Branch entities,"Design tenant and branch management entities",2,2h,"entity,tenant",Phase 5A: Database Schema Migration
+Sub-task,Update existing entities with tenant_id,"Add TenantId to Product, Session, etc.",2,4h,"entity,migration",Phase 5A: Database Schema Migration
+Sub-task,Create and apply EF migration,"Generate migration and apply to database",2,3h,"migration,ef-core",Phase 5A: Database Schema Migration
+Sub-task,Migrate Múi Xù data to first tenant,"Data migration script for existing data",2,4h,"migration,data",Phase 5A: Database Schema Migration
+Story,Phase 5B: Request Routing & Context,"Implement tenant resolution from PageId with caching",3,2d,"routing,tenant-context",Phase 5: Multi-Tenant Architecture
+Sub-task,Create ITenantContext service,"Implement tenant context service",1,2h,"service,tenant-context",Phase 5B: Request Routing & Context
+Sub-task,Create TenantResolutionMiddleware,"Middleware to resolve tenant from PageId",2,4h,"middleware,routing",Phase 5B: Request Routing & Context
+Sub-task,Add EF Core global query filters,"Automatic tenant filtering for all queries",2,4h,"ef-core,query-filter",Phase 5B: Request Routing & Context
+Sub-task,Create Branch repository,"Repository for branch lookup by PageId",1,2h,"repository,branch",Phase 5B: Request Routing & Context
+Sub-task,Add routing tests,"Test tenant resolution and query filters",2,4h,"testing,routing",Phase 5B: Request Routing & Context
+Story,Phase 5C: Caching Layer (Redis),"Setup Redis for L1+L2 caching with tenant-aware keys",3,2d,"caching,redis,performance",Phase 5: Multi-Tenant Architecture
+Sub-task,Setup Redis infrastructure,"Configure Redis Cloud or self-hosted",1,2h,"infrastructure,redis",Phase 5C: Caching Layer (Redis)
+Sub-task,Create TenantAwareCache service,"Implement cache with tenant-prefixed keys",2,4h,"service,cache",Phase 5C: Caching Layer (Redis)
+Sub-task,Create HybridCache (L1+L2),"Memory + Redis hybrid caching",2,4h,"cache,hybrid",Phase 5C: Caching Layer (Redis)
+Sub-task,Update repositories with caching,"Add caching to product and session repos",2,4h,"repository,cache",Phase 5C: Caching Layer (Redis)
+Sub-task,Add cache tests,"Test cache hit/miss and invalidation",2,4h,"testing,cache",Phase 5C: Caching Layer (Redis)
+Story,Phase 5D: Security Hardening,"PostgreSQL RLS, encryption, audit logging",5,3d,"security,compliance,rls",Phase 5: Multi-Tenant Architecture
+Sub-task,Enable PostgreSQL Row-Level Security,"Enable RLS on all tenant tables",2,4h,"database,rls,security",Phase 5D: Security Hardening
+Sub-task,Create RLS policies,"Create tenant isolation policies",2,4h,"database,rls,policy",Phase 5D: Security Hardening
+Sub-task,Implement field encryption,"Encrypt API keys and tokens at rest",2,4h,"security,encryption",Phase 5D: Security Hardening
+Sub-task,Create audit log system,"Log all tenant operations for compliance",3,6h,"audit,logging",Phase 5D: Security Hardening
+Sub-task,Add security tests,"Test tenant isolation and RLS",3,6h,"testing,security",Phase 5D: Security Hardening
+Story,Phase 5E: Testing & Validation,"Comprehensive testing and performance validation",3,2d,"testing,validation,performance",Phase 5: Multi-Tenant Architecture
+Sub-task,Write unit tests,"Unit tests for all multi-tenant components",2,4h,"testing,unit-test",Phase 5E: Testing & Validation
+Sub-task,Write integration tests,"Integration tests for tenant isolation",3,6h,"testing,integration-test",Phase 5E: Testing & Validation
+Sub-task,Write E2E tests,"End-to-end multi-tenant webhook flow",2,4h,"testing,e2e",Phase 5E: Testing & Validation
+Sub-task,Run performance benchmarks,"Measure tenant resolution and cache performance",2,4h,"testing,performance",Phase 5E: Testing & Validation
+Sub-task,Security audit,"Manual security checklist and automated tests",2,4h,"security,audit",Phase 5E: Testing & Validation
+Story,Phase 6: Livestream Auto-Reply,"Implement auto-reply for Facebook livestream comments.",5,4d,"phase-6,livestream,facebook-api",Multi-Tenant Messenger Chatbot Platform
+Sub-task,Research Facebook Live API,"Research livestream comment webhook events",2,3h,"research,facebook-api",Phase 6: Livestream Auto-Reply
+Sub-task,Implement livestream webhook handler,"Handle livestream comment events",3,6h,"webhook,livestream",Phase 6: Livestream Auto-Reply
+Sub-task,Implement auto-reply logic,"AI-powered auto-reply for common questions",3,8h,"ai,auto-reply",Phase 6: Livestream Auto-Reply
+Sub-task,Add livestream tests,"Test livestream comment handling",2,3h,"testing,livestream",Phase 6: Livestream Auto-Reply
+Story,Phase 7: Testing & Production Deployment,"Final testing, optimization, and production deployment.",8,7d,"phase-7,testing,deployment,production",Multi-Tenant Messenger Chatbot Platform
+Sub-task,Run full test suite,"Execute all unit, integration, E2E tests",2,4h,"testing,full-suite",Phase 7: Testing & Production Deployment
+Sub-task,Performance optimization,"Optimize database queries and caching",3,8h,"performance,optimization",Phase 7: Testing & Production Deployment
+Sub-task,Security hardening review,"Final security audit and penetration testing",3,6h,"security,audit",Phase 7: Testing & Production Deployment
+Sub-task,Setup production infrastructure,"Configure production servers, Redis, PostgreSQL",3,8h,"infrastructure,production",Phase 7: Testing & Production Deployment
+Sub-task,Deploy to staging,"Deploy and test in staging environment",2,4h,"deployment,staging",Phase 7: Testing & Production Deployment
+Sub-task,Deploy to production,"Production deployment with monitoring",3,6h,"deployment,production",Phase 7: Testing & Production Deployment
+Sub-task,Post-deployment monitoring,"Monitor for 48 hours, fix critical issues",2,8h,"monitoring,production",Phase 7: Testing & Production Deployment

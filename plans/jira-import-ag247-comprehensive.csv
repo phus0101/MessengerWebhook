@@ -1,0 +1,14 @@
+Issue Type,Summary,Description,Story Points,Original Estimate,Labels,Epic Link,Parent,Status
+Epic,Multi-Tenant Messenger Chatbot Platform for AG247,"Production-ready multi-tenant platform for Mui Xu Cosmetics with Nobita CRM integration, draft order workflow, customer tracking, and livestream support.",,,"messenger-bot,multi-tenant,production,ag247",,,To Do
+Story,Phase 1: Quick Reply Handler Enhancement,Complete Quick Reply implementation with 3 product options and state transition to address collection.,3,2d,"phase-1,quick-reply,facebook-api",Multi-Tenant Messenger Chatbot Platform for AG247,,In Progress
+Task,Configure Facebook Page Quick Reply buttons,"Set up 3 Quick Reply buttons: Kem Chong Nang (KCN), Kem Lua (KL), Combo 2 san pham freeship (COMBO2FS)",1,2h,"quick-reply,facebook-config",,Phase 1: Quick Reply Handler Enhancement,To Do
+Task,Add product codes to database,"Seed products with codes: KCN, KL, COMBO2FS with corresponding gifts",1,2h,"database,seeding",,Phase 1: Quick Reply Handler Enhancement,To Do
+Task,Fix QuickReply to ShippingAddress transition,Update WebhookProcessor to transition from QuickReply directly to ShippingAddress state,2,3h,"state-machine,transition",,Phase 1: Quick Reply Handler Enhancement,To Do
+Task,Test Quick Reply end-to-end flow,Integration test: Quick Reply -> Product+Gift response -> Address collection,2,3h,"testing,integration",,Phase 1: Quick Reply Handler Enhancement,To Do
+Story,Phase 2: State Machine Refactor (17 to 6 states),"Simplify state machine from 17 states to 6 sales-focused states: Idle, QuickReply, Consulting, CollectingInfo, DraftOrder, Complete",8,5d,"phase-2,state-machine,refactor",Multi-Tenant Messenger Chatbot Platform for AG247,,To Do
+Task,Design 6-state flow diagram,Create new state flow: Idle -> QuickReply -> Consulting -> CollectingInfo -> DraftOrder -> Complete,2,3h,"design,state-machine",,Phase 2: State Machine Refactor (17 to 6 states),To Do
+Task,Create new ConversationState enum,"Update enum with 6 new states, deprecate old 17 states",1,2h,"entity,enum",,Phase 2: State Machine Refactor (17 to 6 states),To Do
+Task,Implement 6 new state handlers,"Create handlers: IdleStateHandler, QuickReplyStateHandler, ConsultingStateHandler, CollectingInfoStateHandler, DraftOrderStateHandler, CompleteStateHandler",5,16h,"state-handlers,implementation",,Phase 2: State Machine Refactor (17 to 6 states),To Do
+Task,Update StateTransitionRules,Rewrite transition rules for 6-state flow,2,4h,"state-machine,rules",,Phase 2: State Machine Refactor (17 to 6 states),To Do
+Task,Create migration script for existing sessions,Migrate old 17-state sessions to new 6-state model,3,6h,"migration,database",,Phase 2: State Machine Refactor (17 to 6 states),To Do
+Task,Update all state machine tests,Rewrite tests for new 6-state flow,3,8h,"testing,state-machine",,Phase 2: State Machine Refactor (17 to 6 states),To Do

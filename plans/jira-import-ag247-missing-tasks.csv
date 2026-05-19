@@ -1,0 +1,81 @@
+Issue Type,Summary,Description,Status,Story Points,Original Estimate,Labels,Epic Link,Parent
+Story,Phase 0: Foundation (Completed),"Core infrastructure already implemented: Database, AI Integration, State Machine, RAG Layer",Done,21,15d,"phase-0,foundation,completed",Multi-Tenant Messenger Chatbot Platform,
+Task,Setup PostgreSQL with pgvector,PostgreSQL 16 with pgvector extension for RAG,Done,3,1d,"database,pgvector,completed",,Phase 0: Foundation (Completed)
+Task,Implement Gemini AI Integration,GeminiService with text generation and chat completion,Done,5,2d,"ai,gemini,completed",,Phase 0: Foundation (Completed)
+Task,Implement RAG Layer,GeminiEmbeddingService + VectorSearchRepository for semantic product search,Done,5,3d,"rag,vector-search,completed",,Phase 0: Foundation (Completed)
+Task,Create Product Catalog entities,"Product, ProductVariant, Gift, ProductGiftMapping entities",Done,3,2d,"entities,product,completed",,Phase 0: Foundation (Completed)
+Task,Implement 17-state State Machine,ConversationStateMachine with 17 states and handlers,Done,8,5d,"state-machine,completed",,Phase 0: Foundation (Completed)
+Task,Create repositories and services,"ProductRepository, GiftRepository, ProductGiftMappingRepository",Done,3,2d,"repository,service,completed",,Phase 0: Foundation (Completed)
+Task,Create QuickReplyHandler,Orchestrate services and format response message,Done,3,4h,"handler,quick-reply,completed",,Phase 1: Quick Reply Handler
+Task,Update WebhookProcessor for Quick Reply,Integrate QuickReplyHandler into webhook flow,Done,2,3h,"webhook,integration,completed",,Phase 1: Quick Reply Handler
+Task,Add Quick Reply unit tests,22 unit tests for all services,Done,2,3h,"testing,unit-test,completed",,Phase 1: Quick Reply Handler
+Task,Fix high-priority code review issues,"Null check, database indexes, input validation",Done,1,2h,"bugfix,security,completed",,Phase 1: Quick Reply Handler
+Task,Add auto-migration on startup,Auto-apply EF migrations in Development mode,Done,1,1h,"migration,automation,completed",,Phase 1: Quick Reply Handler
+Story,Phase 1B: Quick Reply Configuration,Configure 3 Quick Reply buttons in Facebook Page and ensure state transition,To Do,2,1d,"phase-1b,quick-reply,configuration",Multi-Tenant Messenger Chatbot Platform,
+Task,Configure Facebook Page Quick Reply buttons,"Setup 3 buttons with payloads: PRODUCT_KCN, PRODUCT_KL, PRODUCT_COMBO_2",To Do,1,2h,"facebook,configuration",,Phase 1B: Quick Reply Configuration
+Task,Ensure state transition to CollectingInfo,"After Quick Reply, bot should ask for phone + address",To Do,2,4h,"state-machine,transition",,Phase 1B: Quick Reply Configuration
+Task,Test end-to-end Quick Reply flow,Manual testing with real Facebook Page,To Do,1,2h,"testing,e2e",,Phase 1B: Quick Reply Configuration
+Story,Phase 2: Simplified State Machine (6 states),Refactor from 17 states to 6 sales-focused states: Idle → QuickReply → Consulting → CollectingInfo → DraftOrder → Complete,To Do,13,8d,"phase-2,state-machine,refactor",Multi-Tenant Messenger Chatbot Platform,
+Task,Implement CollectingInfoStateHandler,"Collect phone + address, validate format, transition to DraftOrder",To Do,3,6h,"state-handler,collecting-info",,Phase 2: Simplified State Machine (6 states)
+Task,Implement DraftOrderStateHandler,"Create draft order, send email to staff, transition to Complete",To Do,3,6h,"state-handler,draft-order",,Phase 2: Simplified State Machine (6 states)
+Task,Implement CompleteStateHandler,"Thank you message, reset session",To Do,1,2h,"state-handler,complete",,Phase 2: Simplified State Machine (6 states)
+Task,Update StateTransitionRules,Define transitions for 6 new states,To Do,2,4h,"state-machine,rules",,Phase 2: Simplified State Machine (6 states)
+Task,Create migration script for existing sessions,Migrate old 17-state sessions to new 6-state flow,To Do,3,6h,"migration,database",,Phase 2: Simplified State Machine (6 states)
+Task,Add state machine tests,Unit and integration tests for new flow,To Do,3,6h,"testing,state-machine",,Phase 2: Simplified State Machine (6 states)
+Task,Remove old state handlers,Delete 11 unused state handlers,To Do,1,2h,"cleanup,refactor",,Phase 2: Simplified State Machine (6 states)
+Story,Phase 3: Ep Chot AI Prompt Enhancement,Implement aggressive sales-focused AI prompt that always asks for phone + address,To Do,5,3d,"phase-3,ai-prompt,sales",Multi-Tenant Messenger Chatbot Platform,
+Task,Design ep chot system prompt,Create system prompt with sales focus and objection handling,To Do,3,6h,"ai,prompt-engineering",,Phase 3: Ep Chot AI Prompt Enhancement
+Task,Implement prompt template system,Allow dynamic prompt injection based on state,To Do,2,4h,"ai,prompt-template",,Phase 3: Ep Chot AI Prompt Enhancement
+Task,Add objection handling patterns,"Handle common objections: price, quality, shipping",To Do,3,6h,"ai,objection-handling",,Phase 3: Ep Chot AI Prompt Enhancement
+Task,Implement conversation memory,Track conversation history for context-aware responses,To Do,2,4h,"ai,memory",,Phase 3: Ep Chot AI Prompt Enhancement
+Task,Test ep chot effectiveness,A/B testing with conversion rate metrics,To Do,2,4h,"testing,ab-testing",,Phase 3: Ep Chot AI Prompt Enhancement
+Story,Phase 4: AI Data Enhancement,"Add FAQs, Promotions, Policies, Inventory, Shipping rules to AI knowledge base",To Do,8,5d,"phase-4,ai-data,knowledge-base",Multi-Tenant Messenger Chatbot Platform,
+Task,Create FAQ entity and repository,Store frequently asked questions with categories,To Do,2,3h,"entity,faq",,Phase 4: AI Data Enhancement
+Task,Create Policy entity and repository,"Store store policies, return policy, warranty",To Do,2,3h,"entity,policy",,Phase 4: AI Data Enhancement
+Task,Create Promotion entity and repository,Store active promotions and campaigns,To Do,2,3h,"entity,promotion",,Phase 4: AI Data Enhancement
+Task,Create ShippingRule entity,Store shipping fee rules by region,To Do,2,3h,"entity,shipping",,Phase 4: AI Data Enhancement
+Task,Implement RAG for FAQ search,Vector search for relevant FAQs,To Do,3,6h,"rag,faq",,Phase 4: AI Data Enhancement
+Task,Implement RAG for Policy search,Vector search for relevant policies,To Do,2,4h,"rag,policy",,Phase 4: AI Data Enhancement
+Task,Update AI prompt with knowledge base,"Inject FAQs, policies, promotions into prompt",To Do,3,6h,"ai,prompt",,Phase 4: AI Data Enhancement
+Task,Seed initial data,"Add 50+ FAQs, 10+ policies, 5+ promotions",To Do,2,4h,"data,seeding",,Phase 4: AI Data Enhancement
+Task,Add knowledge base tests,Test RAG search and prompt injection,To Do,2,4h,"testing,knowledge-base",,Phase 4: AI Data Enhancement
+Story,Phase 5: Nobita CRM API Integration,"Integrate with Nobita API for customer lookup, risk scoring, and order creation",To Do,13,8d,"phase-5,nobita-api,integration",Multi-Tenant Messenger Chatbot Platform,
+Task,Implement draft order creation,POST /orders/draft with customer + products,To Do,3,6h,"api,draft-order",,Phase 5: Nobita CRM API Integration
+Task,Implement order approval,PUT /orders/{id}/approve,To Do,2,4h,"api,order-approval",,Phase 5: Nobita CRM API Integration
+Task,Add Nobita API configuration,"NobitaOptions with BaseUrl, ApiKey, Timeout",To Do,1,2h,"configuration,api",,Phase 5: Nobita CRM API Integration
+Task,Add Nobita API tests,Unit tests with mocked HTTP responses,To Do,3,6h,"testing,api",,Phase 5: Nobita CRM API Integration
+Task,Add error handling and logging,Handle API errors gracefully,To Do,2,4h,"error-handling,logging",,Phase 5: Nobita CRM API Integration
+Story,Phase 6: Customer Tracking & Risk Scoring,Track customer order history and calculate risk score for bom hang detection,To Do,13,8d,"phase-6,customer-tracking,risk-scoring",Multi-Tenant Messenger Chatbot Platform,
+Task,Create CustomerTag entity,"Tag system: VIP, POTENTIAL_SCAMMER, NEW_CUSTOMER",To Do,2,3h,"entity,tag",,Phase 6: Customer Tracking & Risk Scoring
+Task,Implement auto-tagging logic,Auto-tag based on risk score and order count,To Do,3,6h,"service,auto-tagging",,Phase 6: Customer Tracking & Risk Scoring
+Task,Integrate with Nobita for order history,Sync order history from Nobita on first contact,To Do,3,6h,"integration,nobita",,Phase 6: Customer Tracking & Risk Scoring
+Task,Add customer tracking tests,Test risk scoring and tagging logic,To Do,3,6h,"testing,customer",,Phase 6: Customer Tracking & Risk Scoring
+Story,Phase 7: VIP Customer Detection & Tone Adjustment,"Detect VIP customers and adjust AI tone to be more friendly, but never offer discounts",To Do,8,5d,"phase-7,vip-detection,personalization",Multi-Tenant Messenger Chatbot Platform,
+Task,Define VIP criteria,Order count >= 5 OR lifetime value >= 5M VND,To Do,1,2h,"business-logic,vip",,Phase 7: VIP Customer Detection & Tone Adjustment
+Task,Implement VIP detection service,Check if customer meets VIP criteria,To Do,2,4h,"service,vip-detection",,Phase 7: VIP Customer Detection & Tone Adjustment
+Task,Create VIP-specific AI prompt,Friendly tone: 'Dạ em chào chị khách quen của Múi Xù...',To Do,3,6h,"ai,prompt,vip",,Phase 7: VIP Customer Detection & Tone Adjustment
+Task,Implement prompt switching logic,Switch between normal and VIP prompts,To Do,2,4h,"ai,prompt-switching",,Phase 7: VIP Customer Detection & Tone Adjustment
+Task,Add strict no-discount rule,AI must NEVER offer discounts or free gifts outside of promotions,To Do,2,4h,"ai,guardrails",,Phase 7: VIP Customer Detection & Tone Adjustment
+Task,Test VIP detection and tone,Verify friendly tone without price changes,To Do,2,4h,"testing,vip",,Phase 7: VIP Customer Detection & Tone Adjustment
+Story,Phase 8: Draft Order + Email Notification System,Create draft orders and send email to staff for review before sending to Nobita,To Do,13,8d,"phase-8,draft-order,email",Multi-Tenant Messenger Chatbot Platform,
+Task,Create approval endpoint,POST /api/draft-orders/{id}/approve with token authentication,To Do,3,6h,"api,approval",,Phase 8: Draft Order + Email Notification System
+Task,Implement Nobita order creation on approval,"After approval, send to Nobita API",To Do,3,6h,"integration,nobita",,Phase 8: Draft Order + Email Notification System
+Task,Add email configuration,EmailOptions with SMTP settings,To Do,1,2h,"configuration,email",,Phase 8: Draft Order + Email Notification System
+Task,Add draft order tests,Test workflow and email sending,To Do,3,6h,"testing,draft-order",,Phase 8: Draft Order + Email Notification System
+Story,Phase 9: Human Handoff System,"Implement human handoff when AI cannot handle request, with email notification and bot pause",To Do,13,8d,"phase-9,human-handoff,escalation",Multi-Tenant Messenger Chatbot Platform,
+Task,Create handoff completion endpoint,POST /api/handoff/{id}/complete with token authentication,To Do,2,4h,"api,handoff",,Phase 9: Human Handoff System
+Task,Implement bot resume logic,Resume bot after staff completes handoff,To Do,2,4h,"state-machine,resume",,Phase 9: Human Handoff System
+Task,Add 30-minute timeout mechanism,Auto-resume bot if staff doesn't respond in 30 minutes,To Do,3,6h,"timeout,automation",,Phase 9: Human Handoff System
+Task,Add handoff tests,"Test trigger detection, email, and resume",To Do,3,6h,"testing,handoff",,Phase 9: Human Handoff System
+Story,Phase 10: Multi-Tenant Architecture,Implement multi-tenant support with tenant isolation and security,To Do,21,15d,"phase-10,multi-tenant,architecture",Multi-Tenant Messenger Chatbot Platform,
+Sub-task,Phase 10A: Database Schema Migration,"Add tenant_id to all entities, create Tenants/Branches tables",To Do,8,5d,"database,migration,tenant",,Phase 10: Multi-Tenant Architecture
+Sub-task,Phase 10B: Request Routing & Context,Implement tenant resolution from PageId with caching,To Do,5,3d,"routing,tenant-context",,Phase 10: Multi-Tenant Architecture
+Sub-task,Phase 10C: Caching Layer (Redis),Setup Redis for L1+L2 caching with tenant-aware keys,To Do,5,3d,"caching,redis,performance",,Phase 10: Multi-Tenant Architecture
+Sub-task,Phase 10D: Security Hardening,"PostgreSQL RLS, encryption, audit logging",To Do,8,5d,"security,compliance,rls",,Phase 10: Multi-Tenant Architecture
+Sub-task,Phase 10E: Testing & Validation,Comprehensive testing and performance validation,To Do,5,3d,"testing,validation,performance",,Phase 10: Multi-Tenant Architecture
+Story,Phase 11: Livestream Auto-Reply,Implement auto-reply for Facebook livestream comments with comment hiding,To Do,8,5d,"phase-11,livestream,facebook-api",Multi-Tenant Messenger Chatbot Platform,
+Task,Add livestream tests,Test comment detection and auto-reply,To Do,3,6h,"testing,livestream",,Phase 11: Livestream Auto-Reply
+Story,Phase 12: Testing & Production Deployment,"Final testing, optimization, and production deployment",To Do,13,10d,"phase-12,testing,deployment,production",Multi-Tenant Messenger Chatbot Platform,
+Task,Deploy to production,Production deployment with monitoring,To Do,3,8h,"deployment,production",,Phase 12: Testing & Production Deployment
+Task,Post-deployment monitoring,"Monitor for 48 hours, fix critical issues",To Do,3,12h,"monitoring,production",,Phase 12: Testing & Production Deployment
+Task,Create runbook,Document common issues and solutions,To Do,2,4h,"documentation,runbook",,Phase 12: Testing & Production Deployment

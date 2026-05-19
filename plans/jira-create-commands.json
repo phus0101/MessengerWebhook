@@ -1,0 +1,1364 @@
+[
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 0: Foundation (Completed)",
+      "description": "Core infrastructure already implemented: Database, AI Integration, State Machine, RAG Layer",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-0",
+          "foundation",
+          "completed"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 1B: Quick Reply Configuration",
+      "description": "Configure 3 Quick Reply buttons in Facebook Page and ensure state transition",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-1b",
+          "quick-reply",
+          "configuration"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 2: Simplified State Machine (6 states)",
+      "description": "Refactor from 17 states to 6 sales-focused states: Idle → QuickReply → Consulting → CollectingInfo → DraftOrder → Complete",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-2",
+          "state-machine",
+          "refactor"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 3: Ep Chot AI Prompt Enhancement",
+      "description": "Implement aggressive sales-focused AI prompt that always asks for phone + address",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-3",
+          "ai-prompt",
+          "sales"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 4: AI Data Enhancement",
+      "description": "Add FAQs, Promotions, Policies, Inventory, Shipping rules to AI knowledge base",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-4",
+          "ai-data",
+          "knowledge-base"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 5: Nobita CRM API Integration",
+      "description": "Integrate with Nobita API for customer lookup, risk scoring, and order creation",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-5",
+          "nobita-api",
+          "integration"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 6: Customer Tracking & Risk Scoring",
+      "description": "Track customer order history and calculate risk score for bom hang detection",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-6",
+          "customer-tracking",
+          "risk-scoring"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 7: VIP Customer Detection & Tone Adjustment",
+      "description": "Detect VIP customers and adjust AI tone to be more friendly, but never offer discounts",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-7",
+          "vip-detection",
+          "personalization"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 8: Draft Order + Email Notification System",
+      "description": "Create draft orders and send email to staff for review before sending to Nobita",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-8",
+          "draft-order",
+          "email"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 9: Human Handoff System",
+      "description": "Implement human handoff when AI cannot handle request, with email notification and bot pause",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-9",
+          "human-handoff",
+          "escalation"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 10: Multi-Tenant Architecture",
+      "description": "Implement multi-tenant support with tenant isolation and security",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-10",
+          "multi-tenant",
+          "architecture"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 11: Livestream Auto-Reply",
+      "description": "Implement auto-reply for Facebook livestream comments with comment hiding",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-11",
+          "livestream",
+          "facebook-api"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Story",
+      "summary": "Phase 12: Testing & Production Deployment",
+      "description": "Final testing, optimization, and production deployment",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "phase-12",
+          "testing",
+          "deployment",
+          "production"
+        ]
+      }
+    }
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Setup PostgreSQL with pgvector",
+      "description": "PostgreSQL 16 with pgvector extension for RAG",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "database",
+          "pgvector",
+          "completed"
+        ]
+      }
+    },
+    "parent_name": "Phase 0: Foundation (Completed)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement Gemini AI Integration",
+      "description": "GeminiService with text generation and chat completion",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "ai",
+          "gemini",
+          "completed"
+        ]
+      }
+    },
+    "parent_name": "Phase 0: Foundation (Completed)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement RAG Layer",
+      "description": "GeminiEmbeddingService + VectorSearchRepository for semantic product search",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "rag",
+          "vector-search",
+          "completed"
+        ]
+      }
+    },
+    "parent_name": "Phase 0: Foundation (Completed)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create Product Catalog entities",
+      "description": "Product, ProductVariant, Gift, ProductGiftMapping entities",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "entities",
+          "product",
+          "completed"
+        ]
+      }
+    },
+    "parent_name": "Phase 0: Foundation (Completed)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement 17-state State Machine",
+      "description": "ConversationStateMachine with 17 states and handlers",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "state-machine",
+          "completed"
+        ]
+      }
+    },
+    "parent_name": "Phase 0: Foundation (Completed)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create repositories and services",
+      "description": "ProductRepository, GiftRepository, ProductGiftMappingRepository",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "repository",
+          "service",
+          "completed"
+        ]
+      }
+    },
+    "parent_name": "Phase 0: Foundation (Completed)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create QuickReplyHandler",
+      "description": "Orchestrate services and format response message",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "handler",
+          "quick-reply",
+          "completed"
+        ]
+      }
+    },
+    "parent_name": "Phase 1: Quick Reply Handler"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Update WebhookProcessor for Quick Reply",
+      "description": "Integrate QuickReplyHandler into webhook flow",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "webhook",
+          "integration",
+          "completed"
+        ]
+      }
+    },
+    "parent_name": "Phase 1: Quick Reply Handler"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add Quick Reply unit tests",
+      "description": "22 unit tests for all services",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "testing",
+          "unit-test",
+          "completed"
+        ]
+      }
+    },
+    "parent_name": "Phase 1: Quick Reply Handler"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Fix high-priority code review issues",
+      "description": "Null check, database indexes, input validation",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "bugfix",
+          "security",
+          "completed"
+        ]
+      }
+    },
+    "parent_name": "Phase 1: Quick Reply Handler"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add auto-migration on startup",
+      "description": "Auto-apply EF migrations in Development mode",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "migration",
+          "automation",
+          "completed"
+        ]
+      }
+    },
+    "parent_name": "Phase 1: Quick Reply Handler"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Configure Facebook Page Quick Reply buttons",
+      "description": "Setup 3 buttons with payloads: PRODUCT_KCN, PRODUCT_KL, PRODUCT_COMBO_2",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "facebook",
+          "configuration"
+        ]
+      }
+    },
+    "parent_name": "Phase 1B: Quick Reply Configuration"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Ensure state transition to CollectingInfo",
+      "description": "After Quick Reply, bot should ask for phone + address",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "state-machine",
+          "transition"
+        ]
+      }
+    },
+    "parent_name": "Phase 1B: Quick Reply Configuration"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Test end-to-end Quick Reply flow",
+      "description": "Manual testing with real Facebook Page",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "testing",
+          "e2e"
+        ]
+      }
+    },
+    "parent_name": "Phase 1B: Quick Reply Configuration"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement CollectingInfoStateHandler",
+      "description": "Collect phone + address, validate format, transition to DraftOrder",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "state-handler",
+          "collecting-info"
+        ]
+      }
+    },
+    "parent_name": "Phase 2: Simplified State Machine (6 states)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement DraftOrderStateHandler",
+      "description": "Create draft order, send email to staff, transition to Complete",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "state-handler",
+          "draft-order"
+        ]
+      }
+    },
+    "parent_name": "Phase 2: Simplified State Machine (6 states)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement CompleteStateHandler",
+      "description": "Thank you message, reset session",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "state-handler",
+          "complete"
+        ]
+      }
+    },
+    "parent_name": "Phase 2: Simplified State Machine (6 states)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Update StateTransitionRules",
+      "description": "Define transitions for 6 new states",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "state-machine",
+          "rules"
+        ]
+      }
+    },
+    "parent_name": "Phase 2: Simplified State Machine (6 states)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create migration script for existing sessions",
+      "description": "Migrate old 17-state sessions to new 6-state flow",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "migration",
+          "database"
+        ]
+      }
+    },
+    "parent_name": "Phase 2: Simplified State Machine (6 states)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add state machine tests",
+      "description": "Unit and integration tests for new flow",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "testing",
+          "state-machine"
+        ]
+      }
+    },
+    "parent_name": "Phase 2: Simplified State Machine (6 states)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Remove old state handlers",
+      "description": "Delete 11 unused state handlers",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "cleanup",
+          "refactor"
+        ]
+      }
+    },
+    "parent_name": "Phase 2: Simplified State Machine (6 states)"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Design ep chot system prompt",
+      "description": "Create system prompt with sales focus and objection handling",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "ai",
+          "prompt-engineering"
+        ]
+      }
+    },
+    "parent_name": "Phase 3: Ep Chot AI Prompt Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement prompt template system",
+      "description": "Allow dynamic prompt injection based on state",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "ai",
+          "prompt-template"
+        ]
+      }
+    },
+    "parent_name": "Phase 3: Ep Chot AI Prompt Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add objection handling patterns",
+      "description": "Handle common objections: price, quality, shipping",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "ai",
+          "objection-handling"
+        ]
+      }
+    },
+    "parent_name": "Phase 3: Ep Chot AI Prompt Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement conversation memory",
+      "description": "Track conversation history for context-aware responses",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "ai",
+          "memory"
+        ]
+      }
+    },
+    "parent_name": "Phase 3: Ep Chot AI Prompt Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Test ep chot effectiveness",
+      "description": "A/B testing with conversion rate metrics",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "testing",
+          "ab-testing"
+        ]
+      }
+    },
+    "parent_name": "Phase 3: Ep Chot AI Prompt Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create FAQ entity and repository",
+      "description": "Store frequently asked questions with categories",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "entity",
+          "faq"
+        ]
+      }
+    },
+    "parent_name": "Phase 4: AI Data Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create Policy entity and repository",
+      "description": "Store store policies, return policy, warranty",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "entity",
+          "policy"
+        ]
+      }
+    },
+    "parent_name": "Phase 4: AI Data Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create Promotion entity and repository",
+      "description": "Store active promotions and campaigns",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "entity",
+          "promotion"
+        ]
+      }
+    },
+    "parent_name": "Phase 4: AI Data Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create ShippingRule entity",
+      "description": "Store shipping fee rules by region",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "entity",
+          "shipping"
+        ]
+      }
+    },
+    "parent_name": "Phase 4: AI Data Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement RAG for FAQ search",
+      "description": "Vector search for relevant FAQs",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "rag",
+          "faq"
+        ]
+      }
+    },
+    "parent_name": "Phase 4: AI Data Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement RAG for Policy search",
+      "description": "Vector search for relevant policies",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "rag",
+          "policy"
+        ]
+      }
+    },
+    "parent_name": "Phase 4: AI Data Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Update AI prompt with knowledge base",
+      "description": "Inject FAQs, policies, promotions into prompt",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "ai",
+          "prompt"
+        ]
+      }
+    },
+    "parent_name": "Phase 4: AI Data Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Seed initial data",
+      "description": "Add 50+ FAQs, 10+ policies, 5+ promotions",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "data",
+          "seeding"
+        ]
+      }
+    },
+    "parent_name": "Phase 4: AI Data Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add knowledge base tests",
+      "description": "Test RAG search and prompt injection",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "testing",
+          "knowledge-base"
+        ]
+      }
+    },
+    "parent_name": "Phase 4: AI Data Enhancement"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement draft order creation",
+      "description": "POST /orders/draft with customer + products",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "api",
+          "draft-order"
+        ]
+      }
+    },
+    "parent_name": "Phase 5: Nobita CRM API Integration"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement order approval",
+      "description": "PUT /orders/{id}/approve",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "api",
+          "order-approval"
+        ]
+      }
+    },
+    "parent_name": "Phase 5: Nobita CRM API Integration"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add Nobita API configuration",
+      "description": "NobitaOptions with BaseUrl, ApiKey, Timeout",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "configuration",
+          "api"
+        ]
+      }
+    },
+    "parent_name": "Phase 5: Nobita CRM API Integration"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add Nobita API tests",
+      "description": "Unit tests with mocked HTTP responses",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "testing",
+          "api"
+        ]
+      }
+    },
+    "parent_name": "Phase 5: Nobita CRM API Integration"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add error handling and logging",
+      "description": "Handle API errors gracefully",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "error-handling",
+          "logging"
+        ]
+      }
+    },
+    "parent_name": "Phase 5: Nobita CRM API Integration"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create CustomerTag entity",
+      "description": "Tag system: VIP, POTENTIAL_SCAMMER, NEW_CUSTOMER",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "entity",
+          "tag"
+        ]
+      }
+    },
+    "parent_name": "Phase 6: Customer Tracking & Risk Scoring"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement auto-tagging logic",
+      "description": "Auto-tag based on risk score and order count",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "service",
+          "auto-tagging"
+        ]
+      }
+    },
+    "parent_name": "Phase 6: Customer Tracking & Risk Scoring"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Integrate with Nobita for order history",
+      "description": "Sync order history from Nobita on first contact",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "integration",
+          "nobita"
+        ]
+      }
+    },
+    "parent_name": "Phase 6: Customer Tracking & Risk Scoring"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add customer tracking tests",
+      "description": "Test risk scoring and tagging logic",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "testing",
+          "customer"
+        ]
+      }
+    },
+    "parent_name": "Phase 6: Customer Tracking & Risk Scoring"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Define VIP criteria",
+      "description": "Order count >= 5 OR lifetime value >= 5M VND",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "business-logic",
+          "vip"
+        ]
+      }
+    },
+    "parent_name": "Phase 7: VIP Customer Detection & Tone Adjustment"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement VIP detection service",
+      "description": "Check if customer meets VIP criteria",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "service",
+          "vip-detection"
+        ]
+      }
+    },
+    "parent_name": "Phase 7: VIP Customer Detection & Tone Adjustment"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create VIP-specific AI prompt",
+      "description": "Friendly tone: 'Dạ em chào chị khách quen của Múi Xù...'",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "ai",
+          "prompt",
+          "vip"
+        ]
+      }
+    },
+    "parent_name": "Phase 7: VIP Customer Detection & Tone Adjustment"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement prompt switching logic",
+      "description": "Switch between normal and VIP prompts",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "ai",
+          "prompt-switching"
+        ]
+      }
+    },
+    "parent_name": "Phase 7: VIP Customer Detection & Tone Adjustment"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add strict no-discount rule",
+      "description": "AI must NEVER offer discounts or free gifts outside of promotions",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "ai",
+          "guardrails"
+        ]
+      }
+    },
+    "parent_name": "Phase 7: VIP Customer Detection & Tone Adjustment"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Test VIP detection and tone",
+      "description": "Verify friendly tone without price changes",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "testing",
+          "vip"
+        ]
+      }
+    },
+    "parent_name": "Phase 7: VIP Customer Detection & Tone Adjustment"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create approval endpoint",
+      "description": "POST /api/draft-orders/{id}/approve with token authentication",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "api",
+          "approval"
+        ]
+      }
+    },
+    "parent_name": "Phase 8: Draft Order + Email Notification System"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement Nobita order creation on approval",
+      "description": "After approval, send to Nobita API",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "integration",
+          "nobita"
+        ]
+      }
+    },
+    "parent_name": "Phase 8: Draft Order + Email Notification System"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add email configuration",
+      "description": "EmailOptions with SMTP settings",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "configuration",
+          "email"
+        ]
+      }
+    },
+    "parent_name": "Phase 8: Draft Order + Email Notification System"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add draft order tests",
+      "description": "Test workflow and email sending",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "testing",
+          "draft-order"
+        ]
+      }
+    },
+    "parent_name": "Phase 8: Draft Order + Email Notification System"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create handoff completion endpoint",
+      "description": "POST /api/handoff/{id}/complete with token authentication",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "api",
+          "handoff"
+        ]
+      }
+    },
+    "parent_name": "Phase 9: Human Handoff System"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Implement bot resume logic",
+      "description": "Resume bot after staff completes handoff",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "state-machine",
+          "resume"
+        ]
+      }
+    },
+    "parent_name": "Phase 9: Human Handoff System"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add 30-minute timeout mechanism",
+      "description": "Auto-resume bot if staff doesn't respond in 30 minutes",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "timeout",
+          "automation"
+        ]
+      }
+    },
+    "parent_name": "Phase 9: Human Handoff System"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add handoff tests",
+      "description": "Test trigger detection, email, and resume",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "testing",
+          "handoff"
+        ]
+      }
+    },
+    "parent_name": "Phase 9: Human Handoff System"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Add livestream tests",
+      "description": "Test comment detection and auto-reply",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "testing",
+          "livestream"
+        ]
+      }
+    },
+    "parent_name": "Phase 11: Livestream Auto-Reply"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Deploy to production",
+      "description": "Production deployment with monitoring",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "deployment",
+          "production"
+        ]
+      }
+    },
+    "parent_name": "Phase 12: Testing & Production Deployment"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Post-deployment monitoring",
+      "description": "Monitor for 48 hours, fix critical issues",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "monitoring",
+          "production"
+        ]
+      }
+    },
+    "parent_name": "Phase 12: Testing & Production Deployment"
+  },
+  {
+    "tool": "mcp__plugin_atlassian_atlassian__createJiraIssue",
+    "params": {
+      "cloudId": "e5a49acb-2043-4ef2-9bd9-3fdacc6615f0",
+      "projectKey": "AG247",
+      "issueTypeName": "Task",
+      "summary": "Create runbook",
+      "description": "Document common issues and solutions",
+      "contentFormat": "markdown",
+      "additional_fields": {
+        "labels": [
+          "documentation",
+          "runbook"
+        ]
+      }
+    },
+    "parent_name": "Phase 12: Testing & Production Deployment"
+  }
+]
