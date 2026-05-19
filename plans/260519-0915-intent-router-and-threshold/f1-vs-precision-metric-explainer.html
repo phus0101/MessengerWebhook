@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>F1 vs Precision — Chọn metric nào để tune threshold?</title>
+<style>
+  :root {
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --ink: #1c1917;
+    --muted: #57534e;
+    --brand: #0f766e;
+    --brand-soft: #ccfbf1;
+    --accent: #b45309;
+    --accent-soft: #fef3c7;
+    --danger: #b91c1c;
+    --danger-soft: #fee2e2;
+    --ok: #166534;
+    --ok-soft: #dcfce7;
+    --border: #e7e5e4;
+    --code-bg: #1c1917;
+    --code-ink: #fafaf9;
+    --shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.65;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 56px 28px 96px;
+  }
+  header.hero {
+    border-left: 4px solid var(--brand);
+    padding: 4px 0 4px 20px;
+    margin-bottom: 48px;
+  }
+  header.hero .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 12px;
+    color: var(--brand);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  header.hero h1 {
+    font-size: 32px;
+    line-height: 1.25;
+    margin: 0 0 12px;
+    color: var(--ink);
+    font-weight: 700;
+  }
+  header.hero p.subtitle {
+    color: var(--muted);
+    margin: 0;
+    font-size: 16px;
+  }
+  h2 {
+    font-size: 22px;
+    margin: 56px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+  }
+  h3 {
+    font-size: 17px;
+    margin: 32px 0 12px;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  p { margin: 0 0 14px; }
+  ul, ol { padding-left: 22px; margin: 8px 0 16px; }
+  li { margin-bottom: 6px; }
+  strong { color: var(--ink); font-weight: 600; }
+  blockquote {
+    margin: 16px 0;
+    padding: 12px 18px;
+    background: var(--surface);
+    border-left: 3px solid var(--brand);
+    color: var(--muted);
+    border-radius: 0 8px 8px 0;
+    font-style: italic;
+  }
+  code {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    font-size: 0.92em;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 18px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 13.5px;
+    line-height: 1.55;
+    margin: 16px 0 20px;
+    box-shadow: var(--shadow);
+  }
+  pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    font-size: inherit;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 14.5px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: #f5f5f4;
+    font-weight: 600;
+    color: var(--ink);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafaf9; }
+
+  .callout {
+    margin: 20px 0;
+    padding: 16px 20px;
+    border-radius: 10px;
+    background: var(--brand-soft);
+    border-left: 4px solid var(--brand);
+  }
+  .callout.warning { background: var(--danger-soft); border-color: var(--danger); }
+  .callout.success { background: var(--ok-soft); border-color: var(--ok); }
+  .callout.note    { background: var(--accent-soft); border-color: var(--accent); }
+  .callout strong { display: block; margin-bottom: 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .callout.warning strong { color: var(--danger); }
+  .callout.success strong { color: var(--ok); }
+  .callout.note strong    { color: var(--accent); }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--brand-soft);
+    color: var(--brand);
+  }
+  .pill.warn { background: var(--danger-soft); color: var(--danger); }
+  .pill.ok   { background: var(--ok-soft); color: var(--ok); }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin: 20px 0;
+  }
+  .card {
+    background: var(--surface);
+    padding: 18px 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+  .card h4 {
+    margin: 0 0 10px;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card.recommended {
+    border-color: var(--brand);
+    background: linear-gradient(180deg, #fff 0%, #f0fdfa 100%);
+  }
+
+  .formula {
+    font-family: ui-monospace, Consolas, monospace;
+    background: #f5f5f4;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border-left: 3px solid var(--brand);
+    font-size: 14px;
+    margin: 10px 0;
+  }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  footer p { margin: 4px 0; }
+
+  @media (max-width: 640px) {
+    .container { padding: 32px 18px 64px; }
+    header.hero h1 { font-size: 26px; }
+    h2 { font-size: 20px; }
+    .grid-2 { grid-template-columns: 1fr; }
+    table { font-size: 13px; }
+    th, td { padding: 10px; }
+  }
+
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 22px;
+    margin-bottom: 32px;
+  }
+  .toc strong { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .toc ol { margin: 8px 0 0; padding-left: 20px; }
+  .toc li { margin-bottom: 2px; }
+  .toc a { color: var(--brand); text-decoration: none; font-size: 14.5px; }
+  .toc a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="hero">
+  <div class="eyebrow">Phase 03 · Decision Document</div>
+  <h1>F1 vs Precision — Chọn metric nào để tune threshold?</h1>
+  <p class="subtitle">Giải thích vì sao skincare bot ưu tiên <strong>Precision</strong> over F1 khi tune RAG similarity threshold.</p>
+</header>
+
+<nav class="toc">
+  <strong>Mục lục</strong>
+  <ol>
+    <li><a href="#concept">Khái niệm cơ bản</a></li>
+    <li><a href="#define">Định nghĩa metric</a></li>
+    <li><a href="#tradeoff">Tradeoff khi đổi threshold</a></li>
+    <li><a href="#skincare">Áp dụng vào shop skincare</a></li>
+    <li><a href="#dataset">Đề xuất cho dataset tuning</a></li>
+    <li><a href="#industry">So sánh industry</a></li>
+    <li><a href="#summary">Tóm tắt</a></li>
+    <li><a href="#decision">Quyết định Phase 03</a></li>
+  </ol>
+</nav>
+
+<section id="concept">
+<h2>1. Khái niệm cơ bản</h2>
+<p>Khi bot search sản phẩm cho query <code>"kem dưỡng da khô"</code>, giả sử:</p>
+<ul>
+  <li>Trong shop có <strong>5 sản phẩm thực sự phù hợp</strong> (ground truth)</li>
+  <li>Bot trả về <strong>7 sản phẩm</strong> (gợi ý)</li>
+  <li>Trong 7 sản phẩm đó: <strong>4 đúng + 3 sai</strong></li>
+</ul>
+
+<pre><code>┌─────────────────────────────────────────────────────┐
+│  Tất cả SP trong shop                                │
+│                                                      │
+│   ┌──────────────────┐                              │
+│   │ Bot gợi ý (7 SP) │                              │
+│   │                  │                              │
+│   │   ┌────────┐     │      ┌──────────────────┐   │
+│   │   │ ĐÚNG   │     │      │ SP phù hợp thực  │   │
+│   │   │  (4)   │     │      │ tế (5)           │   │
+│   │   │        │─────┼──────┤                  │   │
+│   │   └────────┘     │      │  (1 SP đúng nh   │   │
+│   │                  │      │   bot bỏ sót)    │   │
+│   │   ┌────────┐     │      └──────────────────┘   │
+│   │   │ SAI(3) │     │                              │
+│   │   └────────┘     │                              │
+│   └──────────────────┘                              │
+└─────────────────────────────────────────────────────┘</code></pre>
+</section>
+
+<section id="define">
+<h2>2. Định nghĩa metric</h2>
+
+<h3>Precision (Độ chính xác)</h3>
+<blockquote>"Trong những SP bot gợi ý, <strong>bao nhiêu phần là đúng</strong>?"</blockquote>
+<div class="formula">Precision = SP đúng được gợi ý / Tổng SP bot gợi ý<br>= 4 / 7 = <strong>0.57 (57%)</strong></div>
+<p>→ <strong>Cao precision = ít nhiễu, ít gợi ý sai.</strong> Bot "im miệng" khi không chắc chắn.</p>
+
+<h3>Recall (Độ phủ)</h3>
+<blockquote>"Trong những SP thực sự phù hợp, <strong>bot tìm được bao nhiêu</strong>?"</blockquote>
+<div class="formula">Recall = SP đúng được gợi ý / Tổng SP phù hợp thực tế<br>= 4 / 5 = <strong>0.80 (80%)</strong></div>
+<p>→ <strong>Cao recall = ít bỏ sót.</strong> Bot "nói nhiều" để không miss case nào.</p>
+
+<h3>F1 (Trung bình điều hoà)</h3>
+<blockquote>"Cân bằng giữa precision và recall."</blockquote>
+<div class="formula">F1 = 2 × (P × R) / (P + R)<br>= 2 × (0.57 × 0.80) / (0.57 + 0.80) = <strong>0.67</strong></div>
+<p>→ Phạt nặng nếu 1 trong 2 quá thấp. Đảm bảo <strong>cả 2 đều tốt</strong>.</p>
+</section>
+
+<section id="tradeoff">
+<h2>3. Tradeoff khi thay đổi threshold</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Threshold</th>
+      <th>Hành vi</th>
+      <th>Precision</th>
+      <th>Recall</th>
+      <th>Hậu quả</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="pill warn">0.40</span></td>
+      <td>Bot gợi ý nhiều SP có score thấp</td>
+      <td>↓ 0.50</td>
+      <td>↑ 0.95</td>
+      <td>Khách thấy SP sai → mất tin tưởng</td>
+    </tr>
+    <tr>
+      <td><span class="pill">0.55</span></td>
+      <td>Cân bằng</td>
+      <td>0.70</td>
+      <td>0.85</td>
+      <td>F1 cao nhất</td>
+    </tr>
+    <tr>
+      <td><span class="pill ok">0.75</span></td>
+      <td>Chỉ gợi ý SP rất chắc chắn</td>
+      <td>↑ 0.92</td>
+      <td>↓ 0.60</td>
+      <td>Bỏ sót case → câu "không tìm thấy" tăng</td>
+    </tr>
+  </tbody>
+</table>
+<div class="callout note">
+  <strong>Insight</strong>
+  <p>Tăng threshold = đổi recall lấy precision. Giảm threshold = đổi precision lấy recall. Đây chính là tradeoff cần tune.</p>
+</div>
+</section>
+
+<section id="skincare">
+<h2>4. Áp dụng vào shop skincare</h2>
+
+<div class="grid-2">
+  <div class="card">
+    <h4>🅰️ Tối ưu F1 (cân bằng)</h4>
+    <p><strong>Ưu:</strong></p>
+    <ul>
+      <li>Bot trả lời được nhiều câu hơn</li>
+      <li>Phù hợp shop mới, cần khách tương tác</li>
+    </ul>
+    <p><strong>Nhược:</strong></p>
+    <ul>
+      <li>Có lúc gợi ý SP không hoàn toàn đúng</li>
+      <li>Vd: "kem cho da dầu mụn" → gợi ý cả serum</li>
+    </ul>
+  </div>
+  <div class="card recommended">
+    <h4>🅱️ Tối ưu Precision <span class="pill">Recommended</span></h4>
+    <p><strong>Ưu:</strong></p>
+    <ul>
+      <li><strong>Khách tin tưởng hơn</strong> — gợi ý nào cũng khớp</li>
+      <li>Brand trust matter trong skincare</li>
+      <li>Khi không chắc → hỏi clarifying question</li>
+    </ul>
+    <p><strong>Nhược:</strong></p>
+    <ul>
+      <li>Bot hay nói "em chưa rõ ý ạ, anh/chị..." → cần fallback tốt</li>
+    </ul>
+  </div>
+</div>
+
+<h3>Tại sao skincare ưu tiên Precision?</h3>
+<ol>
+  <li><strong>Da mỗi người khác nhau.</strong> Gợi ý retinol cho da nhạy cảm → kích ứng → review xấu → khủng hoảng truyền thông.</li>
+  <li><strong>Khách skincare nghiên cứu kỹ.</strong> Google INCI list, đọc review. Gợi ý sai = bot lộ "ngu" → mất uy tín.</li>
+  <li><strong>AOV cao, mua ít.</strong> 500K-2M cho 1 SP. Khách thà chờ tư vấn kỹ hơn vớ vẩn mua nhầm.</li>
+  <li><strong>Vùng an toàn:</strong> Hỏi lại rẻ hơn gợi ý sai.</li>
+</ol>
+</section>
+
+<section id="dataset">
+<h2>5. Đề xuất cho dataset tuning</h2>
+<p>Sweep script Phase 03 sẽ output:</p>
+<pre><code>threshold | precision@5 | recall@5 | F1   | empty_rate
+----------+-------------+----------+------+-----------
+0.40      | 0.52        | 0.94     | 0.67 | 2%
+0.45      | 0.61        | 0.91     | 0.73 | 4%
+0.50      | 0.70        | 0.85     | 0.77 | 7%   ← max F1
+0.55      | 0.78        | 0.79     | 0.78 | 11%
+0.60      | 0.85        | 0.71     | 0.77 | 16%
+0.65      | 0.90        | 0.62     | 0.74 | 24%  ← sweet spot
+0.70      | 0.94        | 0.48     | 0.64 | 35%
+0.75      | 0.97        | 0.32     | 0.48 | 51%  ← bot im quá nhiều</code></pre>
+
+<div class="callout success">
+  <strong>Rule chọn (đã chốt)</strong>
+  <ol>
+    <li>Filter <code>precision ≥ 0.85 AND empty_rate ≤ 0.30</code></li>
+    <li>Pick row có recall cao nhất</li>
+    <li>Fallback: nếu không có row qualify → relax precision floor 0.80</li>
+    <li>Vẫn không có → flag manual review</li>
+  </ol>
+  <p>→ Theo bảng trên, <strong>threshold = 0.65</strong> là sweet spot cho skincare.</p>
+</div>
+</section>
+
+<section id="industry">
+<h2>6. So sánh với industry</h2>
+<table>
+  <thead>
+    <tr><th>Ngành</th><th>Metric ưu tiên</th><th>Lý do</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Skincare / Pharma</strong></td><td><span class="pill">Precision</span></td><td>Sai = tổn hại → rủi ro pháp lý + reputation</td></tr>
+    <tr><td>Fashion / Apparel</td><td><span class="pill">Recall / F1</span></td><td>Khách thích duyệt nhiều, sai cũng OK</td></tr>
+    <tr><td>Grocery / FMCG</td><td><span class="pill">Recall</span></td><td>Khách cần thấy đủ option</td></tr>
+    <tr><td>Electronics / Cao cấp</td><td><span class="pill">Precision</span></td><td>AOV cao, khách kỹ tính</td></tr>
+    <tr><td>Search engine (Google)</td><td><span class="pill">F1 nghiêng precision</span></td><td>Đỡ click rác nhưng vẫn phủ rộng</td></tr>
+  </tbody>
+</table>
+<div class="callout">
+  <strong>Skincare = Pharma-adjacent</strong>
+  <p>→ industry standard là precision-first.</p>
+</div>
+</section>
+
+<section id="summary">
+<h2>7. Tóm tắt</h2>
+<table>
+  <thead>
+    <tr><th>Aspect</th><th>F1</th><th>Precision (khuyến nghị)</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Định nghĩa</td><td>Cân bằng đúng + đủ</td><td>Chỉ đúng mới gợi ý</td></tr>
+    <tr><td>Phù hợp khi</td><td>Data còn ít, cần học</td><td>Brand trust matter</td></tr>
+    <tr><td>Tone bot</td><td>"Hay nói"</td><td>"Cẩn trọng, hay hỏi lại"</td></tr>
+    <tr><td>Hậu quả tệ nhất</td><td>Gợi ý lệch</td><td>Bot im, đẩy lên CS</td></tr>
+    <tr><td>Cho shop mình</td><td>❌</td><td>✅ — skincare + AOV cao</td></tr>
+  </tbody>
+</table>
+</section>
+
+<section id="decision">
+<h2>8. Quyết định cho Phase 03</h2>
+<div class="callout success">
+  <strong>Chốt 2026-05-19</strong>
+  <p>Per-intent metric (không dùng 1 metric chung).</p>
+</div>
+<table>
+  <thead>
+    <tr><th>Coarse intent</th><th>Metric</th><th>Selection rule</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>product_lookup</code></td>
+      <td><span class="pill">Precision-first</span></td>
+      <td><code>precision ≥ 0.85 AND empty_rate ≤ 0.30</code> → max recall. Relax to 0.80 nếu không qualify.</td>
+    </tr>
+    <tr>
+      <td><code>category_discovery</code></td>
+      <td><span class="pill">F1</span></td>
+      <td><code>empty_rate ≤ 0.30</code> → max F1. (Gợi ý sai danh mục nhẹ hơn gợi ý sai SP.)</td>
+    </tr>
+    <tr>
+      <td><code>policy / order / small_talk / greeting</code></td>
+      <td>—</td>
+      <td>Không tune (không vào RAG).</td>
+    </tr>
+  </tbody>
+</table>
+</section>
+
+<footer>
+  <p><strong>Author:</strong> phus · <strong>Date:</strong> 2026-05-19</p>
+  <p><strong>Related:</strong> phase-03-adaptive-threshold-and-query-expansion.md · plan.md</p>
+  <p><strong>Project:</strong> MessengerWebhook · Sales bot for Mũi Xù cosmetics (skincare)</p>
+</footer>
+
+</div>
+</body>
+</html>
