@@ -36,7 +36,11 @@ Replace fixed `MinSimilarityScore=0.50` (from Phase 01) with **adaptive threshol
 
 ### Non-functional
 - Query expansion adds ≤300ms p95 (parallel Gemini Flash call, cached on identical query for 10min via existing Redis).
-- F1 score ≥ 0.75 on tuning dataset; precision ≥ 0.80 (prefer precision over recall — wrong product worse than no product).
+- **Tuning objective (confirmed 2026-05-19):** Precision-first, per-intent metrics.
+  - `product_lookup` (and other SP-suggesting intents): **precision ≥ 0.85**, then maximize recall.
+  - `category_discovery`: optimize **F1** (gợi ý sai danh mục nhẹ hơn gợi ý sai SP).
+  - `policy / order_action / small_talk / greeting`: not threshold-tuned (don't hit RAG).
+- **Empty rate ceiling:** ≤ 30% per intent. If sweep result violates ceiling → relax precision floor to 0.80 before lowering further.
 - Expansion call cost < $0.001 per message (Gemini Flash 2.5 pricing at Jan 2026).
 
 ## Architecture
@@ -146,10 +150,12 @@ Coarse intent = product_lookup OR category_discovery
 6. **Tune thresholds** via grid sweep:
    - Run `scripts/threshold-sweep.py` (uses `.claude/skills/.venv/bin/python3`).
    - Sweep range: 0.40 → 0.80 step 0.05 per bucket.
-   - Metric: precision@5, recall@5, F1.
-   - Output: CSV with best threshold per bucket.
+   - **Selection rule (confirmed 2026-05-19):**
+     - For `(*, ProductLookup)` buckets: filter rows where `precision ≥ 0.85 AND empty_rate ≤ 0.30`, then pick row with max `recall`. If no row qualifies → relax precision to ≥ 0.80, retry. If still none → flag for manual review.
+     - For `(*, CategoryDiscovery)` buckets: filter rows where `empty_rate ≤ 0.30`, then pick row with max `F1`.
+   - Output: CSV columns `bucket, threshold, precision, recall, f1, empty_rate, selected` — one selected row per bucket.
    - Apply winning values to `appsettings.json`.
-   → verify: F1 ≥ 0.75 on validation set (20% holdout from annotated dataset).
+   → verify: precision ≥ 0.85 on product-lookup buckets, F1 ≥ 0.70 on discovery buckets, empty_rate ≤ 0.30 everywhere (validation 20% holdout).
 
 7. **Live transcript regression**:
    - Extend `plans/260506-1411-live-ai-rag-transcript-test/` with adaptive-threshold cases.
@@ -183,7 +189,8 @@ Coarse intent = product_lookup OR category_discovery
 
 ## Success criteria
 - ✅ Annotated tuning dataset: ≥50 rows, ≥7 intent classes covered.
-- ✅ F1 ≥ 0.75, precision ≥ 0.80 on validation holdout.
+- ✅ `product_lookup` buckets: **precision ≥ 0.85**, recall maximized under that constraint, empty_rate ≤ 0.30.
+- ✅ `category_discovery` buckets: **F1 ≥ 0.70**, empty_rate ≤ 0.30.
 - ✅ Query "da" returns relevant skincare products (after expansion → "chăm sóc da, kem dưỡng da, serum, ...").
 - ✅ p95 latency ≤ +300ms when expansion enabled (parallel + cached).
 - ✅ Cost increase < $5/month at current message volume.
@@ -203,6 +210,11 @@ Coarse intent = product_lookup OR category_discovery
 - Query expansion sends customer message text to Gemini → already in scope of existing data-processing agreement.
 - Annotated dataset stored OUTSIDE git (PII): keep in `plans/.../data/` and add to `.gitignore` even though `plans/**/*` is now tracked.
 - No new PII storage; tunings persisted only as scalar thresholds in `appsettings.json`.
+
+## Resolved decisions (2026-05-19)
+- ✅ Tuning metric: **Precision-first** for product_lookup (precision ≥ 0.85 → max recall); **F1** for category_discovery.
+- ✅ Empty-rate ceiling: **30%** per intent (lower-precision threshold of 0.80 used as relaxation step before any further loosening).
+- ✅ Per-intent metric weights: separate selection rules per coarse intent, not single global metric.
 
 ## Open questions
 - Should threshold tuning happen monthly (drift) or one-time? Defer to Phase 03+ once we have baseline data.

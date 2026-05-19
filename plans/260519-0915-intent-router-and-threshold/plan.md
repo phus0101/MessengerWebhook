@@ -45,6 +45,9 @@ Shop is **skincare** — "da" is the **core category**. Bot fails by asking cust
 - **Phase 01:** feature flag `RAG:Threshold:Enabled` (default `false` in prod, `true` in staging) → ramp to 100% after 48h clean.
 - **Phase 02 & 03:** same gating pattern via `Intent:CoarseRouter:Enabled` and `RAG:AdaptiveThreshold:Enabled`.
 
+## Resolved decisions (2026-05-19)
+- ✅ Phase 02: **piggyback** coarse + fine in single Gemini call (~200-400ms saved per request).
+- ✅ Phase 03: **per-intent metric** — Precision-first (≥0.85) for product_lookup, F1 for category_discovery. Empty-rate ceiling 30%.
+
 ## Open questions
-- Phase 02: do we keep the existing 5-bucket fine classifier in same Gemini call as coarse, or split into 2 LLM calls? (cost vs latency tradeoff — see Phase 02 decisions)
-- Phase 03: pick threshold by F1 (precision-recall balanced) or pure precision (skincare KOL standard prefers fewer wrong recommendations)?
+- Dataset PII: confirm `plans/260519-0915-intent-router-and-threshold/data/` added to `.gitignore` before extraction run?
