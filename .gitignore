@@ -113,3 +113,6 @@ TestResults/
 .env.*.local
 src/MessengerWebhook/vertex-ai-key.json
 vertex-ai-key.json
+
+# PII datasets extracted from prod (Phase 03 threshold tuning)
+plans/260519-0915-intent-router-and-threshold/data/
